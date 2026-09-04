@@ -127,7 +127,7 @@ func printSummary(out io.Writer, generation app.Generation, auditSkipped bool) {
 		fmt.Fprintf(out, "Source files modified  %d (verified across %s files)\n",
 			report.Totals.SourceFilesChanged, formatInt(int64(report.Privacy.SourceAudit.Files)))
 	} else {
-		fmt.Fprintln(out, "Source integrity       inconclusive; see warnings in the Rewind")
+		fmt.Fprintln(out, "Source integrity       inconclusive; see source audit in the Rewind")
 	}
 	fmt.Fprintf(out, "Generated artifact     %s\n", shortenHome(generation.OutputPath))
 	fmt.Fprintf(out, "Elapsed                %s\n", generation.Duration.Round(time.Millisecond))
@@ -150,7 +150,7 @@ func cleanCommand() *cobra.Command {
 			applyPathOverrides(&paths)
 			if err := app.EnsureOutputSeparate(path,
 				[]string{paths.ClaudeProjects, paths.CodexSessions, paths.CodexArchived},
-				[]string{paths.HermesDatabase, paths.CursorStateDB},
+				append(sqliteGuardPaths(paths.HermesDatabase), sqliteGuardPaths(paths.CursorStateDB)...),
 			); err != nil {
 				return err
 			}
@@ -161,6 +161,10 @@ func cleanCommand() *cobra.Command {
 			return nil
 		},
 	}
+}
+
+func sqliteGuardPaths(path string) []string {
+	return []string{path, path + "-wal", path + "-shm", path + "-journal"}
 }
 
 func versionCommand(version string) *cobra.Command {

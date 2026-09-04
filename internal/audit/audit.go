@@ -20,6 +20,7 @@ import (
 type FileState struct {
 	SHA256 string
 	Size   int64
+	Exists bool
 }
 
 // Snapshot contains content hashes and directory membership. Absolute paths
@@ -29,6 +30,7 @@ type Snapshot struct {
 	Directories map[string][]string
 	Manifest    string
 	TotalBytes  int64
+	Complete    bool
 }
 
 // Comparison summarizes a before/after pair without revealing paths.
@@ -41,29 +43,50 @@ type Comparison struct {
 	DirectoryChanges int    `json:"directory_changes"`
 }
 
-// Capture hashes every existing discovered file, existing SQLite sidecars, and
-// the directory listing containing each source.
+// Capture classifies paths for callers that do not already distinguish source
+// roots from files.
 func Capture(ctx context.Context, paths []string) (Snapshot, error) {
-	files := existingFilesWithSidecars(paths)
-	snapshot := Snapshot{Files: make(map[string]FileState), Directories: make(map[string][]string)}
+	var roots, files []string
+	for _, path := range paths {
+		if path == "" {
+			continue
+		}
+		info, err := os.Lstat(path)
+		if err == nil && info.IsDir() {
+			roots = append(roots, path)
+			continue
+		}
+		files = append(files, path)
+	}
+	return CaptureDiscovered(ctx, roots, files)
+}
 
-	for _, dir := range directoriesToInventory(paths, files) {
-		entries, err := os.ReadDir(dir)
-		if err != nil {
+// CaptureDiscovered hashes every discovered source file and present SQLite
+// sidecar, recursively inventories source roots, and inventories each source
+// file's containing directory. Missing discovered files make the snapshot
+// incomplete instead of silently shrinking the audited set.
+func CaptureDiscovered(ctx context.Context, roots, discoveredFiles []string) (Snapshot, error) {
+	snapshot := Snapshot{
+		Files: make(map[string]FileState), Directories: make(map[string][]string), Complete: true,
+	}
+	for _, root := range uniqueSorted(roots) {
+		if err := inventoryTree(ctx, root, &snapshot); err != nil {
+			return Snapshot{}, fmt.Errorf("inventory source root: %w", err)
+		}
+	}
+
+	files, missing, err := filesWithSidecars(discoveredFiles)
+	if err != nil {
+		return Snapshot{}, err
+	}
+	for _, path := range missing {
+		snapshot.Files[path] = FileState{}
+		snapshot.Complete = false
+	}
+	for _, dir := range containingDirectories(append(append([]string(nil), files...), missing...)) {
+		if err := inventoryDirectory(dir, &snapshot); err != nil {
 			return Snapshot{}, fmt.Errorf("list source directory: %w", err)
 		}
-		listing := make([]string, 0, len(entries))
-		for _, entry := range entries {
-			kind := "f"
-			if entry.IsDir() {
-				kind = "d"
-			} else if entry.Type()&os.ModeSymlink != 0 {
-				kind = "l"
-			}
-			listing = append(listing, kind+":"+entry.Name())
-		}
-		sort.Strings(listing)
-		snapshot.Directories[dir] = listing
 	}
 
 	type result struct {
@@ -81,7 +104,7 @@ func Capture(ctx context.Context, paths []string) (Snapshot, error) {
 			defer wg.Done()
 			for path := range jobs {
 				digest, size, err := DigestFile(ctx, path)
-				results <- result{path: path, state: FileState{SHA256: digest, Size: size}, err: err}
+				results <- result{path: path, state: FileState{SHA256: digest, Size: size, Exists: true}, err: err}
 			}
 		}()
 	}
@@ -111,37 +134,74 @@ func Capture(ctx context.Context, paths []string) (Snapshot, error) {
 	return snapshot, nil
 }
 
-func directoriesToInventory(paths, files []string) []string {
-	seen := make(map[string]struct{})
-	for _, path := range files {
-		seen[filepath.Dir(path)] = struct{}{}
+func inventoryTree(ctx context.Context, root string, snapshot *Snapshot) error {
+	if root == "" {
+		return nil
 	}
-	for _, path := range paths {
-		if path == "" {
-			continue
+	info, err := os.Stat(root)
+	if errors.Is(err, os.ErrNotExist) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	if !info.IsDir() {
+		return fmt.Errorf("source root is not a directory")
+	}
+	var walk func(string) error
+	walk = func(dir string) error {
+		if err := ctx.Err(); err != nil {
+			return err
 		}
-		info, err := os.Stat(path)
-		switch {
-		case err == nil && info.IsDir():
-			seen[path] = struct{}{}
-		case err == nil && info.Mode().IsRegular():
-			seen[filepath.Dir(path)] = struct{}{}
-		case errors.Is(err, os.ErrNotExist):
-			// Missing optional roots remain absent from both snapshots.
+		entries, err := inventoryDirectoryEntries(dir, snapshot)
+		if err != nil {
+			return err
 		}
+		for _, entry := range entries {
+			if entry.IsDir() && entry.Type()&os.ModeSymlink == 0 {
+				if err := walk(filepath.Join(dir, entry.Name())); err != nil {
+					return err
+				}
+			}
+		}
+		return nil
 	}
-	directories := make([]string, 0, len(seen))
-	for path := range seen {
-		directories = append(directories, path)
+	return walk(root)
+}
+
+func inventoryDirectory(dir string, snapshot *Snapshot) error {
+	_, err := inventoryDirectoryEntries(dir, snapshot)
+	if errors.Is(err, os.ErrNotExist) {
+		snapshot.Complete = false
+		return nil
 	}
-	sort.Strings(directories)
-	return directories
+	return err
+}
+
+func inventoryDirectoryEntries(dir string, snapshot *Snapshot) ([]os.DirEntry, error) {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return nil, err
+	}
+	listing := make([]string, 0, len(entries))
+	for _, entry := range entries {
+		kind := "f"
+		if entry.IsDir() {
+			kind = "d"
+		} else if entry.Type()&os.ModeSymlink != 0 {
+			kind = "l"
+		}
+		listing = append(listing, kind+":"+entry.Name())
+	}
+	sort.Strings(listing)
+	snapshot.Directories[dir] = listing
+	return entries, nil
 }
 
 // Compare returns aggregate proof suitable for the generated artifact.
 func Compare(before, after Snapshot) Comparison {
 	comparison := Comparison{
-		Files:          len(before.Files),
+		Files:          existingFileCount(before.Files),
 		ManifestBefore: before.Manifest,
 		ManifestAfter:  after.Manifest,
 	}
@@ -169,7 +229,7 @@ func Compare(before, after Snapshot) Comparison {
 			comparison.DirectoryChanges++
 		}
 	}
-	comparison.Verified = comparison.Files > 0 && comparison.ChangedFiles == 0 && comparison.DirectoryChanges == 0 &&
+	comparison.Verified = before.Complete && after.Complete && comparison.Files > 0 && comparison.ChangedFiles == 0 && comparison.DirectoryChanges == 0 &&
 		comparison.ManifestBefore != "" && comparison.ManifestBefore == comparison.ManifestAfter
 	return comparison
 }
@@ -205,29 +265,79 @@ func DigestFile(ctx context.Context, path string) (string, int64, error) {
 	return hex.EncodeToString(h.Sum(nil)), size, nil
 }
 
-func existingFilesWithSidecars(paths []string) []string {
+func filesWithSidecars(paths []string) ([]string, []string, error) {
 	seen := make(map[string]struct{})
+	missing := make(map[string]struct{})
 	for _, path := range paths {
 		if path == "" {
 			continue
 		}
-		candidates := []string{path}
-		if isSQLite(path) {
-			candidates = append(candidates, path+"-wal", path+"-shm", path+"-journal")
+		info, err := os.Lstat(path)
+		if errors.Is(err, os.ErrNotExist) {
+			missing[path] = struct{}{}
+			continue
 		}
-		for _, candidate := range candidates {
-			info, err := os.Stat(candidate)
-			if err == nil && info.Mode().IsRegular() {
+		if err != nil {
+			return nil, nil, fmt.Errorf("inspect discovered source file: %w", err)
+		}
+		if info.Mode()&os.ModeSymlink != 0 || !info.Mode().IsRegular() {
+			return nil, nil, fmt.Errorf("discovered source is not a regular file")
+		}
+		seen[path] = struct{}{}
+		if isSQLite(path) {
+			for _, candidate := range []string{path + "-wal", path + "-shm", path + "-journal"} {
+				info, err := os.Lstat(candidate)
+				if errors.Is(err, os.ErrNotExist) {
+					continue
+				}
+				if err != nil {
+					return nil, nil, fmt.Errorf("inspect SQLite sidecar: %w", err)
+				}
+				if info.Mode()&os.ModeSymlink != 0 || !info.Mode().IsRegular() {
+					return nil, nil, fmt.Errorf("SQLite sidecar is not a regular file")
+				}
 				seen[candidate] = struct{}{}
 			}
 		}
 	}
-	files := make([]string, 0, len(seen))
-	for path := range seen {
-		files = append(files, path)
+	return sortedKeys(seen), sortedKeys(missing), nil
+}
+
+func containingDirectories(paths []string) []string {
+	seen := make(map[string]struct{})
+	for _, path := range paths {
+		seen[filepath.Dir(path)] = struct{}{}
 	}
-	sort.Strings(files)
-	return files
+	return sortedKeys(seen)
+}
+
+func uniqueSorted(paths []string) []string {
+	seen := make(map[string]struct{})
+	for _, path := range paths {
+		if path != "" {
+			seen[path] = struct{}{}
+		}
+	}
+	return sortedKeys(seen)
+}
+
+func sortedKeys(values map[string]struct{}) []string {
+	keys := make([]string, 0, len(values))
+	for value := range values {
+		keys = append(keys, value)
+	}
+	sort.Strings(keys)
+	return keys
+}
+
+func existingFileCount(files map[string]FileState) int {
+	count := 0
+	for _, state := range files {
+		if state.Exists {
+			count++
+		}
+	}
+	return count
 }
 
 func isSQLite(path string) bool {
@@ -244,7 +354,7 @@ func manifest(snapshot Snapshot) string {
 	sort.Strings(filePaths)
 	for _, path := range filePaths {
 		state := snapshot.Files[path]
-		fmt.Fprintf(h, "file\x00%s\x00%s\x00%d\n", path, state.SHA256, state.Size)
+		fmt.Fprintf(h, "file\x00%s\x00%t\x00%s\x00%d\n", path, state.Exists, state.SHA256, state.Size)
 	}
 	dirs := make([]string, 0, len(snapshot.Directories))
 	for path := range snapshot.Directories {

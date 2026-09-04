@@ -50,18 +50,18 @@ func Generate(ctx context.Context, options GenerateOptions) (Generation, error) 
 		err       error
 	}
 	discoveries := make([]discovered, 0, len(options.Readers))
-	var auditPaths []string
+	var auditRoots []string
+	var auditFiles []string
 	var sourceRoots []string
 	var sourceFiles []string
 	for _, reader := range options.Readers {
 		d, err := reader.Discover(ctx)
 		discoveries = append(discoveries, discovered{reader: reader, discovery: d, err: err})
-		auditPaths = append(auditPaths, d.Roots...)
-		if err == nil {
-			sourceRoots = append(sourceRoots, d.Roots...)
-			auditPaths = append(auditPaths, d.Files...)
-			sourceFiles = append(sourceFiles, d.Files...)
-		}
+		auditRoots = append(auditRoots, d.Roots...)
+		sourceRoots = append(sourceRoots, d.Roots...)
+		auditFiles = append(auditFiles, d.Files...)
+		sourceFiles = append(sourceFiles, d.Files...)
+		sourceFiles = append(sourceFiles, d.ConfiguredFiles...)
 	}
 	if err := EnsureOutputSeparate(outputPath, sourceRoots, sourceFiles); err != nil {
 		return Generation{}, err
@@ -69,8 +69,8 @@ func Generate(ctx context.Context, options GenerateOptions) (Generation, error) 
 
 	var before audit.Snapshot
 	var auditErr error
-	if options.AuditSources && len(auditPaths) > 0 {
-		before, auditErr = audit.Capture(ctx, auditPaths)
+	if options.AuditSources && len(auditRoots)+len(auditFiles) > 0 {
+		before, auditErr = audit.CaptureDiscovered(ctx, auditRoots, auditFiles)
 	}
 
 	results := make([]model.ProviderResult, 0, len(discoveries))
@@ -88,8 +88,8 @@ func Generate(ctx context.Context, options GenerateOptions) (Generation, error) 
 	}
 
 	comparison := audit.Comparison{}
-	if options.AuditSources && auditErr == nil && len(auditPaths) > 0 {
-		after, err := audit.Capture(ctx, auditPaths)
+	if options.AuditSources && auditErr == nil && len(auditRoots)+len(auditFiles) > 0 {
+		after, err := audit.CaptureDiscovered(ctx, auditRoots, auditFiles)
 		if err != nil {
 			auditErr = err
 		} else {

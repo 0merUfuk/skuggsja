@@ -28,7 +28,7 @@ analytics aggregation ────► Report (content-free contract)
                                       embedded HTML/CSS/JS
 ```
 
-The ordering matters. Every reader must disclose its intended files during `Discover` before `Read` opens them. With the source audit enabled, Skuggsja hashes those files and their containing-directory listings before parsing, repeats the capture afterward, and records only aggregate comparison results.
+The ordering matters. Every reader must disclose its intended files during `Discover` before `Read` opens them. With the source audit enabled, Skuggsja hashes those files, recursively inventories declared history roots, and inventories file-containing directories before parsing. It repeats the capture afterward and records only aggregate comparison results.
 
 ## Package map
 
@@ -59,18 +59,20 @@ The runtime dependency surface is deliberately small:
 
 The web UI has no package-manager dependencies, remote fonts, remote scripts, or runtime assets outside the binary. Standard-library packages provide JSON parsing, hashing, filesystems, embedded assets, and the loopback HTTP server.
 
+`scripts/verify-runtime-offline.sh` builds disposable inputs that exercise all four provider adapters, then runs generation and serving with remote sockets denied by macOS Seatbelt and observed/blocked by a verification-only DYLD guard. Its calibrated Go probe must produce an external-attempt record; Skuggsja must produce none while every embedded route is retrieved over loopback. The helper binaries and interposer are development evidence only and are not part of release archives.
+
 ## Generation lifecycle
 
 1. `platform.DefaultPaths` resolves candidate locations without network access.
 2. CLI environment overrides replace individual locations.
 3. Each provider performs discovery. Missing paths produce an empty discovery rather than an error.
-4. The source/output guard rejects a fixed artifact path inside a successfully discovered source root or aliased to a source file.
-5. If enabled and at least one discovery file or root was supplied, `audit.Capture` hashes every existing discovered regular file and relevant SQLite sidecar, and inventories existing discovery-root and containing-directory listings. A directory-only snapshot remains unverified because verification requires at least one hashed file.
+4. The source/output guard checks every declared root, discovered file, and configured SQLite path even after a discovery error. It rejects shared directories, containment in either direction, symlink/case aliases, and existing hard-link aliases.
+5. If enabled and at least one discovery file or root was supplied, the audit hashes every discovered regular file and relevant SQLite sidecar, recursively inventories existing discovery roots, and inventories file-containing directories. A discovered file that disappears makes the snapshot incomplete rather than silently shrinking the set. A directory-only snapshot remains unverified because verification requires at least one hashed file.
 6. Readers parse each discovery into `model.ProviderResult`. Provider failures become scoped statuses and aggregate warnings where possible.
 7. SQLite readers call `sqlitecopy.Open`; the SQLite driver never receives the original database path.
 8. A second audit snapshot is compared with the first. An audit failure adds a `system` provider warning rather than suppressing otherwise usable analytics.
 9. `analytics.Build` creates the serializable `Report` and drops internal identifiers and source paths.
-10. `WriteReport` writes a temporary file beside the destination, syncs it, and replaces the artifact. Unix-like systems rename over the old file; Windows removes the old artifact immediately before rename.
+10. `WriteReport` writes a temporary file beside the destination, syncs it, and renames it over the previous artifact.
 11. Unless `--once` or `--json` was selected, `Serve` binds `127.0.0.1`, serves the in-memory report and embedded assets, and runs until cancellation.
 
 Provider discovery and reads currently run in deterministic provider order. File-oriented readers and the source hasher use at most six workers. Each copied SQLite database is opened with one connection and `PRAGMA query_only = ON` after `PRAGMA quick_check` succeeds.
@@ -135,7 +137,7 @@ The JSON artifact is `analytics.Report`, currently schema version `1`.
 | --- | --- |
 | `schema_version`, `product_name`, `generated_at` | Format identity and generation time |
 | `coverage` | Earliest start, latest end, local timezone, honest display label, and `calendar_framing` presentation hint |
-| `totals` | Root sessions, prompts, unique projects, tool calls, active days, child sessions, primary source-file count, changed-source count |
+| `totals` | Root sessions, prompts, unique projects, tool calls from providers that expose that metric, active days, child sessions, primary source-file count, changed-source count |
 | `providers` | Per-harness status, verification scope, metrics, span, time basis, token ledger, limitations, warnings, and primary file count |
 | `rhythm` | Activity by local date, 24 local hours, Monday-first weekdays, favorite hour, late-night percentage, streak, busiest day/month |
 | `prompt_style` | Availability, textual-prompt sample count, median/average words, average characters, and deterministic label |
@@ -162,9 +164,9 @@ The JSON artifact is `analytics.Report`, currently schema version `1`.
 
 ## Output and serving
 
-The destination is `<user-cache>/skuggsja/rewind.json`. Before any reader runs, generation rejects a destination inside a discovered source root or aliased to a discovered source file; `clean` performs the same check against configured source locations before deleting. Checks cover cleaned paths, resolved symlinks, and existing file identity, including hard links.
+The destination is `<user-cache>/skuggsja/rewind.json`. Before any reader runs, generation rejects source and output directories that are equal or contain one another; `clean` performs the same check against configured source locations before deleting. Checks cover cleaned and symlink-resolved forms, conservative case folding on macOS and Windows, existing ancestor identity, and hard-link identity. Discovery-error paths do not bypass the guard.
 
-The writer creates and syncs a temporary file beside the destination, then renames it into place. Rename-over-existing provides atomic replacement on platforms that support it; on Windows the prior artifact is removed before rename, so a failed replacement can leave no artifact. On Unix-like systems, the product directory is set to mode `0700` and the temporary/final artifact to mode `0600`. The artifact writer does not currently establish a corresponding protected Windows DACL; this differs from Windows SQLite temporary copies, which fail closed unless their restricted DACL validates.
+The writer creates and syncs a temporary file beside the destination, then renames it over the prior artifact. On Unix-like systems, the product directory is set to mode `0700` and the temporary/final artifact to mode `0600`. On Windows, the product directory is created or updated with a protected, inheritable DACL limited to the current user and LocalSystem and validated before the artifact is created. This code cross-compiles but remains runtime-unverified on Windows.
 
 The server exposes:
 

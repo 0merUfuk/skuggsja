@@ -147,9 +147,11 @@
     const framing = coverage.calendar_framing === true ? "Calendar framing supported" : "Recorded span only";
     setText("coverage-stamp", framing + " · " + range + " · " + zone);
 
+    const auditChanges = auditChangeCount(audit, totals) + changeCount(audit.directory_changes);
     if (audit.verified === true) {
-      const changes = auditChangeCount(audit, totals);
-      setText("proof-audit", formatNumber(changes) + " changed · verified");
+      setText("proof-audit", "0 changed · verified");
+    } else if (auditWasCompared(audit) && auditChanges > 0) {
+      setText("proof-audit", formatNumber(auditChanges) + " changed · detected");
     } else {
       setText("proof-audit", "Not verified");
     }
@@ -339,7 +341,7 @@
       if (count > 0 && ratio < 0.38) { level = "low"; }
       if (ratio >= 0.38 && ratio < 0.72) { level = "medium"; }
       if (ratio >= 0.72) { level = "high"; }
-      if ((hour >= 22 || hour < 6) && count > 0) { level = "late"; }
+      if (hour < 5 && count > 0) { level = "late"; }
       const line = svgElement("line", {
         x1: String(x1),
         y1: "80",
@@ -475,7 +477,7 @@
     [
       ["Prompts", formatNumber(provider.prompts)],
       ["Projects", formatNumber(provider.projects)],
-      ["Tool calls", formatNumber(provider.tool_calls)],
+      ["Tool calls", provider.tool_calls_available === true ? formatNumber(provider.tool_calls) : "Not available"],
       ["Child sessions", formatNumber(provider.child_sessions)],
       ["Span", providerSpan(provider)],
       ["Time basis", cleanText(provider.time_basis, "Not reported", 90)]
@@ -484,7 +486,7 @@
     });
 
     tokenSection.appendChild(element("h3", "", "Token ledger"));
-    tokenSection.appendChild(renderTokenLedger(recordOrEmpty(provider.token_usage)));
+    tokenSection.appendChild(renderTokenLedger(recordOrEmpty(provider.token_usage), cleanText(provider.id, "", 40)));
     appendProviderNotes(notes, "Limitations", provider.limitations);
     appendProviderNotes(notes, "Parser notes", provider.warnings);
     body.append(facts, tokenSection);
@@ -495,7 +497,7 @@
     return details;
   }
 
-  function renderTokenLedger(tokens) {
+  function renderTokenLedger(tokens, providerID) {
     const wrapper = element("div", "");
     if (tokens.available !== true) {
       const reason = cleanText(tokens.source, "This harness did not expose compatible token usage.", 180);
@@ -503,9 +505,9 @@
       return wrapper;
     }
 
-    const precision = tokens.exact === true ? "Exact counts recorded by the harness" : "Available counts; exactness not established";
+    const precision = tokens.exact === true ? "Source-recorded ledger totals" : "Available counts; exactness not established";
     const source = cleanText(tokens.source, "source field not reported", 120);
-    wrapper.appendChild(element("p", "token-note", precision + " · " + source));
+    wrapper.appendChild(element("p", "token-note", precision + " · " + source + " · zero may mean recorded zero or an omitted/null category"));
 
     const scroll = element("div", "table-scroll");
     const table = element("table", "token-ledger");
@@ -517,13 +519,16 @@
     caption.textContent = "Recorded token categories";
     headRow.append(element("th", "", "Category"), element("th", "", "Count"));
     head.appendChild(headRow);
-    [
+    const categories = [
       ["Input", tokens.input],
       ["Output", tokens.output],
       ["Cache read", tokens.cache_read],
-      ["Cache write", tokens.cache_write],
-      ["Reasoning", tokens.reasoning]
-    ].forEach(function (rowData) {
+      ["Cache write", tokens.cache_write]
+    ];
+    if (providerID !== "claude") {
+      categories.push(["Reasoning", tokens.reasoning]);
+    }
+    categories.forEach(function (rowData) {
       const row = document.createElement("tr");
       row.append(element("td", "", rowData[0]), element("td", "", formatNumber(rowData[1])));
       body.appendChild(row);
@@ -642,25 +647,28 @@
     const changes = auditChangeCount(audit, totals);
     const directories = changeCount(audit.directory_changes);
     const auditFiles = countValue(audit.files);
+    const compared = auditWasCompared(audit);
     const unchanged = audit.verified === true && changes === 0 && directories === 0;
     setPrivacyOutput("privacy-raw", raw.label, raw.good);
     setPrivacyOutput("privacy-paths", paths.label, paths.good);
     setPrivacyOutput(
       "privacy-changed",
-      audit.verified === true ? formatNumber(changes + directories) : "Not verified",
+      compared ? formatNumber(changes + directories) : "Not verified",
       unchanged
     );
     setPrivacyOutput(
       "privacy-audit-files",
-      audit.verified === true ? formatNumber(auditFiles) + " files" : "Not verified",
+      compared ? formatNumber(auditFiles) + " files" : "Not verified",
       audit.verified === true
     );
 
     let verdict = "Not verified";
     if (audit.verified === true && unchanged) {
       verdict = "Verified unchanged";
-    } else if (audit.verified === true) {
+    } else if (compared && changes + directories > 0) {
       verdict = "Changes detected";
+    } else if (compared) {
+      verdict = "Inconclusive";
     }
     setText("audit-verdict", verdict);
     setText("manifest-before", compactHash(audit.manifest_before));
@@ -843,8 +851,8 @@
   }
 
   function providerSpan(provider) {
-    const start = formatDateOnly(provider.span_start);
-    const end = formatDateOnly(provider.span_end);
+    const start = formatLocalInstantDate(provider.span_start);
+    const end = formatLocalInstantDate(provider.span_end);
     if (start === "—" && end === "—") {
       return "Not reported";
     }
@@ -859,8 +867,8 @@
     if (label) {
       return label;
     }
-    const start = formatDateOnly(coverage.start);
-    const end = formatDateOnly(coverage.end);
+    const start = formatLocalInstantDate(coverage.start);
+    const end = formatLocalInstantDate(coverage.end);
     if (start === "—" && end === "—") {
       return "the recorded span";
     }
@@ -886,13 +894,17 @@
   }
 
   function calendarRange(activity, coverage) {
-    let start = parseDateOnly(coverage.start);
-    let end = parseDateOnly(coverage.end);
-    if (!start && activity.length > 0) {
+    let start = null;
+    let end = null;
+    if (activity.length > 0) {
       start = parseDateOnly(activity[0].date);
-    }
-    if (!end && activity.length > 0) {
       end = parseDateOnly(activity[activity.length - 1].date);
+    }
+    if (!start) {
+      start = parseLocalInstantDate(coverage.start);
+    }
+    if (!end) {
+      end = parseLocalInstantDate(coverage.end);
     }
     if (!start || !end) {
       return null;
@@ -916,6 +928,11 @@
       return changeCount(audit.changed_files);
     }
     return numeric(totals.source_files_changed, 0);
+  }
+
+  function auditWasCompared(audit) {
+    return typeof audit.manifest_before === "string" && audit.manifest_before !== "" &&
+      typeof audit.manifest_after === "string" && audit.manifest_after !== "";
   }
 
   function changeCount(value) {
@@ -965,6 +982,17 @@
     return shortMonthNames[date.getUTCMonth()] + " " + date.getUTCDate() + ", " + date.getUTCFullYear();
   }
 
+  function formatLocalInstantDate(value) {
+    if (typeof value !== "string" || value.trim() === "") {
+      return "—";
+    }
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime()) || date.getUTCFullYear() <= 1) {
+      return "—";
+    }
+    return shortMonthNames[date.getMonth()] + " " + date.getDate() + ", " + date.getFullYear();
+  }
+
   function formatDateTime(value, timezone) {
     if (typeof value !== "string" || value.trim() === "") {
       return "Not reported";
@@ -1012,6 +1040,17 @@
       return null;
     }
     return date;
+  }
+
+  function parseLocalInstantDate(value) {
+    if (typeof value !== "string" || value.trim() === "") {
+      return null;
+    }
+    const instant = new Date(value);
+    if (Number.isNaN(instant.getTime()) || instant.getUTCFullYear() <= 1) {
+      return null;
+    }
+    return new Date(Date.UTC(instant.getFullYear(), instant.getMonth(), instant.getDate()));
   }
 
   function addUTCDays(date, amount) {

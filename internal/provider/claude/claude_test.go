@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -37,6 +38,26 @@ func TestReaderExcludesSubagentsAndDerivesMetrics(t *testing.T) {
 	}
 	if session.Project != "project-one" {
 		t.Errorf("project = %q, want project-one", session.Project)
+	}
+}
+
+func TestDiscoverRejectsSymbolicLinkSession(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	project := filepath.Join(root, "synthetic-project")
+	if err := os.Mkdir(project, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	target := filepath.Join(t.TempDir(), "target.jsonl")
+	if err := os.WriteFile(target, []byte("{}\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(target, filepath.Join(project, "session.jsonl")); err != nil {
+		t.Skipf("symlinks unavailable: %v", err)
+	}
+	_, err := (Reader{ProjectsDir: root}).Discover(context.Background())
+	if err == nil || !strings.Contains(err.Error(), "symbolic link") {
+		t.Fatalf("Discover() error = %v, want symbolic-link rejection", err)
 	}
 }
 

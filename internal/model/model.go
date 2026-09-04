@@ -99,14 +99,15 @@ type Warning struct {
 
 // ProviderResult is one harness's normalized output and operational metadata.
 type ProviderResult struct {
-	Harness           Harness
-	DisplayName       string
-	Status            string
-	VerificationLevel string
-	Sessions          []Session
-	SourceFiles       []string
-	Warnings          []Warning
-	Limitations       []string
+	Harness            Harness
+	DisplayName        string
+	Status             string
+	VerificationLevel  string
+	ToolCallsAvailable bool
+	Sessions           []Session
+	SourceFiles        []string
+	Warnings           []Warning
+	Limitations        []string
 }
 
 // AddWarning increments a warning without retaining record-specific details.

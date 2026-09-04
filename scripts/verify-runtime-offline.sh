@@ -1,8 +1,8 @@
 #!/bin/sh
 set -eu
 
-if [ "$(uname -s)" != "Darwin" ] || ! command -v sandbox-exec >/dev/null 2>&1; then
-  echo "runtime isolation check requires macOS sandbox-exec" >&2
+if [ "$(uname -s)" != "Darwin" ] || ! command -v cc >/dev/null 2>&1; then
+  echo "runtime isolation check requires macOS and a C compiler" >&2
   exit 2
 fi
 
@@ -22,15 +22,32 @@ cleanup() {
 }
 trap cleanup EXIT HUP INT TERM
 
-mkdir -p "$verify_root/bin" "$verify_root/home" "$verify_root/missing"
+mkdir -p "$verify_root/bin" "$verify_root/home" "$verify_root/missing" "$verify_root/sources"
 CGO_ENABLED=0 go -C "$repo_dir" build -trimpath -o "$verify_root/bin/skuggsja" ./cmd/skuggsja
+CGO_ENABLED=0 go -C "$repo_dir" build -trimpath -o "$verify_root/bin/network-probe" ./scripts/network-probe
+CGO_ENABLED=0 go -C "$repo_dir" build -trimpath -o "$verify_root/bin/verification-fixtures" ./scripts/verification-fixtures
+cc -dynamiclib -Os -Wall -Wextra -Werror \
+  -o "$verify_root/bin/network-guard.dylib" "$repo_dir/scripts/network_guard_darwin.c"
 
-if sandbox-exec -f "$repo_dir/scripts/macos-network-deny.sb" \
-  /usr/bin/curl --silent --show-error --connect-timeout 2 --max-time 3 https://example.com \
-  >/dev/null 2>&1; then
-  echo "network-isolation control failed: a remote request succeeded" >&2
+"$verify_root/bin/verification-fixtures" \
+  "$verify_root/sources/hermes/state.db" \
+  "$verify_root/sources/cursor/state.vscdb"
+
+attempt_log="$verify_root/network-attempts.log"
+: >"$attempt_log"
+if ! env \
+  DYLD_INSERT_LIBRARIES="$verify_root/bin/network-guard.dylib" \
+  SKUGGSJA_NETWORK_ATTEMPT_LOG="$attempt_log" \
+  "$verify_root/bin/network-probe"; then
+  echo "network-isolation control failed: the remote probe connected" >&2
   exit 1
 fi
+if ! grep -Fx "network-guard-active" "$attempt_log" >/dev/null || \
+   ! grep -Fx "external-connect-attempt" "$attempt_log" >/dev/null; then
+  echo "network-isolation control failed: the remote probe was not observed" >&2
+  exit 1
+fi
+: >"$attempt_log"
 
 server_log="$verify_root/server.log"
 
@@ -39,9 +56,12 @@ env \
   SKUGGSJA_CLAUDE_PROJECTS="$repo_dir/testdata/claude" \
   SKUGGSJA_CODEX_SESSIONS="$repo_dir/testdata/codex/sessions" \
   SKUGGSJA_CODEX_ARCHIVED="$verify_root/missing/codex-archive" \
-  SKUGGSJA_HERMES_DATABASE="$verify_root/missing/hermes.db" \
-  SKUGGSJA_CURSOR_DATABASE="$verify_root/missing/cursor.vscdb" \
+  SKUGGSJA_HERMES_DATABASE="$verify_root/sources/hermes/state.db" \
+  SKUGGSJA_CURSOR_DATABASE="$verify_root/sources/cursor/state.vscdb" \
   sandbox-exec -f "$repo_dir/scripts/macos-network-deny.sb" \
+  /usr/bin/env \
+  DYLD_INSERT_LIBRARIES="$verify_root/bin/network-guard.dylib" \
+  SKUGGSJA_NETWORK_ATTEMPT_LOG="$attempt_log" \
   "$verify_root/bin/skuggsja" --no-open --port 0 >"$server_log" 2>&1 &
 server_pid=$!
 
@@ -76,6 +96,15 @@ header_file="$verify_root/headers.txt"
 /usr/bin/curl --fail --silent --show-error "$local_url/app.js" >/dev/null
 /usr/bin/curl --fail --silent --show-error "$local_url/api/rewind" >/dev/null
 
+if ! grep -Fx "network-guard-active" "$attempt_log" >/dev/null; then
+  echo "runtime network guard did not load" >&2
+  exit 1
+fi
+if grep -Fx "external-connect-attempt" "$attempt_log" >/dev/null; then
+  echo "runtime attempted an external connection" >&2
+  exit 1
+fi
+
 grep -F "Content-Security-Policy: default-src 'self'; base-uri 'none'; connect-src 'self'; font-src 'self'; form-action 'none'; frame-ancestors 'none'; img-src 'self' data:; object-src 'none'; script-src 'self'; style-src 'self'" "$header_file" >/dev/null
 
 kill "$server_pid"
@@ -83,4 +112,4 @@ wait "$server_pid" || true
 server_pid=""
 cat "$server_log"
 
-echo "PASS: generation and localhost viewing completed with remote networking denied"
+echo "PASS: generation and localhost viewing completed with zero observed external connect attempts"

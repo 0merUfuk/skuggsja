@@ -149,6 +149,16 @@ Only synthetic fixtures belong in Git.
 
 If a real-data smoke test is necessary, run it locally, do not capture content in terminal output, verify the source audit, record only aggregate conclusions, and delete generated test exports afterward.
 
+The opt-in full-run verifier brackets discovery, parsing, internal auditing, and aggregate persistence with an independent outer source snapshot:
+
+```sh
+SKUGGSJA_VERIFY_REAL_DATA=1 go test ./internal/app -run TestRealDataFullRunLeavesSourcesUnchanged -count=1 -v
+```
+
+Run it only on a machine whose histories you are authorized to inspect. Its output is aggregate-only.
+
+On macOS, `make verify-offline` builds synthetic histories for every Tier-1 adapter, calibrates the external-connect observer with a deliberate Go probe, and exercises generation plus every localhost UI/API route with remote networking denied. The probe, fixture builder, and DYLD guard under `scripts/` are verification-only and are excluded from release builds.
+
 ## Web UI changes
 
 The three embedded assets are `web/index.html`, `web/styles.css`, and `web/app.js`.

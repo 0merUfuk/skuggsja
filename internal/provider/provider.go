@@ -8,13 +8,15 @@ import (
 	"github.com/0merUfuk/skuggsja/internal/model"
 )
 
-// Discovery lists only the files a reader intends to open. Paths stay in
-// process memory and are never serialized into the generated Rewind.
+// Discovery lists only the files a reader intends to open and the directories
+// that contain provider histories. Paths stay in process memory and are never
+// serialized into the generated Rewind.
 type Discovery struct {
-	Harness model.Harness
-	Files   []string
-	Roots   []string
-	Meta    map[string]string
+	Harness         model.Harness
+	Files           []string
+	Roots           []string
+	ConfiguredFiles []string
+	Meta            map[string]string
 }
 
 // Reader discovers and parses one local harness.

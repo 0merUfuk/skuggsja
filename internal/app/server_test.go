@@ -4,7 +4,6 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
-	"strings"
 	"testing"
 
 	"github.com/0merUfuk/skuggsja/internal/analytics"
@@ -23,7 +22,7 @@ func TestHandlerServesEmbeddedAssetsWithStrictHeaders(t *testing.T) {
 			t.Errorf("GET %s returned %d", path, response.Code)
 		}
 		csp := response.Header().Get("Content-Security-Policy")
-		if !strings.Contains(csp, "default-src 'self'") || !strings.Contains(csp, "connect-src 'self'") {
+		if csp != contentSecurityPolicy {
 			t.Errorf("GET %s has unexpected CSP %q", path, csp)
 		}
 		if got := response.Header().Get("Referrer-Policy"); got != "no-referrer" {
@@ -40,7 +39,7 @@ func TestHandlerRejectsNonLoopbackHostHeader(t *testing.T) {
 	if response.Code != http.StatusMisdirectedRequest {
 		t.Fatalf("status = %d, want %d", response.Code, http.StatusMisdirectedRequest)
 	}
-	if !strings.Contains(response.Header().Get("Content-Security-Policy"), "default-src 'self'") {
+	if response.Header().Get("Content-Security-Policy") != contentSecurityPolicy {
 		t.Fatal("rejected response is missing security headers")
 	}
 }

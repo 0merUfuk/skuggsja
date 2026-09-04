@@ -64,7 +64,7 @@ The source audit is enabled by default. It captures:
 
 - SHA-256 and byte size for every discovered primary file;
 - present `-wal`, `-shm`, and `-journal` files for SQLite sources;
-- sorted entry names and file/directory/symlink kinds in existing discovery-root and source-containing directories.
+- sorted entry names and file/directory/symlink kinds recursively below existing file-oriented discovery roots, plus SQLite source-containing directories.
 
 The capture runs before and after all readers. The report persists the before-snapshot file count, before/after manifest digests, changed-file count, changed-directory count, and a `verified` flag. Absolute paths and directory entries participate in the digest but are not serialized.
 
@@ -86,7 +86,7 @@ The default artifact is the OS user-cache path ending in `skuggsja/rewind.json`.
 - source-audit digests and aggregate change counts;
 - fixed methodology text.
 
-Before reading or writing, Skuggsja refuses a fixed artifact path inside a configured source root or aliased to a source file through a cleaned path, resolved symlink, or existing hard link. The writer creates or changes the containing directory to mode `0700`, writes a mode-`0600` temporary file, syncs it, and renames it into place. Those artifact modes provide their intended protection on Unix-like systems; unlike the SQLite temporary-copy path, the artifact writer does not establish an equivalent protected Windows DACL.
+Before reading or writing, Skuggsja refuses source and output directories that are equal or contain one another, as well as cleaned-path, resolved-symlink, case, and existing hard-link aliases. Declared paths remain guarded after discovery errors. The writer creates or changes the containing directory to mode `0700`, writes a mode-`0600` temporary file, syncs it, and renames it into place on Unix-like systems. On Windows it applies and validates a protected, inheritable directory DACL limited to the current user and LocalSystem before creating the artifact; this implementation has cross-compile coverage but no current Windows runtime evidence.
 
 `--json` still writes the normal artifact before emitting the same aggregate to standard output. Shell redirection, terminal scrollback, pipelines, logs, and any duplicate file created from stdout are controlled by your shell and downstream tools, not by Skuggsja.
 

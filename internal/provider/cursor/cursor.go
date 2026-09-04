@@ -31,7 +31,7 @@ func (Reader) Harness() model.Harness { return model.Cursor }
 func (Reader) DisplayName() string    { return "Cursor" }
 
 func (r Reader) Discover(_ context.Context) (provider.Discovery, error) {
-	d := provider.Discovery{Harness: model.Cursor, Roots: []string{r.DatabasePath}}
+	d := provider.Discovery{Harness: model.Cursor, ConfiguredFiles: sqlitePaths(r.DatabasePath)}
 	info, err := os.Lstat(r.DatabasePath)
 	if errors.Is(err, os.ErrNotExist) {
 		return d, nil
@@ -49,6 +49,10 @@ func (r Reader) Discover(_ context.Context) (provider.Discovery, error) {
 	return d, nil
 }
 
+func sqlitePaths(path string) []string {
+	return []string{path, path + "-wal", path + "-shm", path + "-journal"}
+}
+
 func (r Reader) Read(ctx context.Context, d provider.Discovery) (result model.ProviderResult) {
 	result = model.ProviderResult{
 		Harness:           model.Cursor,
@@ -58,6 +62,7 @@ func (r Reader) Read(ctx context.Context, d provider.Discovery) (result model.Pr
 		SourceFiles:       append([]string(nil), d.Files...),
 		Limitations: []string{
 			"Cursor does not persist trustworthy token totals in this schema, so none are reported.",
+			"Tool-call counts are not mapped from this schema and remain unavailable rather than measured zero.",
 			"Only the canonical global composer store is counted; the derived conversation-search index is not merged.",
 			"Model events are eligible human bubbles with a recorded model name, not a cross-harness turn unit.",
 		},

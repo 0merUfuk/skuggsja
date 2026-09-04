@@ -62,7 +62,8 @@ type ProviderSummary struct {
 	ChildSessions   int              `json:"child_sessions"`
 	Prompts         int              `json:"prompts"`
 	Projects        int              `json:"projects"`
-	ToolCalls       int64            `json:"tool_calls"`
+	ToolCalls          int64            `json:"tool_calls"`
+	ToolCallsAvailable bool             `json:"tool_calls_available"`
 	SpanStart       time.Time        `json:"span_start"`
 	SpanEnd         time.Time        `json:"span_end"`
 	TimeBasis       string           `json:"time_basis"`
@@ -186,7 +187,9 @@ func Build(results []model.ProviderResult, options Options) Report {
 		report.Totals.Sessions += summary.Sessions
 		report.Totals.ChildSessions += summary.ChildSessions
 		report.Totals.Prompts += summary.Prompts
-		report.Totals.ToolCalls += summary.ToolCalls
+		if summary.ToolCallsAvailable {
+			report.Totals.ToolCalls += summary.ToolCalls
+		}
 		report.Totals.SourceFiles += summary.SourceFileCount
 		for _, warning := range result.Warnings {
 			report.Warnings = append(report.Warnings, ReportWarning{
@@ -280,6 +283,7 @@ func summarizeProvider(result model.ProviderResult) (ProviderSummary, []ModelSum
 		ID: result.Harness, Name: result.DisplayName, Status: result.Status,
 		Verification: result.VerificationLevel, Limitations: result.Limitations,
 		Warnings: result.Warnings, SourceFileCount: len(result.SourceFiles),
+		ToolCallsAvailable: result.ToolCallsAvailable,
 	}
 	projects := make(map[string]struct{})
 	promptIDs := make(map[string]struct{})

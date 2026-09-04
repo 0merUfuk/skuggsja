@@ -12,7 +12,8 @@ func TestEmbeddedAssetsHaveNoExternalOrigins(t *testing.T) {
 
 	externalOrigin := regexp.MustCompile(`(?i)(?:https?:|wss?:)?//[a-z0-9]`)
 	remoteCSS := regexp.MustCompile(`(?i)@import\s|url\(\s*["']?(?:https?:|//)`)
-	networkAPI := regexp.MustCompile(`\b(?:XMLHttpRequest|WebSocket|EventSource|sendBeacon)\b`)
+	networkAPI := regexp.MustCompile(`\b(?:XMLHttpRequest|WebSocket|EventSource|sendBeacon|RTCPeerConnection|SharedWorker|ServiceWorker)\b`)
+	fetchAPI := regexp.MustCompile(`\bfetch\s*\(`)
 	want := map[string]bool{"index.html": true, "styles.css": true, "app.js": true}
 
 	err := fs.WalkDir(Files, ".", func(path string, entry fs.DirEntry, walkErr error) error {
@@ -53,7 +54,8 @@ func TestEmbeddedAssetsHaveNoExternalOrigins(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if strings.Count(string(app), `fetch("/api/rewind"`) != 1 {
+	appText := string(app)
+	if len(fetchAPI.FindAllStringIndex(appText, -1)) != 1 || strings.Count(appText, `fetch("/api/rewind"`) != 1 {
 		t.Fatal("the only permitted fetch must target the same-origin aggregate API")
 	}
 }

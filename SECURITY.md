@@ -33,6 +33,8 @@ The installed/built Skuggsja process has no outbound network client, telemetry, 
 
 This claim begins after installation. Building or running through the Go tool may download the requested Go toolchain and modules. Launching the default browser delegates to software outside Skuggsja; `--no-open` avoids that launch.
 
+The macOS verification harness creates disposable synthetic histories for all four adapters, runs generation and the localhost server under both a Seatbelt profile that denies remote networking and a DYLD guard that records and rejects non-loopback `connect`, `connectx`, `sendto`, and `sendmsg` destinations, then retrieves every UI/API route locally. A calibrated Go network probe must be observed and denied before the product run, while the product run must record no external attempt. The guard, probe, and fixture builder live under `scripts/` and are never linked into release binaries. A separate source-policy test limits production network-capable imports to the loopback server.
+
 ### Source isolation
 
 - JSONL and compressed history files are opened read-only.
@@ -53,9 +55,9 @@ This claim begins after installation. Building or running through the Go tool ma
 
 ### Artifact and web-server hardening
 
-- The aggregate is encoded to a same-directory temporary file, set to mode `0600` where supported, synced, and renamed. Replacement is atomic where rename-over-existing is supported; Windows removes the previous destination first.
-- The default product directory is set to mode `0700` where supported.
-- Generation fails before reads if the fixed artifact lies inside a discovered source root or aliases a source file; `clean` performs the corresponding configured-source check before deletion. Cleaned paths, resolved symlinks, and existing hard-link identity are checked.
+- The aggregate is encoded to a same-directory temporary file, set to mode `0600` where supported, synced, and renamed over the previous artifact.
+- The default product directory is set to mode `0700` on Unix-like systems. Windows applies and validates a protected, inheritable DACL limited to the current user and LocalSystem before artifact creation; the Windows path is compile-tested but not runtime-verified.
+- Generation fails before reads when source and output directories are equal or contain one another, or a source aliases the artifact; `clean` performs the corresponding configured-source check before deletion. Cleaned paths, resolved symlinks, conservative macOS/Windows case folding, existing ancestor identity, and hard-link identity are checked. Declared paths remain protected after discovery errors.
 - `clean` also refuses to remove an unexpected artifact filename.
 - The server never binds a wildcard or LAN address; an occupied requested port falls back to another loopback port.
 - HTTP requests whose normalized `Host` is not exactly `127.0.0.1`, `localhost`, or `::1` are rejected with status 421 to reduce DNS-rebinding exposure.
@@ -85,7 +87,7 @@ Skuggsja is intended for one user inspecting their own histories on a machine th
 | Browser asset exfiltration | Embedded assets, one same-origin fetch, strict CSP/no-referrer | Browser extensions and browser-level behavior are outside the process |
 | Remote access to report | Bind `127.0.0.1` only and reject non-loopback hostnames | Any sufficiently privileged local process can connect with an allowed Host header; there is no app authentication |
 | Partial/malformed history causing false precision | Warnings, record bounds, SQLite-schema and Codex-mode refusal, provider-scoped semantics | Upstream private formats can change; Claude/Codex filename-matched valid JSON with no recognized records may currently look supported but empty |
-| Artifact disclosure | Private Unix modes and privacy-reduced schema | No encryption at rest; the artifact writer has no equivalent protected Windows DACL; custom copies inherit downstream handling |
+| Artifact disclosure | Private Unix modes or a protected Windows DACL, plus a privacy-reduced schema | No encryption at rest; Windows runtime behavior is not yet validated; custom copies inherit downstream handling |
 | Temporary SQLite disclosure | Private Unix modes or a validated protected Windows DACL, plus normal-path cleanup | Crash or `SIGKILL` may leave a raw copy in the OS temp directory; Windows runtime behavior has not been validated on a Windows machine |
 | Dependency or build-chain compromise | Small dependency surface, reproducible module versions, reviewable Go build | Dependency acquisition is networked and remains a supply-chain trust decision |
 

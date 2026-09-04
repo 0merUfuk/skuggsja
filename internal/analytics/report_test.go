@@ -17,8 +17,8 @@ func TestBuildKeepsProviderSemanticsAndDiscardsSensitiveContent(t *testing.T) {
 	start := time.Date(2025, 12, 31, 22, 30, 0, 0, time.UTC)
 	result := model.ProviderResult{
 		Harness: model.Claude, DisplayName: "Claude Code", Status: "supported",
-		VerificationLevel: "fixture",
-		SourceFiles:       []string{"/Users/private/.claude/projects/secret.jsonl"},
+		VerificationLevel: "fixture", ToolCallsAvailable: true,
+		SourceFiles: []string{"/Users/private/.claude/projects/secret.jsonl"},
 		Sessions: []model.Session{
 			{
 				Harness: model.Claude, ID: "root", StartedAt: start, EndedAt: start.Add(90 * time.Minute),
@@ -45,6 +45,9 @@ func TestBuildKeepsProviderSemanticsAndDiscardsSensitiveContent(t *testing.T) {
 	}
 	if report.Totals.Prompts != 1 || report.Totals.ToolCalls != 1 {
 		t.Fatalf("deduplicated totals = %d prompts, %d tools", report.Totals.Prompts, report.Totals.ToolCalls)
+	}
+	if !report.Providers[0].ToolCallsAvailable {
+		t.Fatal("mapped provider tool calls were reported as unavailable")
 	}
 	if report.Totals.ActiveDays != 1 || report.Rhythm.Activity[0].Date != "2026-01-01" {
 		t.Fatalf("local activity = %#v", report.Rhythm.Activity)

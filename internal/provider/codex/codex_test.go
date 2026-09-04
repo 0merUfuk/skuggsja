@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -62,6 +63,22 @@ func TestReaderUsesModeAwarePromptEvents(t *testing.T) {
 	}
 	if got, want := childSession.EndedAt, time.Date(2026, 1, 3, 1, 0, 4, 0, time.UTC); !got.Equal(want) {
 		t.Errorf("child end = %s, want %s", got, want)
+	}
+}
+
+func TestDiscoverRejectsSymbolicLinkRollout(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	target := filepath.Join(t.TempDir(), "rollout-target.jsonl")
+	if err := os.WriteFile(target, syntheticLegacyRollout("target", "Synthetic prompt."), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(target, filepath.Join(root, "rollout-link.jsonl")); err != nil {
+		t.Skipf("symlinks unavailable: %v", err)
+	}
+	_, err := (Reader{SessionsDir: root}).Discover(context.Background())
+	if err == nil || !strings.Contains(err.Error(), "symbolic link") {
+		t.Fatalf("Discover() error = %v, want symbolic-link rejection", err)
 	}
 }
 

@@ -27,9 +27,22 @@ jobs:
       - name: Test
         run: go test ./... -count=1
 
+      - name: Verify modules
+        run: go mod verify
+
+      - name: Vet
+        run: go vet ./...
+
+      - name: Check embedded JavaScript syntax
+        run: node --check web/app.js
+
       - name: Race test
         if: runner.os != 'Windows'
         run: go test ./... -race -count=1
+
+      - name: Verify generation and localhost UI with outbound networking denied
+        if: runner.os == 'macOS'
+        run: ./scripts/verify-runtime-offline.sh
 
   cross-build:
     runs-on: ubuntu-latest

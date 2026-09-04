@@ -51,6 +51,9 @@ func (r Reader) Discover(_ context.Context) (provider.Discovery, error) {
 				return walkErr
 			}
 			if !entry.IsDir() && isRolloutFile(entry.Name()) {
+				if entry.Type()&os.ModeSymlink != 0 {
+					return errors.New("Codex rollout source is a symbolic link")
+				}
 				plainPath := plainRolloutPath(path)
 				current, exists := selected[plainPath]
 				if !exists || isPlainRollout(path) && !isPlainRollout(current) {
@@ -97,6 +100,7 @@ func (r Reader) Read(ctx context.Context, d provider.Discovery) model.ProviderRe
 		return result
 	}
 	result.Status = "supported"
+	result.ToolCallsAvailable = true
 
 	type parsed struct {
 		session  model.Session

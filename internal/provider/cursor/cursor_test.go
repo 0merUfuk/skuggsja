@@ -79,6 +79,9 @@ func TestReaderParsesCurrentComposerSchemaWithoutTokenEstimates(t *testing.T) {
 	if result.VerificationLevel != "schema-verified with synthetic fixtures" {
 		t.Fatalf("verification level = %q", result.VerificationLevel)
 	}
+	if result.ToolCallsAvailable {
+		t.Fatal("Cursor tool calls must remain unavailable")
+	}
 
 	var top, childFound bool
 	for _, session := range result.Sessions {

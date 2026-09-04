@@ -26,23 +26,40 @@ func DefaultOutputPath() (string, error) {
 }
 
 // EnsureOutputSeparate rejects lexical, symlink-resolved, and hard-link
-// overlap between the fixed generated artifact and source inputs. Roots are
-// treated as directories; files require exact identity.
+// overlap between the fixed generated artifact and source inputs. Source and
+// output directories must not contain one another.
 func EnsureOutputSeparate(output string, roots, files []string) error {
+	outputAbsolute, err := absolutePath(output)
+	if err != nil {
+		return fmt.Errorf("resolve generated artifact location: %w", err)
+	}
 	resolvedOutput, err := canonicalPath(output)
 	if err != nil {
 		return fmt.Errorf("resolve generated artifact location: %w", err)
+	}
+	outputDirectories, err := pathForms(filepath.Dir(output))
+	if err != nil {
+		return fmt.Errorf("resolve generated artifact directory: %w", err)
 	}
 	for _, root := range roots {
 		if root == "" {
 			continue
 		}
-		resolvedRoot, err := canonicalPath(root)
+		if info, statErr := os.Lstat(root); statErr == nil && info.Mode()&os.ModeSymlink != 0 {
+			return errOutputOverlapsSource
+		} else if statErr != nil && !errors.Is(statErr, os.ErrNotExist) {
+			return fmt.Errorf("inspect configured source root: %w", statErr)
+		}
+		rootDirectories, err := pathForms(root)
 		if err != nil {
 			return fmt.Errorf("resolve configured source location: %w", err)
 		}
-		if containsPath(resolvedRoot, resolvedOutput) {
-			return errOutputOverlapsSource
+		for _, outputDirectory := range outputDirectories {
+			for _, rootDirectory := range rootDirectories {
+				if directoriesOverlap(outputDirectory, rootDirectory) {
+					return errOutputOverlapsSource
+				}
+			}
 		}
 		if sameFileIdentity(root, output) {
 			return errOutputOverlapsSource
@@ -52,19 +69,63 @@ func EnsureOutputSeparate(output string, roots, files []string) error {
 		if source == "" {
 			continue
 		}
+		if info, statErr := os.Lstat(source); statErr == nil && info.Mode()&os.ModeSymlink != 0 {
+			return errOutputOverlapsSource
+		} else if statErr != nil && !errors.Is(statErr, os.ErrNotExist) {
+			return fmt.Errorf("inspect discovered source location: %w", statErr)
+		}
+		sourceAbsolute, err := absolutePath(source)
+		if err != nil {
+			return fmt.Errorf("resolve discovered source location: %w", err)
+		}
 		resolvedSource, err := canonicalPath(source)
 		if err != nil {
 			return fmt.Errorf("resolve discovered source location: %w", err)
 		}
-		if samePath(resolvedSource, resolvedOutput) || sameFileIdentity(source, output) {
+		if samePath(sourceAbsolute, outputAbsolute) || samePath(resolvedSource, resolvedOutput) || sameFileIdentity(source, output) {
 			return errOutputOverlapsSource
+		}
+		sourceDirectories, err := pathForms(filepath.Dir(source))
+		if err != nil {
+			return fmt.Errorf("resolve discovered source directory: %w", err)
+		}
+		resolvedDirectories, err := pathForms(filepath.Dir(resolvedSource))
+		if err != nil {
+			return fmt.Errorf("resolve discovered source target directory: %w", err)
+		}
+		sourceDirectories = append(sourceDirectories, resolvedDirectories...)
+		for _, outputDirectory := range outputDirectories {
+			for _, sourceDirectory := range sourceDirectories {
+				if directoriesOverlap(outputDirectory, sourceDirectory) {
+					return errOutputOverlapsSource
+				}
+			}
 		}
 	}
 	return nil
 }
 
+func absolutePath(input string) (string, error) {
+	return filepath.Abs(filepath.Clean(input))
+}
+
+func pathForms(input string) ([]string, error) {
+	absolute, err := absolutePath(input)
+	if err != nil {
+		return nil, err
+	}
+	resolved, err := canonicalPath(input)
+	if err != nil {
+		return nil, err
+	}
+	if samePath(absolute, resolved) {
+		return []string{absolute}, nil
+	}
+	return []string{absolute, resolved}, nil
+}
+
 func canonicalPath(input string) (string, error) {
-	absolute, err := filepath.Abs(filepath.Clean(input))
+	absolute, err := absolutePath(input)
 	if err != nil {
 		return "", err
 	}
@@ -79,6 +140,11 @@ func canonicalPath(input string) (string, error) {
 		if !errors.Is(evalErr, os.ErrNotExist) {
 			return "", evalErr
 		}
+		if info, statErr := os.Lstat(current); statErr == nil && info.Mode()&os.ModeSymlink != 0 {
+			return "", errors.New("path contains a dangling symbolic link")
+		} else if statErr != nil && !errors.Is(statErr, os.ErrNotExist) {
+			return "", statErr
+		}
 		parent := filepath.Dir(current)
 		if parent == current {
 			return absolute, nil
@@ -88,16 +154,24 @@ func canonicalPath(input string) (string, error) {
 	}
 }
 
+func directoriesOverlap(left, right string) bool {
+	return containsPath(left, right) || containsPath(right, left)
+}
+
 func containsPath(root, candidate string) bool {
-	relative, err := filepath.Rel(root, candidate)
-	if err != nil {
-		return false
+	for current := candidate; ; current = filepath.Dir(current) {
+		if samePath(root, current) || sameFileIdentity(root, current) {
+			return true
+		}
+		parent := filepath.Dir(current)
+		if parent == current {
+			return false
+		}
 	}
-	return relative == "." || relative != ".." && !strings.HasPrefix(relative, ".."+string(filepath.Separator))
 }
 
 func samePath(left, right string) bool {
-	if runtime.GOOS == "windows" {
+	if runtime.GOOS == "darwin" || runtime.GOOS == "windows" {
 		return strings.EqualFold(left, right)
 	}
 	return left == right
@@ -110,12 +184,9 @@ func sameFileIdentity(left, right string) bool {
 }
 
 // WriteReport atomically writes only the aggregate report with private permissions.
-func WriteReport(path string, report analytics.Report) error {
+func WriteReport(path string, report analytics.Report) (returnErr error) {
 	dir := filepath.Dir(path)
-	if err := os.MkdirAll(dir, 0o700); err != nil {
-		return fmt.Errorf("create output directory: %w", err)
-	}
-	if err := os.Chmod(dir, 0o700); err != nil {
+	if err := secureOutputDirectory(dir); err != nil {
 		return fmt.Errorf("secure output directory: %w", err)
 	}
 	payload, err := json.MarshalIndent(report, "", "  ")
@@ -131,7 +202,9 @@ func WriteReport(path string, report analytics.Report) error {
 	keep := false
 	defer func() {
 		if !keep {
-			_ = os.Remove(temporaryPath)
+			if err := os.Remove(temporaryPath); err != nil && !errors.Is(err, os.ErrNotExist) {
+				returnErr = errors.Join(returnErr, fmt.Errorf("remove temporary report: %w", err))
+			}
 		}
 	}()
 	if err := temporary.Chmod(0o600); err != nil {
@@ -149,11 +222,6 @@ func WriteReport(path string, report analytics.Report) error {
 	if err := temporary.Close(); err != nil {
 		return fmt.Errorf("close aggregate report: %w", err)
 	}
-	if runtime.GOOS == "windows" {
-		if err := os.Remove(path); err != nil && !errors.Is(err, os.ErrNotExist) {
-			return fmt.Errorf("replace prior aggregate report: %w", err)
-		}
-	}
 	if err := os.Rename(temporaryPath, path); err != nil {
 		return fmt.Errorf("install aggregate report: %w", err)
 	}
@@ -169,9 +237,29 @@ func Clean(path string) error {
 	if err := os.Remove(path); err != nil && !errors.Is(err, os.ErrNotExist) {
 		return fmt.Errorf("remove aggregate report: %w", err)
 	}
-	if err := os.Remove(filepath.Dir(path)); err != nil && !errors.Is(err, os.ErrNotExist) {
-		// A non-empty product directory is left intact deliberately.
+	directory := filepath.Dir(path)
+	info, err := os.Lstat(directory)
+	if errors.Is(err, os.ErrNotExist) {
 		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("inspect aggregate directory: %w", err)
+	}
+	if info.Mode()&os.ModeSymlink != 0 {
+		return nil
+	}
+	if !info.IsDir() {
+		return errors.New("aggregate directory path is not a directory")
+	}
+	entries, err := os.ReadDir(directory)
+	if err != nil {
+		return fmt.Errorf("inspect aggregate directory contents: %w", err)
+	}
+	if len(entries) > 0 {
+		return nil
+	}
+	if err := os.Remove(directory); err != nil && !errors.Is(err, os.ErrNotExist) {
+		return fmt.Errorf("remove empty aggregate directory: %w", err)
 	}
 	return nil
 }

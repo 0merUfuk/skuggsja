@@ -4,7 +4,9 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	_ "modernc.org/sqlite"
@@ -61,5 +63,22 @@ func TestReaderUsesCanonicalSessionAndModelUsageTables(t *testing.T) {
 	session := result.Sessions[0]
 	if len(session.Prompts) != 1 || session.Usage.Input != 110 || session.ToolCalls != 3 {
 		t.Fatalf("unexpected metrics: %s", fmt.Sprintf("prompts=%d input=%d tools=%d", len(session.Prompts), session.Usage.Input, session.ToolCalls))
+	}
+}
+
+func TestDiscoverRejectsSymbolicLinkDatabase(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	target := filepath.Join(dir, "target.db")
+	if err := os.WriteFile(target, []byte("synthetic"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	link := filepath.Join(dir, "state.db")
+	if err := os.Symlink(target, link); err != nil {
+		t.Skipf("symlinks unavailable: %v", err)
+	}
+	_, err := (Reader{DatabasePath: link}).Discover(context.Background())
+	if err == nil || !strings.Contains(err.Error(), "symbolic link") {
+		t.Fatalf("Discover() error = %v, want symbolic-link rejection", err)
 	}
 }

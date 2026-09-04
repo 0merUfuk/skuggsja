@@ -44,6 +44,9 @@ func (r Reader) Discover(_ context.Context) (provider.Discovery, error) {
 		if entry.IsDir() || filepath.Ext(entry.Name()) != ".jsonl" {
 			return nil
 		}
+		if entry.Type()&os.ModeSymlink != 0 {
+			return errors.New("Claude session source is a symbolic link")
+		}
 		rel, relErr := filepath.Rel(r.ProjectsDir, path)
 		if relErr != nil {
 			return relErr
@@ -69,12 +72,14 @@ func (r Reader) Read(ctx context.Context, d provider.Discovery) model.ProviderRe
 		Limitations: []string{
 			"Nested subagent transcripts are excluded because current Claude Code histories duplicate events across files.",
 			"Model events are deduplicated assistant API messages, not a cross-harness turn unit.",
+			"The mapped usage object has no reasoning-token field, so that category is omitted.",
 		},
 	}
 	if len(d.Files) == 0 {
 		return result
 	}
 	result.Status = "supported"
+	result.ToolCallsAvailable = true
 
 	type parsed struct {
 		session  model.Session

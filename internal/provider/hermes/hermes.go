@@ -22,18 +22,26 @@ func (Reader) Harness() model.Harness { return model.Hermes }
 func (Reader) DisplayName() string    { return "Hermes Agent" }
 
 func (r Reader) Discover(_ context.Context) (provider.Discovery, error) {
-	d := provider.Discovery{Harness: model.Hermes, Roots: []string{r.DatabasePath}}
-	info, err := os.Stat(r.DatabasePath)
+	d := provider.Discovery{Harness: model.Hermes, ConfiguredFiles: sqlitePaths(r.DatabasePath)}
+	info, err := os.Lstat(r.DatabasePath)
 	if errors.Is(err, os.ErrNotExist) {
 		return d, nil
 	}
 	if err != nil {
 		return d, err
 	}
-	if info.Mode().IsRegular() {
-		d.Files = []string{r.DatabasePath}
+	if info.Mode()&os.ModeSymlink != 0 {
+		return d, errors.New("Hermes database is a symbolic link")
 	}
+	if !info.Mode().IsRegular() {
+		return d, errors.New("Hermes database is not a regular file")
+	}
+	d.Files = []string{r.DatabasePath}
 	return d, nil
+}
+
+func sqlitePaths(path string) []string {
+	return []string{path, path + "-wal", path + "-shm", path + "-journal"}
 }
 
 func (r Reader) Read(ctx context.Context, d provider.Discovery) (result model.ProviderResult) {
@@ -73,6 +81,7 @@ func (r Reader) Read(ctx context.Context, d provider.Discovery) (result model.Pr
 		return result
 	}
 	result.Status = "supported"
+	result.ToolCallsAvailable = true
 	byID := make(map[string]*model.Session, len(sessions))
 	for i := range sessions {
 		byID[sessions[i].ID] = &sessions[i]

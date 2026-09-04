@@ -88,7 +88,7 @@ These environment variables replace individual discovery locations:
 
 `CLAUDE_CONFIG_DIR`, `CODEX_HOME`, and `HERMES_HOME` change their respective default roots before the more specific `SKUGGSJA_*` overrides are applied. On Linux, `XDG_CONFIG_HOME` affects Cursor's default path; on Windows, `APPDATA` and `LOCALAPPDATA` are used where available.
 
-Overrides are useful for tests and nonstandard installs. Point them only at histories you intend the current process to read. The fixed artifact path must not sit inside a configured source root or alias a source file: generation and `clean` fail closed on cleaned-path, symlink-resolved, and existing hard-link overlap.
+Overrides are useful for tests and nonstandard installs. Point them only at histories you intend the current process to read. The fixed artifact and a configured source may not share or contain one another's directory: generation and `clean` fail closed on cleaned-path, symlink-resolved, case-insensitive macOS/Windows, and existing hard-link overlap. Declared paths are guarded even when provider discovery fails.
 
 ## What the numbers mean
 
@@ -98,7 +98,7 @@ Overrides are useful for tests and nonstandard installs. Point them only at hist
 | Child sessions | Histories identified as children or subagents. They are counted separately and excluded from session-derived totals and rhythm metrics. |
 | Prompts | Unique human prompt events recognized by each adapter. Text is reduced immediately to word and character counts; supported attachment-only events may count as prompts but not as prompt-style samples. |
 | Projects | Distinct final directory names associated with top-level sessions. Absolute project paths are not persisted. |
-| Tool calls | Deduplicated call identifiers where the source exposes them; otherwise the source's count or the adapter's event count. |
+| Tool calls | Deduplicated call identifiers where the source exposes them; otherwise a mapped source count. Totals exclude harnesses such as Cursor where this metric is unavailable. |
 | Active days | Local calendar dates on which at least one top-level session's provider-defined activity time falls. |
 | Model events | Provider-native model/API activity: for example, assistant responses, turn contexts, API-call counts, or eligible Cursor prompt bubbles carrying a model label. These events are not a comparable cross-provider unit. |
 | Tokens | A provider-scoped ledger copied from recognized source usage records when available. Skuggsja does not estimate an unavailable provider ledger or combine unlike cache semantics. A zero category can mean recorded zero or an absent/null field in formats that do not distinguish those cases. |
@@ -115,7 +115,7 @@ Coverage runs from the earliest top-level session start to the latest top-level 
 - Raw prompt text is used transiently to calculate counts and is absent from the normalized model and persisted report.
 - Source paths, session IDs, prompt IDs, call IDs, and tool IDs may exist temporarily for discovery or deduplication but are excluded from the JSON artifact.
 - The persisted artifact contains aggregate timestamps, counts, model labels, project basenames, provider warnings, and source-audit digests. It is privacy-reduced, not anonymous.
-- The default artifact is written through a synced same-directory temporary file and rename. Replacement is atomic on platforms that support rename-over-existing; Windows removes an existing destination first. Unix-like systems receive a mode-`0700` artifact directory and mode-`0600` artifact; the artifact writer does not establish an equivalent Windows ACL guarantee.
+- The default artifact is written through a synced same-directory temporary file and rename-over-existing. Unix-like systems receive a mode-`0700` artifact directory and mode-`0600` artifact. Windows applies and validates a protected directory DACL limited to the current user and LocalSystem; this path cross-compiles but has not been runtime-tested on Windows.
 - A before/after SHA-256 audit checks source contents and directory membership unless disabled. It does not audit metadata such as access times or prove which process caused a concurrent change.
 
 Read [PRIVACY.md](PRIVACY.md) before using real histories and [SECURITY.md](SECURITY.md) for the threat model.
