@@ -1,0 +1,120 @@
+# Security
+
+Skuggsja processes local files that can contain private conversations, credentials pasted into prompts, source paths, and proprietary project names. Its primary security goal is to keep source content on the machine, avoid modifying the source histories, and expose only a reduced aggregate.
+
+Read [PRIVACY.md](PRIVACY.md) for the complete data lifecycle.
+
+## Reporting a vulnerability
+
+Please do not open a public issue containing an exploit, local path, Rewind artifact, agent history, prompt, response, database, screenshot of personal metrics, or other sensitive evidence.
+
+Use GitHub's private vulnerability-reporting or Security Advisory interface for this repository if it is enabled. If that interface is unavailable, contact the maintainer privately through their GitHub profile before publishing details. Include only the minimum synthetic information needed to reproduce the issue:
+
+- affected commit or version;
+- operating system and Go version;
+- provider adapter involved;
+- impact and expected behavior;
+- reproduction using a synthetic fixture;
+- proposed mitigation, if known.
+
+Never send real Claude, Codex, Hermes, or Cursor history files. There is no published response-time SLA yet.
+
+## Verification scope
+
+The current code has operating-system branches for macOS, Linux, and Windows. Real-provider-data verification has occurred only on macOS for the adapters that claim it. Cursor is schema-verified with synthetic data and is not real-data verified. Cross-platform compilation or path resolution is not the same as real-data security verification.
+
+Until versioned releases exist, security fixes target the latest `main` branch. The [changelog](CHANGELOG.md) records release status.
+
+## Security properties
+
+### Runtime network isolation
+
+The installed/built Skuggsja process has no outbound network client, telemetry, update check, CDN, or remote browser dependency. It binds the UI to IPv4 loopback (`127.0.0.1`) and serves an in-memory aggregate plus embedded static assets.
+
+This claim begins after installation. Building or running through the Go tool may download the requested Go toolchain and modules. Launching the default browser delegates to software outside Skuggsja; `--no-open` avoids that launch.
+
+### Source isolation
+
+- JSONL and compressed history files are opened read-only.
+- SQLite sources and persistent sidecars must be regular, non-symlink files and are copied with raw file reads into a private temporary directory. SQLite opens only the copy.
+- A stable-copy check verifies source identity, size, and SHA-256 before, during, and after copying and retries up to five times with bounded backoff.
+- Copied databases must pass `PRAGMA quick_check`; provider queries reopen the copy read-only with `query_only` and defensive mode enabled, double-quoted-string parsing disabled, `trusted_schema` disabled, and temporary storage kept in memory.
+- The default before/after source audit compares source bytes and directory membership across the provider-reader phase.
+- Unknown schemas and ambiguous history modes are skipped or degraded with warnings rather than queried or counted speculatively.
+
+### Data minimization
+
+- Raw prompt/response content has no field in the normalized or persisted model.
+- Source paths and source IDs used for discovery, relationships, and deduplication are not serialized.
+- Project paths are reduced to their final directory names.
+- Source-provided labels are control-character filtered and length limited.
+- Parser warnings are aggregate codes/counts with fixed content-free messages.
+- The UI inserts report values with DOM text APIs rather than HTML interpolation.
+
+### Artifact and web-server hardening
+
+- The aggregate is encoded to a same-directory temporary file, set to mode `0600` where supported, synced, and renamed. Replacement is atomic where rename-over-existing is supported; Windows removes the previous destination first.
+- The default product directory is set to mode `0700` where supported.
+- Generation fails before reads if the fixed artifact lies inside a discovered source root or aliases a source file; `clean` performs the corresponding configured-source check before deletion. Cleaned paths, resolved symlinks, and existing hard-link identity are checked.
+- `clean` also refuses to remove an unexpected artifact filename.
+- The server never binds a wildcard or LAN address; an occupied requested port falls back to another loopback port.
+- HTTP requests whose normalized `Host` is not exactly `127.0.0.1`, `localhost`, or `::1` are rejected with status 421 to reduce DNS-rebinding exposure.
+- Responses set a Content Security Policy restricting connections, scripts, styles, and fonts to self (with `data:` additionally allowed for images), `Referrer-Policy: no-referrer`, `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, and `Cross-Origin-Opener-Policy: same-origin`.
+- The API response is marked `Cache-Control: no-store`.
+- Embedded assets are tested for external origins and additional browser networking APIs.
+
+### Resource bounds
+
+- JSONL parsing has a 64 MiB maximum record size; oversized records are skipped.
+- File parsing and hashing use bounded worker pools.
+- Codex zstd decoding has an explicit decoder-memory ceiling.
+- SQLite stable-copy attempts are limited to five, each copied database uses one connection, and SQLite integrity is checked before queries.
+
+These bounds reduce accidental resource exhaustion; Skuggsja is not a hardened sandbox for actively malicious multi-gigabyte inputs.
+
+## Threat model
+
+Skuggsja is intended for one user inspecting their own histories on a machine they control.
+
+| Threat | Mitigation | Residual risk |
+| --- | --- | --- |
+| Accidental source mutation by SQLite | SQLite opens a stable private copy, never the original | Raw OS reads can update filesystem access metadata; the audit does not compare all metadata |
+| Source/output collision | Generation and `clean` fail closed on root containment and path/symlink/hard-link aliases | Misconfigured unrelated output handling outside Skuggsja remains the user's responsibility |
+| Upstream database changes during copy | Hash source and copied sets, retry five times with bounded backoff | A continuously active source can be skipped; a sophisticated same-hash race is outside the model |
+| Raw content leaking into artifact | Content-free types, label sanitization, serialization tests | Project basenames and aggregates may still be identifying; uncovered parser bugs remain possible |
+| Browser asset exfiltration | Embedded assets, one same-origin fetch, strict CSP/no-referrer | Browser extensions and browser-level behavior are outside the process |
+| Remote access to report | Bind `127.0.0.1` only and reject non-loopback hostnames | Any sufficiently privileged local process can connect with an allowed Host header; there is no app authentication |
+| Partial/malformed history causing false precision | Warnings, record bounds, SQLite-schema and Codex-mode refusal, provider-scoped semantics | Upstream private formats can change; Claude/Codex filename-matched valid JSON with no recognized records may currently look supported but empty |
+| Artifact disclosure | Private Unix modes and privacy-reduced schema | No encryption at rest; the artifact writer has no equivalent protected Windows DACL; custom copies inherit downstream handling |
+| Temporary SQLite disclosure | Private Unix modes or a validated protected Windows DACL, plus normal-path cleanup | Crash or `SIGKILL` may leave a raw copy in the OS temp directory; Windows runtime behavior has not been validated on a Windows machine |
+| Dependency or build-chain compromise | Small dependency surface, reproducible module versions, reviewable Go build | Dependency acquisition is networked and remains a supply-chain trust decision |
+
+## Out of scope and non-goals
+
+Skuggsja does not currently provide:
+
+- authentication, authorization, TLS, or multi-user serving;
+- encryption of the aggregate or temporary SQLite copies;
+- a sandbox for untrusted histories;
+- protection from a compromised kernel, administrator, same-user process, browser, or Go toolchain;
+- proof that upstream tools retained all usage or that a local history is account-complete;
+- proof that source metadata such as access time was unchanged;
+- automatic deletion of custom exports, shell redirections, or stale temp directories after an ungraceful crash;
+- normalized cross-provider billing or token-cost calculations.
+
+Do not expose the loopback port through a proxy, tunnel, container port publication, SSH forwarding, or firewall rule. The server is deliberately not designed for remote use.
+
+## Maintainer checklist for sensitive changes
+
+Changes to a reader, report field, dependency, output path, server, or browser asset should answer all of the following before merge:
+
+1. Can raw content, an absolute path, or a stable source ID reach `analytics.Report`?
+2. Does any code open a source with write flags or let SQLite see the original path?
+3. Does the source audit know every file and sidecar the reader intends to access?
+4. Can a configured source root or file overlap the fixed artifact without the guard rejecting it?
+5. Does the change add an outbound socket, external browser origin, telemetry, or update behavior?
+6. Are source-provided strings bounded and rendered only as text?
+7. Does a synthetic regression test cover the privacy or security boundary?
+8. Does this document or [PRIVACY.md](PRIVACY.md) need a narrower claim?
+
+When evidence is incomplete, describe support as synthetic, schema-verified, or unverified rather than broadening the claim.
