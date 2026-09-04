@@ -5,7 +5,7 @@
   --paper-light: #f7f1e4;
   --ink: #20201d;
   --ink-soft: #59564d;
-  --ink-faint: #817b6c;
+  --ink-faint: #6c665a;
   --rule: #b7ad98;
   --rule-strong: #716b5f;
   --vermilion: #bd3d25;
@@ -40,7 +40,7 @@
     --paper-light: oklch(97% 0.017 82);
     --ink: oklch(24% 0.012 75);
     --ink-soft: oklch(42% 0.018 75);
-    --ink-faint: oklch(55% 0.02 75);
+    --ink-faint: oklch(50% 0.02 75);
     --rule: oklch(72% 0.026 76);
     --rule-strong: oklch(50% 0.025 76);
     --vermilion: oklch(53% 0.17 32);

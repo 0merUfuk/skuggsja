@@ -818,13 +818,22 @@
     if (["ok", "supported", "complete", "ready", "available"].includes(status)) {
       return { kind: "ok", label: "Supported" };
     }
+    if (status === "supported with warnings") {
+      return { kind: "partial", label: "Supported · warnings" };
+    }
     if (["partial", "degraded", "warning", "limited"].includes(status)) {
       return { kind: "partial", label: "Partial" };
+    }
+    if (status === "unsupported schema") {
+      return { kind: "error", label: "Unsupported schema" };
+    }
+    if (status === "unavailable") {
+      return { kind: "error", label: "Unavailable" };
     }
     if (["error", "failed", "invalid"].includes(status)) {
       return { kind: "error", label: "Error" };
     }
-    if (["missing", "not_found", "not found", "unavailable", "unsupported"].includes(status)) {
+    if (["missing", "not_found", "not found", "unsupported"].includes(status)) {
       return { kind: "missing", label: status === "unsupported" ? "Unsupported" : "Not found" };
     }
     if (sessions > 0) {
