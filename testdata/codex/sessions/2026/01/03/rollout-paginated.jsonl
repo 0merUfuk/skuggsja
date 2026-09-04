@@ -1,0 +1,7 @@
+{"timestamp":"2026-01-03T02:00:00Z","type":"session_meta","payload":{"id":"page-root-1","session_id":"page-root-1","cwd":"/synthetic/project-three","source":"cli","history_mode":"paginated"}}
+{"timestamp":"2026-01-03T02:00:01Z","type":"response_item","payload":{"type":"message","id":"raw-page-prompt","role":"user","content":[{"type":"input_text","text":"This raw response item must not count."}]}}
+{"timestamp":"2026-01-03T02:00:02Z","type":"event_msg","payload":{"type":"user_message","message":"This legacy presentation event must not count in paginated mode."}}
+{"timestamp":"2026-01-03T02:00:03Z","type":"event_msg","payload":{"type":"item_completed","turn_id":"page-turn-1","item":{"type":"UserMessage","id":"page-prompt-1","content":[{"type":"text","text":"Ship the paginated parser."}]}}}
+{"timestamp":"2026-01-03T02:00:04Z","type":"event_msg","payload":{"type":"item_completed","turn_id":"page-turn-1","item":{"type":"UserMessage","id":"page-prompt-1","content":[{"type":"text","text":"Ship the paginated parser."}]}}}
+{"timestamp":"2026-01-03T02:00:05Z","type":"turn_context","payload":{"turn_id":"page-turn-1","cwd":"/synthetic/project-three","model":"gpt-synthetic-2"}}
+{"timestamp":"2026-01-03T02:00:06Z","type":"response_item","payload":{"type":"custom_tool_call","id":"page-call-1","call_id":"page-call-1","name":"synthetic","input":"{}"}}

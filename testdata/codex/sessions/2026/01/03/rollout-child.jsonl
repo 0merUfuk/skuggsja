@@ -1,0 +1,4 @@
+{"timestamp":"2026-01-03T01:00:02Z","type":"session_meta","payload":{"id":"child-1","session_id":"root-1","parent_thread_id":"root-1","cwd":"/synthetic/project-two","source":{"subagent":{"thread_spawn":{"parent_thread_id":"root-1","depth":1}}},"history_mode":"legacy"}}
+{"timestamp":"2025-12-01T00:00:00Z","type":"response_item","payload":{"type":"message","id":"copied-parent-response","role":"assistant","content":[]}}
+{"timestamp":"2026-01-03T01:00:03Z","type":"response_item","payload":{"type":"message","id":"agent-prompt","role":"user","content":[{"type":"input_text","text":"Synthetic delegated instruction."}]}}
+{"timestamp":"2026-01-03T01:00:04Z","type":"turn_context","payload":{"turn_id":"child-turn","cwd":"/synthetic/project-two","model":"gpt-synthetic-1"}}

@@ -1,0 +1,7 @@
+{"timestamp":"2026-01-03T01:00:00Z","type":"session_meta","payload":{"id":"root-1","session_id":"root-1","cwd":"/synthetic/project-two","source":"cli","history_mode":"legacy"}}
+{"timestamp":"2026-01-03T01:00:01Z","type":"response_item","payload":{"type":"message","id":"prompt-a","role":"user","content":[{"type":"input_text","text":"<environment_context>synthetic</environment_context>"},{"type":"input_text","text":"Implement the deterministic reducer."}]}}
+{"timestamp":"2026-01-03T01:00:01Z","type":"event_msg","payload":{"type":"user_message","message":"Implement the deterministic reducer.","images":[],"local_images":[]}}
+{"timestamp":"2026-01-03T01:00:02Z","type":"turn_context","payload":{"turn_id":"turn-a","cwd":"/synthetic/project-two","model":"gpt-synthetic-1"}}
+{"timestamp":"2026-01-03T01:00:03Z","type":"response_item","payload":{"type":"function_call","id":"call-a","call_id":"call-a","name":"synthetic","input":"{}"}}
+{"timestamp":"2026-01-03T01:00:04Z","type":"event_msg","payload":{"type":"token_count","info":{"total_token_usage":{"input_tokens":80,"cached_input_tokens":10,"cache_write_input_tokens":5,"output_tokens":15,"reasoning_output_tokens":4,"total_tokens":95}}}}
+{"timestamp":"2026-01-03T01:00:05Z","type":"event_msg","payload":{"type":"token_count","info":{"total_token_usage":{"input_tokens":100,"cached_input_tokens":20,"cache_write_input_tokens":8,"output_tokens":25,"reasoning_output_tokens":7,"total_tokens":125}}}}

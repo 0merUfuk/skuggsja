@@ -1,0 +1,7 @@
+/bin/
+/dist/
+/coverage.out
+/.DS_Store
+/rewind.json
+*.prof
+

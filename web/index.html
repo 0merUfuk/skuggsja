@@ -1,0 +1,374 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#f1ead8">
+    <meta name="description" content="A private, local-first rewind of your AI coding-agent history.">
+    <title>skuggsja — your AI coding-agent rewind</title>
+    <link rel="stylesheet" href="/styles.css">
+    <script src="/app.js" defer></script>
+  </head>
+  <body id="top">
+    <a class="skip-link" href="#main-content">Skip to your rewind</a>
+    <svg id="svg-namespace-probe" class="visually-hidden" aria-hidden="true" focusable="false"></svg>
+    <div class="binding binding--cobalt" aria-hidden="true"></div>
+    <div class="binding binding--vermilion" aria-hidden="true"></div>
+
+    <header class="masthead" aria-label="Rewind masthead">
+      <a class="wordmark" href="#top" aria-label="skuggsja, back to top">
+        <span class="wordmark__name">skuggsja</span>
+        <span class="wordmark__meaning">old norse · mirror</span>
+      </a>
+      <nav class="folio-nav" aria-label="Rewind chapters">
+        <a href="#shape"><span aria-hidden="true">01</span> Shape</a>
+        <a href="#rhythm"><span aria-hidden="true">02</span> Rhythm</a>
+        <a href="#harnesses"><span aria-hidden="true">04</span> Harnesses</a>
+        <a href="#method"><span aria-hidden="true">07</span> Method</a>
+      </nav>
+      <p class="local-mark"><span aria-hidden="true">●</span> localhost edition</p>
+    </header>
+
+    <main id="main-content">
+      <section id="loading-state" class="state-page" aria-labelledby="loading-title" aria-live="polite">
+        <p class="eyebrow">Opening the local archive</p>
+        <h1 id="loading-title">Preparing your mirror<span class="loading-mark" aria-hidden="true">…</span></h1>
+        <p class="state-page__copy">Reading the derived report from this machine.</p>
+        <div class="skeleton" aria-hidden="true">
+          <div class="skeleton__line skeleton__line--short"></div>
+          <div class="skeleton__number"></div>
+          <div class="skeleton__line"></div>
+          <div class="skeleton__spread">
+            <div></div>
+            <div></div>
+            <div></div>
+          </div>
+        </div>
+      </section>
+
+      <section id="error-state" class="state-page state-page--error" aria-labelledby="error-title" aria-live="assertive" hidden>
+        <p class="eyebrow">The archive stayed closed</p>
+        <h1 id="error-title">This mirror could not be developed.</h1>
+        <p id="error-message" class="state-page__copy">The local report endpoint did not answer.</p>
+        <div class="state-actions">
+          <button id="retry-button" class="press-button" type="button">Try the local report again</button>
+          <p>Keep this page open, return to the terminal, and rerun <code>skuggsja</code> if the server stopped.</p>
+        </div>
+      </section>
+
+      <section id="empty-state" class="state-page state-page--empty" aria-labelledby="empty-title" hidden>
+        <p class="eyebrow">Field note · no sessions in view</p>
+        <h1 id="empty-title">The archive is quiet.</h1>
+        <p id="empty-copy" class="state-page__copy">No supported sessions landed inside this recorded span.</p>
+        <div class="state-actions">
+          <button id="empty-retry-button" class="press-button" type="button">Check the report again</button>
+          <p>Review discovery warnings below, check that your agent histories still exist, then rerun the command.</p>
+        </div>
+        <div id="empty-provider-summary" class="empty-provider-summary" aria-label="Provider discovery summary"></div>
+        <div id="empty-warnings" class="empty-warnings"></div>
+      </section>
+
+      <div id="rewind" hidden>
+        <section class="hero chapter" aria-labelledby="hero-title">
+          <div class="hero__copy">
+            <p id="hero-edition" class="eyebrow">Personal archive</p>
+            <h1 id="hero-title">A mirror<br><em>of how you built.</em></h1>
+            <p id="hero-narrative" class="hero__narrative"></p>
+            <p id="coverage-stamp" class="coverage-stamp"></p>
+          </div>
+          <figure class="hero-total" aria-labelledby="hero-session-count hero-session-label">
+            <figcaption class="hero-total__overline">Recorded sessions</figcaption>
+            <strong id="hero-session-count" class="hero-total__number">0</strong>
+            <p id="hero-session-label" class="hero-total__label">sessions held in this mirror</p>
+          </figure>
+          <dl class="proof-strip" aria-label="Archive proof points">
+            <div>
+              <dt>Prompts</dt>
+              <dd id="proof-prompts">—</dd>
+            </div>
+            <div>
+              <dt>Projects</dt>
+              <dd id="proof-projects">—</dd>
+            </div>
+            <div>
+              <dt>Active days</dt>
+              <dd id="proof-days">—</dd>
+            </div>
+            <div>
+              <dt>Source audit</dt>
+              <dd id="proof-audit">—</dd>
+            </div>
+          </dl>
+        </section>
+
+        <aside id="sparse-note" class="field-note" aria-labelledby="sparse-title" hidden>
+          <p class="field-note__mark" aria-hidden="true">※</p>
+          <div>
+            <h2 id="sparse-title">Read this as a field note.</h2>
+            <p id="sparse-copy"></p>
+          </div>
+        </aside>
+
+        <section id="shape" class="chapter chapter--shape" aria-labelledby="shape-title">
+          <header class="chapter-heading">
+            <p class="chapter-number" aria-hidden="true">01</p>
+            <div>
+              <p class="eyebrow">The shape of the recorded span</p>
+              <h2 id="shape-title">Every mark is a day you returned.</h2>
+            </div>
+          </header>
+
+          <div class="activity-layout">
+            <div class="activity-plate">
+              <div class="plate-heading">
+                <div>
+                  <p class="plate-label">Session activity</p>
+                  <p id="activity-caption" class="plate-caption">Calendar view</p>
+                </div>
+                <div class="heat-legend" aria-label="Activity intensity legend">
+                  <span>Quiet</span>
+                  <i class="heat-key heat-key--0" aria-hidden="true"></i>
+                  <i class="heat-key heat-key--1" aria-hidden="true"></i>
+                  <i class="heat-key heat-key--2" aria-hidden="true"></i>
+                  <i class="heat-key heat-key--3" aria-hidden="true"></i>
+                  <i class="heat-key heat-key--4" aria-hidden="true"></i>
+                  <span>Busy</span>
+                </div>
+              </div>
+              <div class="heatmap-scroll" tabindex="0" aria-label="Scrollable activity calendar">
+                <div id="activity-heatmap"></div>
+              </div>
+            </div>
+
+            <dl class="folio-facts" aria-label="Activity highlights">
+              <div class="folio-fact folio-fact--vermilion">
+                <dt>Busiest day</dt>
+                <dd id="busiest-day-date" class="folio-fact__primary">—</dd>
+                <dd id="busiest-day-count" class="folio-fact__secondary">No recorded sessions</dd>
+              </div>
+              <div>
+                <dt>Busiest month</dt>
+                <dd id="busiest-month-label" class="folio-fact__primary">—</dd>
+                <dd id="busiest-month-count" class="folio-fact__secondary">No recorded sessions</dd>
+              </div>
+              <div>
+                <dt>Source files read</dt>
+                <dd id="source-file-count" class="folio-fact__primary">—</dd>
+                <dd class="folio-fact__secondary">read-only inputs discovered</dd>
+              </div>
+            </dl>
+          </div>
+        </section>
+
+        <section id="rhythm" class="chapter chapter--rhythm" aria-labelledby="rhythm-title">
+          <header class="chapter-heading chapter-heading--offset">
+            <p class="chapter-number" aria-hidden="true">02</p>
+            <div>
+              <p class="eyebrow">Your working rhythm</p>
+              <h2 id="rhythm-title">The clock remembers when you found momentum.</h2>
+            </div>
+          </header>
+
+          <div class="rhythm-layout">
+            <figure class="clock-plate" aria-labelledby="clock-caption">
+              <div id="rhythm-clock" class="rhythm-clock"></div>
+              <figcaption id="clock-caption">
+                <span>Favorite hour</span>
+                <strong id="favorite-hour">—</strong>
+                <small>local time</small>
+              </figcaption>
+            </figure>
+
+            <div class="weekday-plate">
+              <p class="plate-label">Weekday cadence</p>
+              <ol id="weekday-list" class="weekday-list"></ol>
+            </div>
+
+            <dl class="rhythm-notes" aria-label="Rhythm highlights">
+              <div>
+                <dt>Longest streak</dt>
+                <dd><strong id="longest-streak">—</strong> <span>days</span></dd>
+              </div>
+              <div>
+                <dt>Late-night share</dt>
+                <dd><strong id="late-night-percent">—</strong> <span>of sessions</span></dd>
+              </div>
+              <div>
+                <dt>Tool calls</dt>
+                <dd><strong id="tool-call-count">—</strong> <span>recorded</span></dd>
+              </div>
+            </dl>
+          </div>
+        </section>
+
+        <section id="voice" class="chapter chapter--voice" aria-labelledby="voice-title">
+          <header class="chapter-heading">
+            <p class="chapter-number" aria-hidden="true">03</p>
+            <div>
+              <p class="eyebrow">The voice in the machine</p>
+              <h2 id="voice-title">How you asked is part of how you built.</h2>
+            </div>
+          </header>
+
+          <div id="prompt-unavailable" class="unavailable-note" hidden>
+            <p class="unavailable-note__mark">Not measured</p>
+            <p>Prompt-length statistics were unavailable, so this page leaves the space honest.</p>
+          </div>
+          <div id="prompt-available" class="prompt-layout">
+            <div class="prompt-lead">
+              <p class="plate-label">Median prompt</p>
+              <p><strong id="median-words">—</strong><span>words</span></p>
+              <small id="prompt-label">Measured locally from prompt text, then discarded</small>
+            </div>
+            <dl class="prompt-facts" aria-label="Prompt style statistics">
+              <div>
+                <dt>Average words</dt>
+                <dd id="average-words">—</dd>
+              </div>
+              <div>
+                <dt>Average characters</dt>
+                <dd id="average-characters">—</dd>
+              </div>
+              <div>
+                <dt>Prompts measured</dt>
+                <dd id="prompts-measured">—</dd>
+              </div>
+            </dl>
+          </div>
+
+          <div class="model-index" aria-labelledby="model-index-title">
+            <div class="index-heading">
+              <h3 id="model-index-title">Model index</h3>
+              <p>Model-attributed events in each harness's native semantics; never treated as one invented unit.</p>
+            </div>
+            <div id="model-list"></div>
+          </div>
+        </section>
+
+        <section id="harnesses" class="chapter chapter--providers" aria-labelledby="harnesses-title">
+          <header class="chapter-heading chapter-heading--offset">
+            <p class="chapter-number" aria-hidden="true">04</p>
+            <div>
+              <p class="eyebrow">The honest ledger</p>
+              <h2 id="harnesses-title">Four histories. No false equivalence.</h2>
+              <p class="chapter-deck">Open a folio for its provenance, limits, and the measurements that source actually recorded.</p>
+            </div>
+          </header>
+          <div class="ledger-labels" aria-hidden="true">
+            <span>Harness</span>
+            <span>Sessions</span>
+            <span>Verification</span>
+          </div>
+          <div id="provider-list" class="provider-list"></div>
+        </section>
+
+        <section id="projects" class="chapter chapter--projects" aria-labelledby="projects-title">
+          <header class="chapter-heading">
+            <p class="chapter-number" aria-hidden="true">05</p>
+            <div>
+              <p class="eyebrow">Where the work gathered</p>
+              <h2 id="projects-title">A project index, not a path disclosure.</h2>
+            </div>
+          </header>
+
+          <div class="projects-layout">
+            <div id="project-list"></div>
+            <aside class="long-session" aria-labelledby="long-session-title">
+              <p class="plate-label">Longest session</p>
+              <h3 id="long-session-title"><span id="longest-session-duration">—</span><small>minutes</small></h3>
+              <p id="longest-session-harness">Harness unavailable</p>
+            </aside>
+          </div>
+        </section>
+
+        <section id="privacy" class="chapter chapter--privacy" aria-labelledby="privacy-title">
+          <header class="chapter-heading chapter-heading--inverse">
+            <p class="chapter-number" aria-hidden="true">06</p>
+            <div>
+              <p class="eyebrow">The negative space matters</p>
+              <h2 id="privacy-title">What this mirror refused to keep.</h2>
+            </div>
+          </header>
+
+          <div class="privacy-layout">
+            <dl class="privacy-claims" aria-label="Privacy report">
+              <div>
+                <dt>Raw content persisted</dt>
+                <dd id="privacy-raw">—</dd>
+              </div>
+              <div>
+                <dt>Absolute paths persisted</dt>
+                <dd id="privacy-paths">—</dd>
+              </div>
+              <div>
+                <dt>Source files changed</dt>
+                <dd id="privacy-changed">—</dd>
+              </div>
+              <div>
+                <dt>Audit coverage</dt>
+                <dd id="privacy-audit-files">—</dd>
+              </div>
+            </dl>
+            <div class="audit-stamp" aria-labelledby="audit-title">
+              <p id="audit-title">Source audit</p>
+              <strong id="audit-verdict">Not verified</strong>
+              <dl>
+                <div>
+                  <dt>Before</dt>
+                  <dd id="manifest-before">—</dd>
+                </div>
+                <div>
+                  <dt>After</dt>
+                  <dd id="manifest-after">—</dd>
+                </div>
+              </dl>
+            </div>
+          </div>
+        </section>
+
+        <section id="method" class="chapter chapter--method" aria-labelledby="method-title">
+          <header class="chapter-heading">
+            <p class="chapter-number" aria-hidden="true">07</p>
+            <div>
+              <p class="eyebrow">Read the footnotes</p>
+              <h2 id="method-title">Method before mythology.</h2>
+              <p class="chapter-deck">This portrait is bounded by what survived locally and by what each harness records.</p>
+            </div>
+          </header>
+
+          <div class="method-layout">
+            <details class="method-notes" open>
+              <summary>How this rewind was derived</summary>
+              <ol id="methodology-list"></ol>
+            </details>
+            <details class="warning-notes">
+              <summary><span>Discovery and parsing warnings</span><span id="warning-count" class="summary-count">0</span></summary>
+              <div id="warning-list"></div>
+            </details>
+          </div>
+        </section>
+      </div>
+    </main>
+
+    <footer id="page-footer" class="page-footer" hidden>
+      <p><span>skuggsja</span> · a local mirror of the sessions that remained on this machine</p>
+      <dl>
+        <div>
+          <dt>Generated</dt>
+          <dd id="generated-at">—</dd>
+        </div>
+        <div>
+          <dt>Schema</dt>
+          <dd id="schema-version">—</dd>
+        </div>
+      </dl>
+    </footer>
+
+    <noscript>
+      <section class="noscript-note">
+        <h1>JavaScript is required to develop this local report.</h1>
+        <p>No remote script is used; the renderer is embedded in the skuggsja binary.</p>
+      </section>
+    </noscript>
+  </body>
+</html>
