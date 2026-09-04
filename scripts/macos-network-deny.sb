@@ -1,0 +1,6 @@
+(version 1)
+
+; Keep the local UI possible while making every remote socket unavailable.
+(allow default)
+(deny network*)
+(allow network* (local ip))
