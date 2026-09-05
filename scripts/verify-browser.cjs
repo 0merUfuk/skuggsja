@@ -45,7 +45,7 @@ const failures = [];
 
 class CDP {
   constructor(ws) {
-    this.ws = ws; this.next = 1; this.pending = new Map(); this.handlers = [];
+    this.ws = ws; this.next = 1; this.pending = new Map(); this.handlers = []; this.inFlightHandlers = new Set();
     ws.addEventListener("message", (event) => {
       const message = JSON.parse(String(event.data));
       if (message.id) {
@@ -54,7 +54,12 @@ class CDP {
         this.pending.delete(message.id); clearTimeout(pending.timer);
         message.error ? pending.reject(new Error(JSON.stringify(message.error))) : pending.resolve(message.result);
       } else {
-        for (const handle of this.handlers) Promise.resolve(handle(message)).catch((error) => failures.push(String(error)));
+        for (const handle of this.handlers) {
+          const handling = Promise.resolve().then(() => handle(message))
+            .catch((error) => failures.push(String(error)))
+            .finally(() => this.inFlightHandlers.delete(handling));
+          this.inFlightHandlers.add(handling);
+        }
       }
     });
     ws.addEventListener("close", () => {
@@ -281,7 +286,10 @@ async function main() {
   catch (error) { result.error = String(error.stack || error); process.exitCode = 1; }
   finally {
     stopping = true;
-    if (cdp) { try { await cdp.send("Browser.close"); } catch {} cdp.ws.close(); }
+    // Install the waiter before shutdown so an early close cannot be missed.
+    const socketClosed = !cdp || cdp.ws.readyState === WebSocket.CLOSED ? Promise.resolve(true) :
+      new Promise((resolve) => cdp.ws.addEventListener("close", () => resolve(true), { once: true }));
+    if (cdp) { try { await cdp.send("Browser.close"); } catch {} }
     if (chrome && chrome.exitCode === null) {
       chrome.kill("SIGTERM");
       await Promise.race([new Promise((resolve) => chrome.once("exit", resolve)), delay(3000)]);
@@ -294,6 +302,15 @@ async function main() {
       failures.push("Chrome termination could not be confirmed; isolated profile retained");
     } else {
       fs.rmSync(profile, { recursive: true, force: true });
+    }
+    if (cdp) {
+      if (cdp.ws.readyState !== WebSocket.CLOSED) cdp.ws.close();
+      if (!await Promise.race([socketClosed, delay(3000, false)])) {
+        failures.push("CDP socket closure could not be confirmed");
+      }
+      if (!await Promise.race([Promise.all([...cdp.inFlightHandlers]).then(() => true), delay(3000, false)])) {
+        failures.push("CDP event handlers did not finish before ledger finalization");
+      }
     }
     // Shutdown can emit final network/target/exception events. Judge the complete
     // ledger after Chrome has stopped, not only the pre-close observation window.
