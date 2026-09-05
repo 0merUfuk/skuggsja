@@ -22,7 +22,7 @@ cleanup() {
 }
 trap cleanup EXIT HUP INT TERM
 
-mkdir -p "$verify_root/bin" "$verify_root/home" "$verify_root/missing" "$verify_root/sources"
+mkdir -p "$verify_root/bin" "$verify_root/output" "$verify_root/missing" "$verify_root/sources"
 CGO_ENABLED=0 go -C "$repo_dir" build -trimpath -o "$verify_root/bin/skuggsja" ./cmd/skuggsja
 CGO_ENABLED=0 go -C "$repo_dir" build -trimpath -o "$verify_root/bin/network-probe" ./scripts/network-probe
 CGO_ENABLED=0 go -C "$repo_dir" build -trimpath -o "$verify_root/bin/verification-fixtures" ./scripts/verification-fixtures
@@ -52,10 +52,23 @@ fi
 server_log="$verify_root/server.log"
 
 env \
-  HOME="$verify_root/home" \
+  SKUGGSJA_OUTPUT_DIRECTORY="$verify_root/output" \
   SKUGGSJA_CLAUDE_PROJECTS="$repo_dir/testdata/claude" \
+  SKUGGSJA_CLAUDE_EXTRA_HOMES="" \
+  SKUGGSJA_CLAUDE_HISTORY="$verify_root/missing/claude-history.jsonl" \
+  SKUGGSJA_CLAUDE_STATS="$verify_root/missing/claude-stats.json" \
+  SKUGGSJA_CLAUDE_GLOBAL_STATE="$verify_root/missing/claude-global.json" \
+  SKUGGSJA_CLAUDE_DESKTOP_SESSIONS="$verify_root/missing/claude-desktop" \
+  SKUGGSJA_CLAUDE_CODE_SESSIONS="$verify_root/missing/claude-code" \
   SKUGGSJA_CODEX_SESSIONS="$repo_dir/testdata/codex/sessions" \
   SKUGGSJA_CODEX_ARCHIVED="$verify_root/missing/codex-archive" \
+  SKUGGSJA_CODEX_RECOVERY="$verify_root/missing/codex-recovery" \
+  SKUGGSJA_CODEX_HISTORY="$verify_root/missing/codex-history.jsonl" \
+  SKUGGSJA_CODEX_SESSION_INDEX="$verify_root/missing/codex-session-index.jsonl" \
+  SKUGGSJA_CODEX_EXTERNAL_IMPORTS="$verify_root/missing/codex-imports.json" \
+  SKUGGSJA_CODEX_STATE_DATABASE="$verify_root/missing/codex-state.sqlite" \
+  SKUGGSJA_CODEX_CATALOG_DATABASE="$verify_root/missing/codex-catalog.sqlite" \
+  SKUGGSJA_CODEX_THREAD_HISTORY_DATABASE="$verify_root/missing/codex-thread-history.sqlite" \
   SKUGGSJA_HERMES_DATABASE="$verify_root/sources/hermes/state.db" \
   SKUGGSJA_CURSOR_DATABASE="$verify_root/sources/cursor/state.vscdb" \
   sandbox-exec -f "$repo_dir/scripts/macos-network-deny.sb" \

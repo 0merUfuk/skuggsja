@@ -9,6 +9,26 @@ import (
 	"github.com/0merUfuk/skuggsja/internal/analytics"
 )
 
+func TestExplicitOutputDirectoryRetainsSourceProtection(t *testing.T) {
+	root := t.TempDir()
+	source := filepath.Join(root, "history")
+	t.Setenv("SKUGGSJA_OUTPUT_DIRECTORY", source)
+	output, err := DefaultOutputPath()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := EnsureOutputSeparate(output, []string{source}, nil); !errors.Is(err, errOutputOverlapsSource) {
+		t.Fatalf("explicit output inside source accepted: %v", err)
+	}
+	if _, err := os.Lstat(source); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("output resolution changed absent source: %v", err)
+	}
+	t.Setenv("SKUGGSJA_OUTPUT_DIRECTORY", "relative-output")
+	if _, err := DefaultOutputPath(); err == nil {
+		t.Fatal("relative output directory accepted")
+	}
+}
+
 func TestEnsureOutputSeparateRejectsAbsentSourceFileAboveOutput(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()

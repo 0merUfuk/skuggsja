@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/0merUfuk/skuggsja/internal/app"
+	"github.com/0merUfuk/skuggsja/internal/platform"
 )
 
 func TestCleanRefusesConfiguredSourceAlias(t *testing.T) {
@@ -111,5 +112,25 @@ func TestCleanAllowsGlobalStateInHomeAncestor(t *testing.T) {
 	}
 	if got, err := os.ReadFile(globalState); err != nil || string(got) != "{}\n" {
 		t.Fatalf("global state changed: content=%q error=%v", got, err)
+	}
+}
+
+func TestExplicitClaudeProjectsScopeClearsAutomaticExtraHomes(t *testing.T) {
+	root := t.TempDir()
+	paths := platform.Paths{ClaudeExtraHomes: []string{filepath.Join(root, "automatic")}}
+	t.Setenv("SKUGGSJA_CLAUDE_PROJECTS", filepath.Join(root, "isolated-projects"))
+	t.Setenv("SKUGGSJA_CLAUDE_EXTRA_HOMES", "")
+	if err := os.Unsetenv("SKUGGSJA_CLAUDE_EXTRA_HOMES"); err != nil {
+		t.Fatal(err)
+	}
+	applyPathOverrides(&paths)
+	if len(paths.ClaudeExtraHomes) != 0 {
+		t.Fatalf("inherited homes=%q", paths.ClaudeExtraHomes)
+	}
+	t.Setenv("SKUGGSJA_CLAUDE_EXTRA_HOMES", filepath.Join(root, "explicit-a")+string(os.PathListSeparator)+filepath.Join(root, "explicit-b"))
+	t.Setenv("SKUGGSJA_CODEX_RECOVERY", filepath.Join(root, "isolated-recovery"))
+	applyPathOverrides(&paths)
+	if len(paths.ClaudeExtraHomes) != 2 || paths.CodexRecovery != filepath.Join(root, "isolated-recovery") {
+		t.Fatalf("explicit source overrides=%#v", paths)
 	}
 }

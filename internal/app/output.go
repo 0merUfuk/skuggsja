@@ -16,8 +16,15 @@ const artifactName = "rewind.json"
 
 var errOutputOverlapsSource = errors.New("generated artifact location overlaps a configured source location")
 
-// DefaultOutputPath returns the one generated-artifact location for this OS.
+// DefaultOutputPath returns the generated-artifact location for this OS, or an
+// explicit private output directory. Source separation is enforced by callers.
 func DefaultOutputPath() (string, error) {
+	if directory := os.Getenv("SKUGGSJA_OUTPUT_DIRECTORY"); directory != "" {
+		if !filepath.IsAbs(directory) {
+			return "", errors.New("SKUGGSJA_OUTPUT_DIRECTORY must be an absolute directory")
+		}
+		return filepath.Join(directory, artifactName), nil
+	}
 	cache, err := os.UserCacheDir()
 	if err != nil {
 		return "", fmt.Errorf("resolve user cache directory: %w", err)

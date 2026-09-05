@@ -5,6 +5,7 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -13,6 +14,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -31,6 +33,7 @@ const maxDecoderMemory = 256 << 20
 type Reader struct {
 	SessionsDir           string
 	ArchivedDir           string
+	RecoveryDir           string
 	HistoryFile           string
 	SessionIndexFile      string
 	ExternalImportsFile   string
@@ -44,6 +47,9 @@ func (Reader) DisplayName() string    { return "Codex" }
 
 func (r Reader) Discover(_ context.Context) (provider.Discovery, error) {
 	d := provider.Discovery{Harness: model.Codex, Roots: []string{r.SessionsDir, r.ArchivedDir}}
+	if r.RecoveryDir != "" {
+		d.Roots = append(d.Roots, r.RecoveryDir)
+	}
 	// Keep every configured source protected even if an earlier discovery step
 	// fails before reaching supplemental indexes or their SQLite sidecars.
 	for _, path := range []string{r.HistoryFile, r.SessionIndexFile, r.ExternalImportsFile} {
@@ -57,6 +63,7 @@ func (r Reader) Discover(_ context.Context) (provider.Discovery, error) {
 		}
 	}
 	selected := make(map[string]string)
+	physicalRollouts := make(map[string]struct{})
 	for _, root := range d.Roots {
 		info, err := os.Stat(root)
 		if errors.Is(err, os.ErrNotExist) {
@@ -76,6 +83,7 @@ func (r Reader) Discover(_ context.Context) (provider.Discovery, error) {
 				if entry.Type()&os.ModeSymlink != 0 {
 					return errors.New("Codex rollout source is a symbolic link")
 				}
+				physicalRollouts[path] = struct{}{}
 				plainPath := plainRolloutPath(path)
 				current, exists := selected[plainPath]
 				if !exists || isPlainRollout(path) && !isPlainRollout(current) {
@@ -89,6 +97,12 @@ func (r Reader) Discover(_ context.Context) (provider.Discovery, error) {
 	}
 	for _, path := range selected {
 		d.Files = append(d.Files, path)
+		delete(physicalRollouts, path)
+	}
+	// A plain rollout takes parsing precedence, but its compressed sibling is
+	// still a physical source whose in-place changes must affect the manifest.
+	for path := range physicalRollouts {
+		d.AuditFiles = append(d.AuditFiles, path)
 	}
 	for _, path := range []string{r.HistoryFile, r.SessionIndexFile, r.ExternalImportsFile} {
 		if path == "" {
@@ -131,6 +145,7 @@ func (r Reader) Discover(_ context.Context) (provider.Discovery, error) {
 	}
 	sort.Strings(d.Files)
 	sort.Strings(d.AuditFiles)
+	d.AuditFiles = slices.Compact(d.AuditFiles)
 	sort.Strings(d.ConfiguredFiles)
 	return d, nil
 }
@@ -339,7 +354,7 @@ func (r Reader) Read(ctx context.Context, d provider.Discovery) model.ProviderRe
 		}
 	}
 	if containsPath(d.AuditFiles, r.StateDatabase) {
-		evidence, err := readStateIndex(ctx, r.StateDatabase, r.SessionsDir, r.ArchivedDir)
+		evidence, err := readStateIndex(ctx, r.StateDatabase, r.SessionsDir, r.ArchivedDir, r.RecoveryDir)
 		if err != nil {
 			result.AddWarning("state_index_unavailable", "Codex's thread-state database could not be copied and queried safely.")
 		} else {
@@ -429,6 +444,7 @@ func planSegments(ctx context.Context, paths []string) ([]segmentPlan, map[strin
 	planByPath := make(map[string]int, len(paths))
 	groups := make(map[string][]segmentInfo)
 	warnings := make(map[string]int)
+	suppressedCopies := make(map[string]bool)
 	for _, path := range paths {
 		plans = append(plans, segmentPlan{Path: path})
 		planByPath[path] = len(plans) - 1
@@ -442,6 +458,27 @@ func planSegments(ctx context.Context, paths []string) ([]segmentPlan, map[strin
 		}
 	}
 	for id, group := range groups {
+		// A recovery copy is another physical source, not another segment. Keep
+		// it in discovery/SourceFiles for auditing, but remove exact copies before
+		// validating pagination so a copied base cannot invalidate a valid chain.
+		if len(group) > 1 {
+			seen := make(map[[sha256.Size]byte]bool)
+			unique := make([]segmentInfo, 0, len(group))
+			for _, info := range group {
+				digest, err := rolloutFingerprint(ctx, info.Path)
+				if err != nil {
+					warnings["rollout_copy_comparison_failed"]++
+				} else if seen[digest] {
+					suppressedCopies[info.Path] = true
+					warnings["identical_rollout_copy_suppressed"]++
+					continue
+				} else {
+					seen[digest] = true
+				}
+				unique = append(unique, info)
+			}
+			group = unique
+		}
 		if len(group) < 2 {
 			if len(group) == 1 && group[0].HistoryBase != nil {
 				warnings["missing_history_base"]++
@@ -493,7 +530,46 @@ func planSegments(ctx context.Context, paths []string) ([]segmentPlan, map[strin
 			}
 		}
 	}
-	return plans, warnings
+	retained := plans[:0]
+	for _, plan := range plans {
+		if !suppressedCopies[plan.Path] {
+			retained = append(retained, plan)
+		}
+	}
+	return retained, warnings
+}
+
+func rolloutFingerprint(ctx context.Context, path string) ([sha256.Size]byte, error) {
+	var digest [sha256.Size]byte
+	if err := ctx.Err(); err != nil {
+		return digest, err
+	}
+	f, err := os.Open(path) // Intentionally read-only; never fingerprint through SQLite.
+	if err != nil {
+		return digest, err
+	}
+	defer f.Close()
+	before, err := f.Stat()
+	if err != nil {
+		return digest, err
+	}
+	hash := sha256.New()
+	n, err := io.Copy(hash, f)
+	if err != nil {
+		return digest, err
+	}
+	after, err := os.Stat(path)
+	if err != nil {
+		return digest, err
+	}
+	if !os.SameFile(before, after) || n != before.Size() || before.Size() != after.Size() || !before.ModTime().Equal(after.ModTime()) {
+		return digest, errors.New("rollout changed while comparing copies")
+	}
+	if err := ctx.Err(); err != nil {
+		return digest, err
+	}
+	copy(digest[:], hash.Sum(nil))
+	return digest, nil
 }
 
 func inspectSegment(ctx context.Context, path string) (segmentInfo, error) {
@@ -721,6 +797,8 @@ func codexWarningMessage(code string) string {
 		"stitched_history_segments":               "Paginated rollout segments were boundary-validated and stitched instead of dropping an earlier segment.",
 		"ambiguous_history_chain_suppressed":      "Same-ID rollout files failed history-chain validation; one preferred physical file was retained and conflicting detail may be omitted.",
 		"unvalidated_same_id_rollout_suppressed":  "An additional same-ID rollout outside a validated chain was suppressed after a deterministic preference comparison.",
+		"identical_rollout_copy_suppressed":       "Byte-identical same-ID rollout copies were counted once; every physical source remains in the audit manifest.",
+		"rollout_copy_comparison_failed":          "Some same-ID rollout copies could not be compared stably; conservative history-chain validation was retained.",
 		"duplicate_stitched_prompt":               "A prompt event repeated across validated history segments and was counted once by event ID.",
 		"missing_history_base":                    "A paginated continuation referenced a base rollout that was not found; only the surviving partial segment was read.",
 		"malformed_history_record":                "Malformed prompt-history records were skipped.",
@@ -805,7 +883,8 @@ func hasCodexLossWarning(warnings []model.Warning) bool {
 	lossCodes := map[string]struct{}{
 		"unreadable_file": {}, "malformed_record": {}, "oversize_record": {}, "invalid_timestamp": {}, "missing_or_invalid_session_meta": {}, "unknown_history_mode": {},
 		"history_chain_inspection_failed": {}, "ambiguous_history_chain_suppressed": {}, "unvalidated_same_id_rollout_suppressed": {}, "missing_history_base": {},
-		"unreadable_history": {}, "malformed_history_record": {}, "oversize_history_record": {},
+		"rollout_copy_comparison_failed": {},
+		"unreadable_history":             {}, "malformed_history_record": {}, "oversize_history_record": {},
 		"unreadable_session_index": {}, "malformed_session_index_record": {}, "oversize_session_index_record": {},
 		"malformed_external_imports": {}, "oversize_external_imports": {}, "state_index_unavailable": {}, "uninspectable_state_rollout_paths": {},
 		"catalog_index_unavailable": {}, "unparsed_thread_history_database": {},

@@ -8,6 +8,8 @@ import (
 
 func TestDefaultPathsHonorsHarnessHomeOverrides(t *testing.T) {
 	root := t.TempDir()
+	t.Setenv("HOME", root)
+	t.Setenv("USERPROFILE", root)
 	claudeHome := filepath.Join(root, "claude-home")
 	codexHome := filepath.Join(root, "codex-home")
 	hermesHome := filepath.Join(root, "hermes-home")
@@ -28,6 +30,7 @@ func TestDefaultPathsHonorsHarnessHomeOverrides(t *testing.T) {
 	}
 	if paths.CodexSessions != filepath.Join(codexHome, "sessions") ||
 		paths.CodexArchived != filepath.Join(codexHome, "archived_sessions") ||
+		paths.CodexRecovery != filepath.Join(codexHome, "recovery") ||
 		paths.CodexHistory != filepath.Join(codexHome, "history.jsonl") ||
 		paths.CodexSessionIndex != filepath.Join(codexHome, "session_index.jsonl") ||
 		paths.CodexStateDatabase != filepath.Join(codexHome, "state_5.sqlite") ||
@@ -41,6 +44,9 @@ func TestDefaultPathsHonorsHarnessHomeOverrides(t *testing.T) {
 }
 
 func TestDefaultPathsReturnsAbsoluteNativeLocations(t *testing.T) {
+	root := t.TempDir()
+	t.Setenv("HOME", root)
+	t.Setenv("USERPROFILE", root)
 	for _, name := range []string{"CLAUDE_CONFIG_DIR", "CODEX_HOME", "HERMES_HOME"} {
 		t.Setenv(name, "")
 	}
@@ -51,7 +57,7 @@ func TestDefaultPathsReturnsAbsoluteNativeLocations(t *testing.T) {
 	for name, path := range map[string]string{
 		"Claude": paths.ClaudeProjects, "Claude history": paths.ClaudeHistory,
 		"Claude stats": paths.ClaudeStats, "Claude global state": paths.ClaudeGlobalState,
-		"Codex sessions": paths.CodexSessions, "Codex archive": paths.CodexArchived,
+		"Codex sessions": paths.CodexSessions, "Codex archive": paths.CodexArchived, "Codex recovery": paths.CodexRecovery,
 		"Codex history": paths.CodexHistory, "Codex index": paths.CodexSessionIndex,
 		"Codex imports": paths.CodexExternalImports, "Codex state": paths.CodexStateDatabase, "Hermes": paths.HermesDatabase,
 		"Codex catalog":        paths.CodexCatalogDatabase,

@@ -6,11 +6,13 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"reflect"
 	"slices"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/0merUfuk/skuggsja/internal/audit"
 	"github.com/0merUfuk/skuggsja/internal/model"
 	"github.com/klauspost/compress/zstd"
 )
@@ -142,6 +144,66 @@ func TestDiscoverRejectsSymbolicLinkRollout(t *testing.T) {
 	}
 }
 
+func TestRecoveryDiscoveryRetainsAuditSourcesWithoutInflatingCopiedUsage(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	sessions := filepath.Join(root, "sessions")
+	recovery := filepath.Join(root, "recovery", "saved", "nested")
+	for _, dir := range []string{sessions, recovery} {
+		if err := os.MkdirAll(dir, 0o700); err != nil {
+			t.Fatal(err)
+		}
+	}
+	data := syntheticLegacyRollout("copied", "Count this prompt once.")
+	canonical := filepath.Join(sessions, "rollout-canonical.jsonl")
+	copied := filepath.Join(recovery, "rollout-recovered.jsonl")
+	for _, path := range []string{canonical, copied} {
+		if err := os.WriteFile(path, data, 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	reader := Reader{SessionsDir: sessions}
+	discovery, err := reader.Discover(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	baseline := reader.Read(context.Background(), discovery)
+	reader.RecoveryDir = filepath.Join(root, "recovery")
+	discovery, err = reader.Discover(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	result := reader.Read(context.Background(), discovery)
+	if !reflect.DeepEqual(result.Sessions, baseline.Sessions) || !reflect.DeepEqual(result.Coverage, baseline.Coverage) {
+		t.Fatalf("byte-identical recovery changed usage or coverage: sessions=%#v coverage=%#v", result.Sessions, result.Coverage)
+	}
+	if len(discovery.Files) != 2 || len(result.SourceFiles) != 2 || !slices.Contains(result.SourceFiles, canonical) || !slices.Contains(result.SourceFiles, copied) {
+		t.Fatalf("physical audit sources were lost: discovery=%#v sources=%v", discovery, result.SourceFiles)
+	}
+	if warningCount(result, "identical_rollout_copy_suppressed") != 1 || warningCount(result, "ambiguous_history_chain_suppressed") != 0 || warningCount(result, "unvalidated_same_id_rollout_suppressed") != 0 {
+		t.Fatalf("recovery warnings = %#v", result.Warnings)
+	}
+	for _, path := range []string{canonical, copied} {
+		got, err := os.ReadFile(path)
+		if err != nil || string(got) != string(data) {
+			t.Fatalf("source changed: path=%s error=%v", path, err)
+		}
+	}
+	// A transcript that survives only in recovery must contribute its evidence.
+	unique := filepath.Join(recovery, "rollout-unique.jsonl")
+	if err := os.WriteFile(unique, syntheticLegacyRollout("recovery-only", "Recovered unique prompt."), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	discovery, err = reader.Discover(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	result = reader.Read(context.Background(), discovery)
+	if len(result.Sessions) != 2 || sessionByID(result, "recovery-only") == nil || len(result.SourceFiles) != 3 {
+		t.Fatalf("unique recovery evidence missing: sessions=%d sources=%d", len(result.Sessions), len(result.SourceFiles))
+	}
+}
+
 func TestDiscoverPrefersPlainSiblingAndReadsZstd(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()
@@ -178,6 +240,9 @@ func TestDiscoverPrefersPlainSiblingAndReadsZstd(t *testing.T) {
 			t.Fatalf("selected compressed sibling instead of plain file: %v", discovery.Files)
 		}
 	}
+	if len(discovery.AuditFiles) != 1 || discovery.AuditFiles[0] != plainPath+".zst" {
+		t.Fatalf("suppressed sibling was omitted from audit sources: %v", discovery.AuditFiles)
+	}
 
 	result := reader.Read(context.Background(), discovery)
 	if got, want := len(result.Sessions), 2; got != want {
@@ -191,6 +256,26 @@ func TestDiscoverPrefersPlainSiblingAndReadsZstd(t *testing.T) {
 		if got, want := len(session.Prompts), 1; got != want {
 			t.Errorf("%s prompts = %d, want %d", id, got, want)
 		}
+	}
+	if len(result.SourceFiles) != 3 || !slices.Contains(result.SourceFiles, plainPath+".zst") {
+		t.Fatalf("physical source coverage = %v, want all three files", result.SourceFiles)
+	}
+	before, err := audit.CaptureConfigured(context.Background(), discovery.Roots, result.SourceFiles, discovery.ConfiguredFiles)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Same path and length, different bytes: directory membership alone cannot
+	// detect a change to this suppressed source.
+	if err := os.WriteFile(plainPath+".zst", []byte("NOT a zstd frame"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	after, err := audit.CaptureConfigured(context.Background(), discovery.Roots, result.SourceFiles, discovery.ConfiguredFiles)
+	if err != nil {
+		t.Fatal(err)
+	}
+	comparison := audit.Compare(before, after)
+	if comparison.Verified || comparison.ChangedFiles != 1 || comparison.DirectoryChanges != 0 || comparison.ManifestBefore == comparison.ManifestAfter {
+		t.Fatalf("suppressed sibling change escaped content audit: %#v", comparison)
 	}
 }
 
@@ -221,7 +306,18 @@ func TestReaderStitchesValidatedPaginatedHistorySegments(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	reader := Reader{SessionsDir: root}
+	// Identical copies of either physical segment must not break the validated
+	// chain or create another prompt/token contribution.
+	recovery := filepath.Join(t.TempDir(), "recovery", "nested")
+	if err := os.MkdirAll(recovery, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	for name, data := range map[string]string{"rollout-base-copy.jsonl": base, "rollout-tail-copy.jsonl": continuation} {
+		if err := os.WriteFile(filepath.Join(recovery, name), []byte(data), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	reader := Reader{SessionsDir: root, RecoveryDir: filepath.Dir(recovery)}
 	discovery, err := reader.Discover(context.Background())
 	if err != nil {
 		t.Fatal(err)
@@ -242,6 +338,9 @@ func TestReaderStitchesValidatedPaginatedHistorySegments(t *testing.T) {
 	}
 	if warningCount(result, "unvalidated_same_id_rollout_suppressed") != 1 || warningCount(result, "history_chain_inspection_failed") != 1 {
 		t.Errorf("unvalidated duplicate warnings = %#v", result.Warnings)
+	}
+	if warningCount(result, "identical_rollout_copy_suppressed") != 2 || warningCount(result, "ambiguous_history_chain_suppressed") != 0 || len(result.SourceFiles) != 5 {
+		t.Errorf("copied chain warnings/sources = %#v / %d", result.Warnings, len(result.SourceFiles))
 	}
 }
 

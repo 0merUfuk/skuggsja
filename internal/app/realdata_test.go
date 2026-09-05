@@ -37,12 +37,12 @@ func TestRealDataFullRunLeavesSourcesUnchanged(t *testing.T) {
 	}
 	readers := []provider.Reader{
 		claude.Reader{
-			ProjectsDir: paths.ClaudeProjects, HistoryFile: paths.ClaudeHistory,
+			ProjectsDir: paths.ClaudeProjects, HistoryFile: paths.ClaudeHistory, ExtraHomes: paths.ClaudeExtraHomes,
 			StatsFile: paths.ClaudeStats, GlobalStateFile: paths.ClaudeGlobalState,
 			DesktopSessionsDir: paths.ClaudeDesktopSessions, CodeSessionsDir: paths.ClaudeCodeSessions,
 		},
 		codex.Reader{
-			SessionsDir: paths.CodexSessions, ArchivedDir: paths.CodexArchived,
+			SessionsDir: paths.CodexSessions, ArchivedDir: paths.CodexArchived, RecoveryDir: paths.CodexRecovery,
 			HistoryFile: paths.CodexHistory, SessionIndexFile: paths.CodexSessionIndex,
 			ExternalImportsFile: paths.CodexExternalImports, StateDatabase: paths.CodexStateDatabase,
 			CatalogDatabase: paths.CodexCatalogDatabase, ThreadHistoryDatabase: paths.CodexThreadHistoryDatabase,
@@ -68,7 +68,7 @@ func TestRealDataFullRunLeavesSourcesUnchanged(t *testing.T) {
 			configured = append(configured, discovery.ConfiguredFiles...)
 		}
 		if err := waitForQuietSourceMetadata(ctx, roots, append(append([]string(nil), files...), configured...)); err != nil {
-			t.Fatalf("wait for a quiet source window: %v", err)
+			t.Logf("active_source_window attempt=%d warning=%q; proceeding with strict before/after captures", attempt, err)
 		}
 		before, err := audit.CaptureConfigured(ctx, roots, files, configured)
 		if err != nil {
@@ -146,11 +146,11 @@ func logChangedProviders(t *testing.T, comparison audit.Comparison, before, afte
 			changedByProvider["hermes"]++
 		case path == paths.CursorStateDB || path == paths.CursorStateDB+"-wal" || path == paths.CursorStateDB+"-shm" || path == paths.CursorStateDB+"-journal":
 			changedByProvider["cursor"]++
-		case withinRoot(paths.ClaudeProjects, path):
+		case withinRoot(paths.ClaudeProjects, path) || withinAnyRoot(paths.ClaudeExtraHomes, path):
 			changedByProvider["claude"]++
 		case withinRoot(paths.ClaudeDesktopSessions, path) || withinRoot(paths.ClaudeCodeSessions, path) || path == paths.ClaudeHistory || path == paths.ClaudeStats || path == paths.ClaudeGlobalState:
 			changedByProvider["claude"]++
-		case withinRoot(paths.CodexSessions, path) || withinRoot(paths.CodexArchived, path):
+		case withinRoot(paths.CodexSessions, path) || withinRoot(paths.CodexArchived, path) || withinRoot(paths.CodexRecovery, path):
 			changedByProvider["codex"]++
 		case path == paths.CodexHistory || path == paths.CodexSessionIndex || path == paths.CodexExternalImports:
 			changedByProvider["codex"]++
@@ -261,4 +261,13 @@ func withinRoot(root, path string) bool {
 	relative, err := filepath.Rel(root, path)
 	return err == nil && relative != ".." && relative != "." && !filepath.IsAbs(relative) &&
 		!strings.HasPrefix(relative, ".."+string(filepath.Separator))
+}
+
+func withinAnyRoot(roots []string, path string) bool {
+	for _, root := range roots {
+		if withinRoot(root, path) {
+			return true
+		}
+	}
+	return false
 }

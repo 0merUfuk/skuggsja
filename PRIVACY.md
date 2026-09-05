@@ -78,7 +78,7 @@ If a source is actively changing, verification may be inconclusive even though S
 
 ## Persisted artifact
 
-The default artifact is the OS user-cache path ending in `skuggsja/rewind.json`. Its contents include:
+The default artifact is the OS user-cache path ending in `skuggsja/rewind.json`; an explicit `SKUGGSJA_OUTPUT_DIRECTORY` selects another absolute directory under the same source-separation protections. Its contents include:
 
 - provider names, status, verification wording, limitations, and aggregate warnings;
 - global coverage timestamps/timezone plus each provider's content-free coverage status, confidence, earliest evidence/detail timestamps, and missing-detail counts;
@@ -110,7 +110,7 @@ Recommended practice:
 skuggsja clean
 ```
 
-This removes only the default `rewind.json` and removes the product cache directory only if it is then empty. It deliberately refuses to act on an unexpected filename or when configured source locations overlap or alias the artifact. It does not delete:
+This removes only `rewind.json` from the selected default or explicit output directory, then removes that directory only if empty. It deliberately refuses to act on an unexpected filename or when configured source locations overlap or alias the artifact. It does not delete:
 
 - source histories;
 - stdout redirections or copies;

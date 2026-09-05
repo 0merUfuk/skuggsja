@@ -3,6 +3,7 @@ package claude
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -23,6 +24,8 @@ const maxRecordBytes = 64 << 20
 // Reader discovers terminal/IDE histories plus Claude Desktop's embedded local
 // agent histories and Claude Code's supplemental prompt/statistics indexes.
 type Reader struct {
+	// ExtraHomes contains verified native config roots, never paths read from an index.
+	ExtraHomes         []string
 	ProjectsDir        string
 	HistoryFile        string
 	StatsFile          string
@@ -34,7 +37,7 @@ type Reader struct {
 func (Reader) Harness() model.Harness { return model.Claude }
 func (Reader) DisplayName() string    { return "Claude Code" }
 
-func (r Reader) Discover(_ context.Context) (provider.Discovery, error) {
+func (r Reader) discoverConfigured(_ context.Context) (provider.Discovery, error) {
 	d := provider.Discovery{Harness: model.Claude}
 	// Declare configured locations before any filesystem operation can fail.
 	// Generate must protect them even when detailed discovery is unavailable.
@@ -127,6 +130,7 @@ func globalStateCandidates(path string) ([]string, error) {
 		path + ".backup*",
 		path + ".bak-*",
 		filepath.Join(filepath.Dir(path), ".claude", "backups", ".claude.json.backup.*"),
+		filepath.Join(filepath.Dir(path), "backups", ".claude.json.backup.*"),
 		filepath.Join(filepath.Dir(path), ".pencil-cleanup-backup-*", "*-.claude.json.backup"),
 	}
 	for _, pattern := range patterns {
@@ -276,6 +280,7 @@ func (r Reader) Read(ctx context.Context, d provider.Discovery) model.ProviderRe
 	addWarningCount(&result, "desktop_local_agent_sessions_excluded", claudeWarningMessage("desktop_local_agent_sessions_excluded"), desktopExcluded)
 
 	type parsed struct {
+		path              string
 		session           model.Session
 		ownerPromptStamps []promptEvidence
 		earliestRecord    time.Time
@@ -292,7 +297,7 @@ func (r Reader) Read(ctx context.Context, d provider.Discovery) model.ProviderRe
 			defer wg.Done()
 			for path := range jobs {
 				session, ownerPromptStamps, earliestRecord, warnings, err := parseFile(ctx, path)
-				parsedFiles <- parsed{session: session, ownerPromptStamps: ownerPromptStamps, earliestRecord: earliestRecord, warnings: warnings, err: err}
+				parsedFiles <- parsed{path: path, session: session, ownerPromptStamps: ownerPromptStamps, earliestRecord: earliestRecord, warnings: warnings, err: err}
 			}
 		}()
 	}
@@ -309,7 +314,12 @@ func (r Reader) Read(ctx context.Context, d provider.Discovery) model.ProviderRe
 	var allPromptEvidence []promptEvidence
 	var earliestUnanchored time.Time
 	var earliestDetailedRecord time.Time
+	var orderedFiles []parsed
 	for item := range parsedFiles {
+		orderedFiles = append(orderedFiles, item)
+	}
+	sort.Slice(orderedFiles, func(i, j int) bool { return orderedFiles[i].path < orderedFiles[j].path })
+	for _, item := range orderedFiles {
 		if item.err != nil {
 			result.AddWarning("unreadable_file", "Some session files could not be read and were skipped.")
 			continue
@@ -335,6 +345,19 @@ func (r Reader) Read(ctx context.Context, d provider.Discovery) model.ProviderRe
 		if !item.session.StartedAt.IsZero() || item.session.TimeUnavailable {
 			result.Sessions = append(result.Sessions, item.session)
 		}
+	}
+	result.Sessions = coalesceSessionCopies(result.Sessions, &result)
+	// A valid physical copy can restore the anchor absent in another copy.
+	unanchoredIDs = make(map[string]struct{})
+	earliestUnanchored = time.Time{}
+	for _, session := range result.Sessions {
+		if !session.Unanchored {
+			continue
+		}
+		if !session.IsChild && session.ID != "" {
+			unanchoredIDs[session.ID] = struct{}{}
+		}
+		earliestUnanchored = earliestNonzero(earliestUnanchored, session.StartedAt)
 	}
 	result.ToolCallsAvailable = len(result.Sessions) > 0
 	sort.Slice(allPromptEvidence, func(i, j int) bool {
@@ -364,42 +387,32 @@ func (r Reader) Read(ctx context.Context, d provider.Discovery) model.ProviderRe
 			rootIDs[session.ID] = struct{}{}
 		}
 	}
-	if containsPath(d.AuditFiles, r.HistoryFile) {
-		historySessions, historyWarnings, err := parseHistory(ctx, r.HistoryFile)
-		if err != nil {
-			result.AddWarning("unreadable_history", "Claude Code's prompt-history index could not be read.")
-		} else {
-			for code, count := range historyWarnings {
-				addWarningCount(&result, code, claudeWarningMessage(code), count)
-			}
-			reconciledRecords := 0
-			copiedReconciledRecords := 0
-			for _, session := range historySessions {
-				_, matchedDetailed := rootIDs[session.ID]
-				rootIDs[session.ID] = struct{}{}
-				if matchedDetailed {
-					reconciledRecords += len(session.Prompts)
-					continue
-				}
-				retained := session.Prompts[:0]
-				for _, prompt := range session.Prompts {
-					stamp := promptStamp{SessionID: session.ID, UnixMillis: prompt.At.UnixMilli()}
-					if survivingCopies := ownerPromptStamps[stamp]; survivingCopies > 0 {
-						copiedReconciledRecords++
-						ownerPromptStamps[stamp] = survivingCopies - 1
-						continue
-					}
-					retained = append(retained, prompt)
-				}
-				session.Prompts = retained
-				result.Sessions = append(result.Sessions, session)
-				result.Coverage.HistoryOnlySessions++
-			}
-			addWarningCount(&result, "history_records_reconciled", claudeWarningMessage("history_records_reconciled"), reconciledRecords)
-			addWarningCount(&result, "copied_history_prompt_records_reconciled", claudeWarningMessage("copied_history_prompt_records_reconciled"), copiedReconciledRecords)
-			addWarningCount(&result, "history_only_sessions", claudeWarningMessage("history_only_sessions"), result.Coverage.HistoryOnlySessions)
+	historySessions := r.readHistorySources(ctx, d, &result)
+	reconciledRecords, copiedReconciledRecords := 0, 0
+	for _, session := range historySessions {
+		_, matchedDetailed := rootIDs[session.ID]
+		rootIDs[session.ID] = struct{}{}
+		if matchedDetailed {
+			reconciledRecords += len(session.Prompts)
+			continue
 		}
+		retained := session.Prompts[:0]
+		for _, prompt := range session.Prompts {
+			stamp := promptStamp{SessionID: session.ID, UnixMillis: prompt.At.UnixMilli()}
+			if survivingCopies := ownerPromptStamps[stamp]; survivingCopies > 0 {
+				copiedReconciledRecords++
+				ownerPromptStamps[stamp] = survivingCopies - 1
+				continue
+			}
+			retained = append(retained, prompt)
+		}
+		session.Prompts = retained
+		result.Sessions = append(result.Sessions, session)
+		result.Coverage.HistoryOnlySessions++
 	}
+	addWarningCount(&result, "history_records_reconciled", claudeWarningMessage("history_records_reconciled"), reconciledRecords)
+	addWarningCount(&result, "copied_history_prompt_records_reconciled", claudeWarningMessage("copied_history_prompt_records_reconciled"), copiedReconciledRecords)
+	addWarningCount(&result, "history_only_sessions", claudeWarningMessage("history_only_sessions"), result.Coverage.HistoryOnlySessions)
 	unmaterializedIDs := make(map[string]struct{}, len(unanchoredIDs))
 	for id := range unanchoredIDs {
 		if _, recoveredInHistory := rootIDs[id]; !recoveredInHistory {
@@ -435,13 +448,8 @@ func (r Reader) Read(ctx context.Context, d provider.Discovery) model.ProviderRe
 		addWarningCount(&result, "code_session_index_unmaterialized", claudeWarningMessage("code_session_index_unmaterialized"), unmaterialized)
 		addWarningCount(&result, "desktop_session_references_unmapped", claudeWarningMessage("desktop_session_references_unmapped"), opaqueReferences)
 	}
-	if r.GlobalStateFile != "" {
-		var statePaths []string
-		for _, path := range d.AuditFiles {
-			if isGlobalStateCandidate(r.GlobalStateFile, path) {
-				statePaths = append(statePaths, path)
-			}
-		}
+	{
+		statePaths := r.supplementalPaths(d, "state")
 		if len(statePaths) > 0 {
 			stateIDs, earliest, malformed, oversize := readGlobalStateIndexes(statePaths)
 			addWarningCount(&result, "malformed_global_state", claudeWarningMessage("malformed_global_state"), malformed)
@@ -461,12 +469,7 @@ func (r Reader) Read(ctx context.Context, d provider.Discovery) model.ProviderRe
 			addWarningCount(&result, "global_state_only_sessions", claudeWarningMessage("global_state_only_sessions"), stateUnmaterialized)
 		}
 	}
-	var projectIndexPaths []string
-	for _, path := range d.AuditFiles {
-		if pathWithinRoot(r.ProjectsDir, path) && filepath.Base(path) == "sessions-index.json" {
-			projectIndexPaths = append(projectIndexPaths, path)
-		}
-	}
+	projectIndexPaths := r.supplementalPaths(d, "project-index")
 	if len(projectIndexPaths) > 0 {
 		indexIDs, earliest, malformed, oversize := readProjectSessionIndexes(projectIndexPaths)
 		addWarningCount(&result, "malformed_project_session_index", claudeWarningMessage("malformed_project_session_index"), malformed)
@@ -495,8 +498,8 @@ func (r Reader) Read(ctx context.Context, d provider.Discovery) model.ProviderRe
 			result.Coverage.EarliestLocalEvidence = evidenceTime
 		}
 	}
-	if containsPath(d.AuditFiles, r.StatsFile) {
-		first, oversize, err := readStatsStart(r.StatsFile)
+	for _, statsPath := range r.supplementalPaths(d, "stats") {
+		first, oversize, err := readStatsStart(statsPath)
 		if oversize {
 			result.AddWarning("oversize_stats_cache", claudeWarningMessage("oversize_stats_cache"))
 		} else if err != nil {
@@ -773,9 +776,8 @@ type historyRecord struct {
 func parseHistory(ctx context.Context, path string) ([]model.Session, map[string]int, error) {
 	byID := make(map[string]*model.Session)
 	warnings := make(map[string]int)
-	lineNumber := 0
+	occurrences := make(map[string]int)
 	err := provider.ForEachLine(ctx, path, maxRecordBytes, func(line []byte, tooLong bool) {
-		lineNumber++
 		if tooLong {
 			warnings["oversize_history_record"]++
 			return
@@ -802,8 +804,10 @@ func parseHistory(ctx context.Context, path string) ([]model.Session, map[string
 		}
 		session.ActivityAt = session.StartedAt
 		words, characters := provider.TextMetric(record.Display)
+		stamp := fmt.Sprintf("history:%s:%d:%x", record.SessionID, record.Timestamp, sha256.Sum256([]byte(record.Display)))
+		occurrences[stamp]++
 		session.Prompts = append(session.Prompts, model.PromptMetric{
-			EventID: fmt.Sprintf("history:%s:%d", record.SessionID, lineNumber), At: at,
+			EventID: fmt.Sprintf("%s:%d", stamp, occurrences[stamp]), At: at,
 			Words: words, Characters: characters, HasText: strings.TrimSpace(record.Display) != "",
 		})
 	})

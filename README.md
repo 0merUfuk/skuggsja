@@ -29,8 +29,8 @@ skuggsja
 
 | Harness | Default source | Reported capabilities | Verification |
 | --- | --- | --- | --- |
-| Claude Code | `projects`, `history.jsonl`, and `stats-cache.json` below `CLAUDE_CONFIG_DIR` (otherwise `~/.claude`), plus the home-level `.claude.json`; macOS Desktop local-agent transcripts and Code-session indexes are audited as exclusion/coverage evidence only | Root and nested child sessions, human prompts, models, tools, source-recorded message token ledger, and explicit local-coverage evidence | Real data on macOS |
-| Codex | rollout roots plus `history.jsonl`, `session_index.jsonl`, import/state/catalog indexes below `CODEX_HOME` (otherwise `~/.codex`) | Root/child sessions, human prompts, models, tools, final cumulative token fields, validated pagination, and explicit local-coverage evidence | Real data on macOS; compressed-file handling is fixture-tested |
+| Claude Code | `projects`, `history.jsonl`, and `stats-cache.json` below `CLAUDE_CONFIG_DIR` (otherwise `~/.claude`), recognized sibling `.claude-*` config homes, and global-state metadata; macOS Desktop local-agent transcripts and Code-session indexes are audited as exclusion/coverage evidence only | Root and nested child sessions, human prompts, models, tools, source-recorded message token ledger, and explicit local-coverage evidence | Real data on macOS |
+| Codex | Active, archived, and recovery rollout roots plus `history.jsonl`, `session_index.jsonl`, import/state/catalog indexes below `CODEX_HOME` (otherwise `~/.codex`) | Root/child sessions, human prompts, models, tools, final cumulative token fields, validated pagination, and explicit local-coverage evidence | Real data on macOS; compressed-file handling is fixture-tested |
 | Hermes Agent | `state.db` below `HERMES_HOME`; otherwise `~/.hermes` on Unix-like systems or the local app-data Hermes directory on Windows | Sessions, parent relationships, prompts, models, tool calls, source-recorded database token ledger | Real data on macOS |
 | Cursor | OS-specific `Cursor/User/globalStorage/state.vscdb` | Composer sessions/subagents, human prompts, models, project basename; no token estimates | Schema-verified synthetic; not real-data verified |
 
@@ -69,7 +69,7 @@ skuggsja --no-open --port 0
 skuggsja clean
 ```
 
-`skuggsja clean` removes only the default `rewind.json` artifact, after confirming configured source locations do not overlap or alias it, and removes its product directory only when empty. It does not remove a copy created by redirecting `--json`.
+`skuggsja clean` removes only the selected `rewind.json` artifact, after confirming configured source locations do not overlap or alias it, and removes its product directory only when empty. It does not remove a copy created by redirecting `--json`.
 
 ## Source-path overrides
 
@@ -78,6 +78,7 @@ These environment variables replace individual discovery locations:
 | Variable | Meaning |
 | --- | --- |
 | `SKUGGSJA_CLAUDE_PROJECTS` | Claude Code projects directory |
+| `SKUGGSJA_CLAUDE_EXTRA_HOMES` | Additional absolute Claude config homes, separated by the OS path-list separator (`:` on Unix, `;` on Windows); an explicitly empty value disables automatic extra homes |
 | `SKUGGSJA_CLAUDE_HISTORY` | Claude Code prompt-history JSONL |
 | `SKUGGSJA_CLAUDE_STATS` | Claude Code aggregate statistics cache |
 | `SKUGGSJA_CLAUDE_GLOBAL_STATE` | Claude global-state JSON; recognized backups are discovered beside it |
@@ -85,6 +86,7 @@ These environment variables replace individual discovery locations:
 | `SKUGGSJA_CLAUDE_CODE_SESSIONS` | Claude Desktop Code-session index root on macOS |
 | `SKUGGSJA_CODEX_SESSIONS` | Codex active sessions directory |
 | `SKUGGSJA_CODEX_ARCHIVED` | Codex archived sessions directory |
+| `SKUGGSJA_CODEX_RECOVERY` | Codex recovery directory, recursively inspected for rollout files |
 | `SKUGGSJA_CODEX_HISTORY` | Codex prompt-history JSONL |
 | `SKUGGSJA_CODEX_SESSION_INDEX` | Codex session index JSONL |
 | `SKUGGSJA_CODEX_EXTERNAL_IMPORTS` | Codex external-session import index |
@@ -98,6 +100,10 @@ These environment variables replace individual discovery locations:
 | `HERMES_HOME` | Base Hermes directory; `state.db` is appended unless the specific Skuggsja override is set |
 
 `CLAUDE_CONFIG_DIR`, `CODEX_HOME`, and `HERMES_HOME` change their respective default roots before the more specific `SKUGGSJA_*` overrides are applied. On Linux, `XDG_CONFIG_HOME` affects Cursor's default path; on Windows, `APPDATA` and `LOCALAPPDATA` are used where available.
+
+Claude discovery retains the canonical home when `CLAUDE_CONFIG_DIR` points elsewhere and checks immediate home-level `.claude-*` directories for native history markers. It does not search arbitrary directories across the host at runtime. Setting `SKUGGSJA_CLAUDE_PROJECTS` disables automatic extra homes unless `SKUGGSJA_CLAUDE_EXTRA_HOMES` is also explicitly set. Supplemental paths have their own overrides; isolated fixtures must set those too.
+
+`SKUGGSJA_OUTPUT_DIRECTORY` optionally sets an absolute artifact directory while retaining the fixed `rewind.json` filename and all source-separation checks. Generation and `clean` use the same selected directory. This lets verification isolate output without changing the user's home or harness environment.
 
 Overrides are useful for tests and nonstandard installs. Point them only at histories you intend the current process to read. A source root and the artifact directory may not contain one another; a source file may not be the artifact or lie within its directory. Generation and `clean` fail closed on cleaned-path, symlink-component, resolved-symlink, case-insensitive macOS/Windows, and existing hard-link aliases. Declared paths are guarded even when provider discovery fails.
 
@@ -138,7 +144,7 @@ Read [PRIVACY.md](PRIVACY.md) before using real histories and [SECURITY.md](SECU
 - Real-data verification is currently limited to macOS; Cursor currently has synthetic schema verification only.
 - Codex’s paginated `thread_history_1.sqlite` is included in source auditing but is not parsed into usage; its presence produces an explicit coverage warning. Skuggsja never migrates or repairs it.
 - Claude project `sessions-index.json` entries contribute only known session references and dates; indexed summaries and message counts never become usage. Runtime debug, session-env, and telemetry residues are not usage inputs.
-- One configured `CLAUDE_CONFIG_DIR` and `CODEX_HOME` is traversed per run. Arbitrary alternate historical homes are not guessed automatically; use the documented overrides or separate runs for known alternate roots.
+- Claude's native sibling-home scan is bounded; arbitrary historical homes, opaque archives, and unmounted stores require independent investigation or explicit overrides. Codex traverses one configured `CODEX_HOME`, including its recovery directory; historical account roots outside it are not guessed automatically.
 - Claude nested `subagents/agent-*.jsonl` transcripts are discovered and counted as child sessions; their events are excluded wholesale from owner/root usage totals.
 - Claude Desktop Cowork/local-agent transcripts are audited and explicitly reported as excluded because they are a different product surface despite embedding Claude Code-shaped history.
 - Supplemental history, state, and catalog indexes establish evidence of missing detail. They contribute only fields they actually retain—some Claude prompt-history rows retain a project basename—and do not reconstruct lost model, tool, token, response, or full-detail records.

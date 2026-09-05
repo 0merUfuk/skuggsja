@@ -425,11 +425,21 @@ main::before {
   border-top: 1px solid var(--rule-strong);
 }
 
-.empty-provider-summary p,
+.empty-provider-summary > p,
 .empty-warnings p {
   margin: 0;
   padding: 1rem 0;
   border-bottom: 1px solid var(--rule);
+}
+
+.empty-provider-entry {
+  margin-top: 1.5rem;
+}
+
+.empty-provider-entry > h2 {
+  margin: 0 0 0.75rem;
+  font-family: var(--font-display);
+  font-size: var(--text-lg);
 }
 
 .eyebrow,
@@ -1204,6 +1214,14 @@ meter::-moz-meter-bar {
   font-family: var(--font-display);
   font-size: clamp(1.5rem, 3vw, 2.8rem);
   font-weight: 500;
+}
+
+.provider-summary-coverage {
+  grid-column: 1 / -1;
+  margin-top: 0.45rem;
+  color: var(--ink-soft);
+  font-family: var(--font-data);
+  font-size: 0.75rem;
 }
 
 .provider-verification {

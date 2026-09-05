@@ -492,7 +492,10 @@
     details.className = "provider-entry";
     details.open = shouldOpen;
     title.append(statusMark, name);
-    summary.append(title, sessions, verification);
+    summary.append(
+      title, sessions, verification,
+      element("span", "provider-summary-coverage", "Coverage: " + cleanText(coverage.status, "Completeness unknown", 70))
+    );
 
     [
       ["Prompts", formatNumber(provider.prompts)],
@@ -770,12 +773,12 @@
     } else {
       providers.forEach(function (provider) {
         const status = providerStatus(provider.status, numeric(provider.sessions, 0));
-        summary.appendChild(element(
-          "p",
-          "",
-          cleanText(provider.name, cleanText(provider.id, "Unknown harness", 80), 80) + " — " + status.label +
-          " · coverage: " + cleanText(recordOrEmpty(provider.coverage).status, "unknown", 70)
-        ));
+        const entry = element("section", "empty-provider-entry");
+        entry.append(
+          element("h2", "", cleanText(provider.name, cleanText(provider.id, "Unknown harness", 80), 80) + " — " + status.label),
+          providerCoverage(recordOrEmpty(provider.coverage))
+        );
+        summary.appendChild(entry);
       });
     }
 

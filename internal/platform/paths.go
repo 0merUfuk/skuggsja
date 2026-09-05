@@ -11,6 +11,7 @@ import (
 // Paths contains all candidate source locations. Tests can construct it directly.
 type Paths struct {
 	ClaudeProjects             string
+	ClaudeExtraHomes           []string
 	ClaudeHistory              string
 	ClaudeStats                string
 	ClaudeGlobalState          string
@@ -18,6 +19,7 @@ type Paths struct {
 	ClaudeCodeSessions         string
 	CodexSessions              string
 	CodexArchived              string
+	CodexRecovery              string
 	CodexHistory               string
 	CodexSessionIndex          string
 	CodexExternalImports       string
@@ -40,6 +42,21 @@ func DefaultPaths() (Paths, error) {
 	claudeHome := os.Getenv("CLAUDE_CONFIG_DIR")
 	if claudeHome == "" {
 		claudeHome = filepath.Join(home, ".claude")
+	}
+	claudeHome, err = filepath.Abs(claudeHome)
+	if err != nil {
+		return Paths{}, fmt.Errorf("resolve Claude home: %w", err)
+	}
+	// Explicit CLI source scope must take effect before native auto-discovery,
+	// including an explicitly empty extra-home list. applyPathOverrides supplies
+	// those exact paths later; do not inspect unrelated real homes first.
+	var extraClaudeHomes []string
+	_, explicitExtraHomes := os.LookupEnv("SKUGGSJA_CLAUDE_EXTRA_HOMES")
+	if !explicitExtraHomes && os.Getenv("SKUGGSJA_CLAUDE_PROJECTS") == "" {
+		extraClaudeHomes, err = claudeExtraHomes(home, claudeHome)
+		if err != nil {
+			return Paths{}, fmt.Errorf("discover Claude config homes: %w", err)
+		}
 	}
 	codexHome := os.Getenv("CODEX_HOME")
 	if codexHome == "" {
@@ -68,6 +85,7 @@ func DefaultPaths() (Paths, error) {
 	}
 	return Paths{
 		ClaudeProjects:             filepath.Join(claudeHome, "projects"),
+		ClaudeExtraHomes:           extraClaudeHomes,
 		ClaudeHistory:              filepath.Join(claudeHome, "history.jsonl"),
 		ClaudeStats:                filepath.Join(claudeHome, "stats-cache.json"),
 		ClaudeGlobalState:          filepath.Join(home, ".claude.json"),
@@ -75,6 +93,7 @@ func DefaultPaths() (Paths, error) {
 		ClaudeCodeSessions:         claudeCodeSessions,
 		CodexSessions:              filepath.Join(codexHome, "sessions"),
 		CodexArchived:              filepath.Join(codexHome, "archived_sessions"),
+		CodexRecovery:              filepath.Join(codexHome, "recovery"),
 		CodexHistory:               filepath.Join(codexHome, "history.jsonl"),
 		CodexSessionIndex:          filepath.Join(codexHome, "session_index.jsonl"),
 		CodexExternalImports:       filepath.Join(codexHome, "external_agent_session_imports.json"),

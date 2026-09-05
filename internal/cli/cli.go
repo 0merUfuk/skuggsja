@@ -91,12 +91,12 @@ func New(version string) *cobra.Command {
 func readers(paths platform.Paths) []provider.Reader {
 	return []provider.Reader{
 		claude.Reader{
-			ProjectsDir: paths.ClaudeProjects, HistoryFile: paths.ClaudeHistory,
+			ProjectsDir: paths.ClaudeProjects, HistoryFile: paths.ClaudeHistory, ExtraHomes: paths.ClaudeExtraHomes,
 			StatsFile: paths.ClaudeStats, GlobalStateFile: paths.ClaudeGlobalState,
 			DesktopSessionsDir: paths.ClaudeDesktopSessions, CodeSessionsDir: paths.ClaudeCodeSessions,
 		},
 		codex.Reader{
-			SessionsDir: paths.CodexSessions, ArchivedDir: paths.CodexArchived,
+			SessionsDir: paths.CodexSessions, ArchivedDir: paths.CodexArchived, RecoveryDir: paths.CodexRecovery,
 			HistoryFile: paths.CodexHistory, SessionIndexFile: paths.CodexSessionIndex,
 			ExternalImportsFile: paths.CodexExternalImports, StateDatabase: paths.CodexStateDatabase,
 			CatalogDatabase: paths.CodexCatalogDatabase, ThreadHistoryDatabase: paths.CodexThreadHistoryDatabase,
@@ -107,6 +107,13 @@ func readers(paths platform.Paths) []provider.Reader {
 }
 
 func applyPathOverrides(paths *platform.Paths) {
+	// An explicit isolated project source must not inherit auto-discovered homes.
+	if os.Getenv("SKUGGSJA_CLAUDE_PROJECTS") != "" {
+		paths.ClaudeExtraHomes = nil
+	}
+	if value, explicit := os.LookupEnv("SKUGGSJA_CLAUDE_EXTRA_HOMES"); explicit {
+		paths.ClaudeExtraHomes = filepath.SplitList(value)
+	}
 	overrides := []struct {
 		name   string
 		target *string
@@ -119,6 +126,7 @@ func applyPathOverrides(paths *platform.Paths) {
 		{"SKUGGSJA_CLAUDE_CODE_SESSIONS", &paths.ClaudeCodeSessions},
 		{"SKUGGSJA_CODEX_SESSIONS", &paths.CodexSessions},
 		{"SKUGGSJA_CODEX_ARCHIVED", &paths.CodexArchived},
+		{"SKUGGSJA_CODEX_RECOVERY", &paths.CodexRecovery},
 		{"SKUGGSJA_CODEX_HISTORY", &paths.CodexHistory},
 		{"SKUGGSJA_CODEX_SESSION_INDEX", &paths.CodexSessionIndex},
 		{"SKUGGSJA_CODEX_EXTERNAL_IMPORTS", &paths.CodexExternalImports},
