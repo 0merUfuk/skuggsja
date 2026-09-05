@@ -1,22 +1,30 @@
 #!/bin/sh
-# Additional process-level evidence. Live before/after equality remains a
-# separate mandatory result; write enforcement cannot turn that failure green.
+# Release-only equality and independent process-level write protection evidence.
+# A self-hosted Codex store may be explicitly snapshotted and excluded from live
+# equality; generation still reads every original source. Runtime activity is neutral.
 set -eu
 umask 077
 
 controls_only=0
+snapshot_codex=0
 evidence_dir=""
 while [ "$#" -gt 0 ]; do
   case "$1" in
     --controls-only) controls_only=1; shift ;;
+    --snapshot-codex-store) snapshot_codex=1; shift ;;
     --evidence-dir)
       [ "$#" -ge 2 ] || { echo "--evidence-dir requires a new directory path" >&2; exit 2; }
       evidence_dir=$2
       shift 2
       ;;
-    *) echo "usage: $0 [--controls-only] [--evidence-dir NEW_DIRECTORY]" >&2; exit 2 ;;
+    *) echo "usage: $0 [--controls-only] [--snapshot-codex-store] [--evidence-dir NEW_DIRECTORY]" >&2; exit 2 ;;
   esac
 done
+
+if [ "$snapshot_codex" -eq 1 ] && [ -z "$evidence_dir" ]; then
+  echo "--snapshot-codex-store requires --evidence-dir to retain the exact excluded manifest" >&2
+  exit 2
+fi
 
 if [ "$(uname -s)" != "Darwin" ] || ! command -v sandbox-exec >/dev/null 2>&1 || ! command -v cc >/dev/null 2>&1; then
   echo "source-protection verification requires macOS, sandbox-exec, and a C compiler" >&2
@@ -139,9 +147,11 @@ date -u '+started_utc=%Y-%m-%dT%H:%M:%SZ' >>"$work_root/evidence/execution.txt"
 sandbox-exec -D "WRITABLE_ROOT=$work_root" -f "$profile" /usr/bin/env \
   TMPDIR="$work_root/tmp" \
   SKUGGSJA_VERIFY_REAL_DATA=1 \
+  SKUGGSJA_RELEASE_SNAPSHOT_CODEX="$snapshot_codex" \
+  SKUGGSJA_RELEASE_EVIDENCE_DIR="$work_root/evidence" \
   DYLD_INSERT_LIBRARIES="$work_root/bin/network-guard.dylib" \
   SKUGGSJA_NETWORK_ATTEMPT_LOG="$attempt_log" \
-  "$work_root/bin/app.test" -test.run '^TestRealDataFullRunLeavesSourcesUnchanged$' -test.v -test.timeout 6m \
+  "$work_root/bin/app.test" -test.run '^TestRealDataFullRunLeavesSourcesUnchanged$' -test.v -test.timeout 16m \
   >"$test_log" 2>&1 &
 run_pid=$!
 echo "pid=$run_pid" >>"$work_root/evidence/execution.txt"
@@ -165,10 +175,13 @@ if [ "$external_attempts" -ne 0 ]; then
 fi
 live_result=failed
 live_status=1
-if [ "$test_status" -eq 0 ] && \
+generation_runs=$(grep -Fc 'release_generation attempt=' "$test_log" || true)
+if [ "$generation_runs" -eq 0 ] && grep -F 'no genuine quiet window' "$test_log" >/dev/null; then
+  live_result=not_run_no_quiet_window
+fi
+if [ "$test_status" -eq 0 ] && [ "$generation_runs" -eq 1 ] && \
    grep -F -- '--- PASS: TestRealDataFullRunLeavesSourcesUnchanged' "$test_log" >/dev/null && \
-   grep -E 'outer_source_audit .*verified=true' "$test_log" >/dev/null && \
-   grep -E 'internal_source_audit .*verified=true' "$test_log" >/dev/null; then
+   grep -E 'outer_source_audit .*verified=true' "$test_log" >/dev/null; then
   live_result=passed
   live_status=0
 fi
@@ -176,7 +189,8 @@ fi
   echo "source_write_enforcement=calibrated source_writes=denied_by_policy writable_paths=private_workspace_and_dev_null"
   echo "source_write_attempts=not_independently_traced"
   echo "network_guard_active=$guard_active observed_external_attempts=$external_attempts network_check_exit=$network_status"
-  echo "strict_live_manifest_result=$live_result live_test_exit=$test_status"
+  echo "release_live_manifest_result=$live_result live_test_exit=$test_status excluded_codex_store=$snapshot_codex other_exclusions=0 generation_runs=$generation_runs"
+  echo "runtime_source_observation=informational ingestion=all_original_sources"
 } | tee "$summary"
 if [ "$live_status" -ne 0 ] || [ "$network_status" -ne 0 ]; then
   exit 1

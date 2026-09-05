@@ -53,6 +53,7 @@ func New(version string) *cobra.Command {
 			if !jsonOutput {
 				fmt.Fprintln(cmd.OutOrStdout(), "\nSKUGGSJA  /  YOUR LOCAL AGENT REWIND")
 				fmt.Fprintln(cmd.OutOrStdout(), "Reading local histories. Nothing leaves this machine.")
+				fmt.Fprintln(cmd.OutOrStdout(), "Source access is read-only; skuggsja does not write to source paths.")
 				fmt.Fprintln(cmd.OutOrStdout())
 			}
 			generation, err := app.Generate(cmd.Context(), app.GenerateOptions{
@@ -81,7 +82,7 @@ func New(version string) *cobra.Command {
 	flags.BoolVar(&noOpen, "no-open", false, "do not open the browser automatically")
 	flags.BoolVar(&once, "once", false, "generate the aggregate artifact and exit")
 	flags.BoolVar(&jsonOutput, "json", false, "print the privacy-safe aggregate as JSON and exit")
-	flags.BoolVar(&noSourceAudit, "no-source-audit", false, "skip before/after source hashing")
+	flags.BoolVar(&noSourceAudit, "no-source-audit", false, "skip optional before/after source activity observation")
 	flags.IntVar(&port, "port", 4321, "preferred localhost port (0 chooses any free port)")
 
 	command.AddCommand(cleanCommand(), versionCommand(version))
@@ -149,13 +150,31 @@ func printSummary(out io.Writer, generation app.Generation, auditSkipped bool) {
 	fmt.Fprintf(out, "Sessions recovered     %s\n", formatInt(int64(report.Totals.Sessions)))
 	fmt.Fprintf(out, "Prompts recovered      %s\n", formatInt(int64(report.Totals.Prompts)))
 	fmt.Fprintf(out, "Recoverable span       %s\n", report.Coverage.Label)
-	if auditSkipped {
-		fmt.Fprintln(out, "Source integrity       not audited (--no-source-audit)")
-	} else if report.Privacy.SourceAudit.Verified {
-		fmt.Fprintf(out, "Source files modified  %d (verified across %s files)\n",
-			report.Totals.SourceFilesChanged, formatInt(int64(report.Privacy.SourceAudit.Files)))
+	fmt.Fprintln(out, "Source access          read-only; skuggsja does not write to source paths")
+	observation := report.Privacy.SourceObservation
+	if auditSkipped || observation == "disabled" {
+		fmt.Fprintln(out, "Source activity        observation skipped (--no-source-audit)")
+	} else if observation != "observed" {
+		fmt.Fprintln(out, "Source activity        observation unavailable")
 	} else {
-		fmt.Fprintln(out, "Source integrity       inconclusive; see source audit in the Rewind")
+		audit := report.Privacy.SourceAudit
+		if audit.ChangedFiles > 0 {
+			files := "files"
+			if audit.ChangedFiles == 1 {
+				files = "file"
+			}
+			fmt.Fprintf(out, "Source activity        %s %s changed during the run by another process; skuggsja does not write to source paths\n", formatInt(int64(audit.ChangedFiles)), files)
+		}
+		if audit.DirectoryChanges > 0 {
+			listings := "listings"
+			if audit.DirectoryChanges == 1 {
+				listings = "listing"
+			}
+			fmt.Fprintf(out, "Source directories     %s directory %s changed during the run by another process\n", formatInt(int64(audit.DirectoryChanges)), listings)
+		}
+		if audit.ChangedFiles == 0 && audit.DirectoryChanges == 0 {
+			fmt.Fprintf(out, "Source activity        no concurrent changes observed across %s files\n", formatInt(int64(audit.Files)))
+		}
 	}
 	fmt.Fprintf(out, "Generated artifact     %s\n", shortenHome(generation.OutputPath))
 	fmt.Fprintf(out, "Elapsed                %s\n", generation.Duration.Round(time.Millisecond))
@@ -183,6 +202,7 @@ func cleanCommand() *cobra.Command {
 					return fmt.Errorf("discover %s sources before clean: %w", reader.DisplayName(), err)
 				}
 				sourceRoots = append(sourceRoots, discovery.Roots...)
+				sourceRoots = append(sourceRoots, discovery.ProtectedDirectories...)
 				sourceFiles = append(sourceFiles, discovery.Files...)
 				sourceFiles = append(sourceFiles, discovery.AuditFiles...)
 				sourceFiles = append(sourceFiles, discovery.ConfiguredFiles...)

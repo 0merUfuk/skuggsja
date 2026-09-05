@@ -11,12 +11,12 @@ OS path resolution
 provider discovery ───────► source-file list (memory only)
         │                            │
         │                            ▼
-        │                   before source audit
+        │                optional before observation
         ▼
 provider readers ─────────► normalized sessions (memory only)
         │                            │
         │                            ▼
-        │                    after source audit
+        │                 optional after observation
         ▼
 analytics aggregation ────► Report (content-free contract)
                                   │
@@ -28,7 +28,9 @@ analytics aggregation ────► Report (content-free contract)
                                       embedded HTML/CSS/JS
 ```
 
-The ordering matters. Every reader must disclose parsed files, audit-only files, configured optional files, and roots during `Discover` before `Read` opens them. With the source audit enabled, Skuggsja captures that set and discovers again. A match pairs the retained before snapshot with the exact set sent to readers; a mismatch retries boundedly. Persistent churn still permits best-effort parsing of the latest discovery but makes the audit explicitly inconclusive.
+The ordering matters. Every reader must disclose parsed files, audit-only files, configured optional files, roots, and protected source directories during `Discover` before `Read` opens them. Source handles are read-only (`O_RDONLY`); output and private SQLite-copy destinations must be separate from the declared sources. This architectural guarantee applies on every run and does not depend on snapshot equality or production OS sandboxing.
+
+With optional source activity observation enabled, Skuggsja captures the audit input set and discovers again. A match pairs the retained before snapshot with the exact set sent to readers; a mismatch retries boundedly. Persistent churn permits best-effort parsing of the latest discovery and records observation as unavailable, without creating a system warning or source-integrity failure. `Discovery.ProtectedDirectories` participates only in output and temporary-workspace write guards; it never adds those directories' contents to discovery, usage, or source observation.
 
 ## Package map
 
@@ -43,7 +45,7 @@ The ordering matters. Every reader must disclose parsed files, audit-only files,
 | `internal/model` | Content-free in-memory normalization boundary |
 | `internal/audit` | Before/after SHA-256 snapshots and directory-membership comparison |
 | `internal/analytics` | Deduplication, aggregation, rhythm, prompt style, and serialized `Report` contract |
-| `internal/app` | Generation orchestration, temp-and-rename output, loopback server, security headers |
+| `internal/app` | Generation orchestration, source/output and private-workspace guards, temp-and-rename output, loopback server, security headers |
 | `web` | Embedded, dependency-free Rewind UI |
 
 Internal packages deliberately prevent downstream consumers from treating provider source formats as public APIs.
@@ -61,19 +63,22 @@ The web UI has no package-manager dependencies, remote fonts, remote scripts, or
 
 `scripts/verify-runtime-offline.sh` builds disposable inputs that exercise all four provider adapters, then runs generation and serving with remote sockets denied by macOS Seatbelt and observed/blocked by a verification-only DYLD guard. Its calibrated Go probe must produce an external-attempt record; Skuggsja must produce none while every embedded route is retrieved over loopback. The helper binaries and interposer are development evidence only and are not part of release archives.
 
+`scripts/verify-live-source-protection.sh` additionally applies a verification-only OS write-denial policy outside its private work area and calibrates that policy using disposable controls. These release tools test the architectural contract; the production binary does not drop its OS permissions or install this sandbox.
+
 ## Generation lifecycle
 
 1. `platform.DefaultPaths` resolves candidate locations without network access.
 2. CLI environment overrides replace individual locations.
-3. Each provider performs discovery. A missing source yields no parsed/audit-only file, while the declared missing root or configured optional path remains part of audit/change detection.
-4. The source/output guard checks every declared root, parsed file, audit-only file, and configured optional path even after a discovery error. It rejects shared directories, containment in either direction, symlink/case aliases, existing hard-link aliases, and intermediate-component symlink aliases.
-5. If enabled and at least one parsed, audit-only, configured, or root path was supplied, the audit hashes every present declared file and relevant SQLite sidecar, records absence for configured optional paths, recursively inventories existing discovery roots, and inventories nearest existing containing directories. Discovery then runs again. A changed set restarts capture; repeated churn makes the audit explicitly inconclusive.
-6. Readers parse the stable discovery set paired with the retained before snapshot, or the latest discovery after bounded persistent churn, into `model.ProviderResult`. The latter cannot produce a verified source audit. Provider failures become scoped statuses and aggregate warnings where possible.
-7. SQLite readers call `sqlitecopy.Open`; the SQLite driver never receives the original database path.
-8. A second audit snapshot is compared with the first. An audit failure adds a `system` provider warning rather than suppressing otherwise usable analytics.
-9. `analytics.Build` creates the serializable `Report` and drops internal identifiers and source paths.
-10. `WriteReport` writes a temporary file beside the destination, syncs it, and renames it over the previous artifact.
-11. Unless `--once` or `--json` was selected, `Serve` binds `127.0.0.1`, serves the in-memory report and embedded assets, and runs until cancellation.
+3. Each provider performs discovery. A missing source yields no parsed/audit-only file, while the declared missing root or configured optional path remains part of observation. SQLite parent directories are declared as protected directories before fallible inspection, even for absent databases.
+4. The source/output guard checks every declared root, protected directory, parsed file, audit-only file, and configured optional path even after a discovery error. It rejects shared directories, containment in either direction, symlink/case aliases, existing hard-link aliases, and intermediate-component symlink aliases.
+5. Generation chooses a random `skuggsja-run-*` workspace under the selected temporary parent and checks its prospective path against the same protected inputs before creating it. `sqlitecopy.WithTempDir` passes that destination through context without changing process environment. Rediscovery rechecks workspace separation if the input set changes.
+6. If enabled and at least one parsed, audit-only, configured, or root path was supplied, observation hashes every present declared file and relevant SQLite sidecar, records absence for configured optional paths, recursively inventories existing discovery roots, and inventories nearest existing containing directories. Protected directories do not expand this audit set. Discovery then runs again. A changed set restarts capture; repeated churn records observation as unavailable.
+7. Readers parse the stable discovery set paired with the retained before snapshot, or the latest discovery after bounded persistent churn, into `model.ProviderResult`. Provider failures become scoped statuses and aggregate warnings where possible; optional observation is independent of those outcomes.
+8. SQLite readers call `sqlitecopy.Open`, which independently rejects a temporary-copy parent inside its own source directory. Only private copies are passed to SQLite for recovery, integrity checking, and provider queries; original files are opened with raw read-only handles.
+9. A second observation snapshot is compared with the first when the before phase succeeded. Changed files and directory listings are neutral activity information. Capture failure, incomplete observation, and disabled observation do not add a system provider or warning and do not fail generation.
+10. `analytics.Build` creates the serializable `Report`, records read-only source access separately from observation status, and drops internal identifiers and source paths.
+11. `WriteReport` writes a temporary file beside the destination, syncs it, and renames it over the previous artifact. Private SQLite copies and their generation workspace are removed on normal completion and handled errors.
+12. Unless `--once` or `--json` was selected, `Serve` binds `127.0.0.1`, serves the in-memory report and embedded assets, and runs until cancellation.
 
 Provider discovery and reads currently run in deterministic provider order. File-oriented readers and the source hasher use at most six workers. Each copied SQLite database is opened with one connection and `PRAGMA query_only = ON` after `PRAGMA quick_check` succeeds.
 
@@ -151,11 +156,15 @@ The JSON artifact is `analytics.Report`, currently schema version `2`.
 | `models` | Provider-qualified, provider-native model-event counts (the schema field remains `turns`) |
 | `projects` | Project basenames ranked by root-session count |
 | `longest_session` | Availability, provider, and rounded duration in minutes |
-| `privacy.source_audit` | Verification result, before-snapshot file count, manifest digests, changed-file count, and changed-directory count |
+| `privacy.source_access` | Always `read-only`; the architectural guarantee that Skuggsja does not write to source paths |
+| `privacy.source_observation` | Optional runtime activity observation: `observed`, `disabled`, or `unavailable` |
+| `privacy.source_audit` | Before-snapshot file count, manifest digests, changed-file count, changed-directory count, and legacy `verified` snapshot-equality flag; independent of source-access guarantees |
 | `methodology` | Human-readable interpretation rules |
 | `warnings` | Provider-qualified aggregate warning codes, counts, and fixed messages |
 
 `totals.source_files` counts parsed and audit-only files returned by adapters. `privacy.source_audit.files` counts existing files in the before snapshot and can be larger because of present SQLite sidecars; configured-but-absent paths affect the manifest and change detection but not that count. `totals.source_files_changed` counts changed file states; directory/root-membership changes are a separate audit field.
+
+The terminal and UI always show read-only source access. An observed file change is reported neutrally as “2 files changed during the run by another process; skuggsja does not write to source paths.” They do not render `source_audit.verified` as an integrity verdict. Disabled or unavailable observation leaves the access guarantee intact. Snapshot comparison cannot identify the other process or detect a change that was reverted between captures.
 
 ### Metric rules
 
@@ -172,7 +181,7 @@ The JSON artifact is `analytics.Report`, currently schema version `2`.
 
 ## Output and serving
 
-The default destination is `<user-cache>/skuggsja/rewind.json`; `SKUGGSJA_OUTPUT_DIRECTORY` can choose an absolute directory while retaining `rewind.json`. Before any reader runs, generation rejects a source root that overlaps the artifact directory and any source file that equals the artifact or lies below its directory; an ordinary source file may safely be in an ancestor directory. `clean` performs the corresponding configured-source check before deleting. Checks cover cleaned and symlink-resolved forms, conservative case folding on macOS and Windows, existing ancestor identity, and hard-link identity. The writer and cleaner separately reject symlinks in output-directory components. Discovery-error paths do not bypass the guard.
+The default destination is `<user-cache>/skuggsja/rewind.json`; `SKUGGSJA_OUTPUT_DIRECTORY` can choose an absolute directory while retaining `rewind.json`. Before any reader runs, generation rejects a source root or protected directory that overlaps the artifact directory and any source file that equals the artifact or lies below its directory; a standalone metadata source file may safely be in an ancestor directory. `clean` performs the corresponding configured-source check before deleting. Checks cover cleaned and symlink-resolved forms, conservative case folding on macOS and Windows, existing ancestor identity, and hard-link identity. The writer and cleaner separately reject symlinks in output-directory components. Discovery-error paths do not bypass the guard. Temporary-copy destinations pass the same source-separation checks before workspace creation.
 
 The writer creates and syncs a temporary file beside the destination, then renames it over the prior artifact. On Unix-like systems, the product directory is set to mode `0700` and the temporary/final artifact to mode `0600`. On Windows, the product directory is created or updated with a protected, inheritable DACL limited to the current user and LocalSystem and validated before the artifact is created. This code cross-compiles but remains runtime-unverified on Windows.
 
@@ -193,16 +202,25 @@ It binds IPv4 loopback only. Requests are accepted only when the normalized `Hos
 | Discovery cannot inspect a location | Provider status `unavailable` plus `discovery_failed`; run continues |
 | Malformed or oversized JSONL record | Record skipped, aggregate warning emitted |
 | Unknown history mode | Ambiguous prompts skipped, warning emitted; other supported metrics continue |
-| Artifact overlaps a source root or file | Generation fails before readers run; `clean` refuses deletion |
+| Artifact overlaps a source root, protected directory, or file | Generation fails before readers run; `clean` refuses deletion |
+| Temporary workspace overlaps a source root, protected directory, or file | Generation fails before workspace creation |
 | SQLite cannot be copied consistently | Provider unavailable; original database is never opened by SQLite |
 | Required SQLite schema unknown | Provider status `unsupported schema`; no guessed queries |
 | Optional SQLite metric unavailable | Supported session metrics remain, warning emitted |
-| Source audit fails | Audit remains unverified and a system warning is added |
-| Discovery changes between the before snapshot and confirmation | Capture is retried up to three times; persistent churn makes the audit inconclusive |
+| Source activity changes during a completed observation | Neutral file/directory activity counts; read-only guarantee unchanged |
+| Source observation fails or is incomplete | `source_observation: unavailable`; no system provider, warning, or generation failure |
+| Source observation disabled | `source_observation: disabled`; read-only guarantee unchanged |
+| Discovery changes between the before snapshot and confirmation | Capture is retried up to three times; persistent churn records observation as unavailable |
 | Artifact cannot be written | Generation fails; no server starts |
 | Requested loopback port is occupied | An ephemeral loopback port is selected |
 
 This degradation policy favors visible omission over fabricated comparability.
+
+## Release-only source equality
+
+`TestRealDataFullRunLeavesSourcesUnchanged` is opt-in release verification. It waits for a continuous quiet preflight, runs generation once, then requires matching outer snapshots for the declared live scope. That asks whether any process changed the observed sources during the window; it is separate from production's architectural source-write protection and normal runtime success.
+
+When the verifier is itself a Codex agent, `SKUGGSJA_RELEASE_SNAPSHOT_CODEX=1` explicitly snapshots the configured Codex store's inventory and hashes and excludes that store only from the outer equality comparison. The exclusion covers rollouts and shared history/index/SQLite files because the verification session can update each. No other source is excluded. Generation and its internal runtime observation still use all original sources, including Codex. The release record must retain the exact private exclusion inventory and reasoning in the scope recorded by [VERIFICATION.md](VERIFICATION.md); it must not claim unchanged original Codex sources.
 
 ### Unparsed Codex paginated database
 

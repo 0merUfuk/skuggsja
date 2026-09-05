@@ -17,6 +17,42 @@ import (
 	"github.com/klauspost/compress/zstd"
 )
 
+func TestDiscoverProtectsDatabaseDirectoriesBeforeInspectionFailure(t *testing.T) {
+	t.Parallel()
+	historyDir := t.TempDir()
+	historyTarget := filepath.Join(historyDir, "history-target")
+	if err := os.WriteFile(historyTarget, []byte("synthetic"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	brokenHistory := filepath.Join(historyDir, "history-link")
+	if err := os.Symlink(historyTarget, brokenHistory); err != nil {
+		t.Skipf("symlinks unavailable: %v", err)
+	}
+	stateDir, catalogDir, threadDir := t.TempDir(), t.TempDir(), t.TempDir()
+	r := Reader{
+		HistoryFile:           brokenHistory,
+		StateDatabase:         filepath.Join(stateDir, "state_without_extension"),
+		CatalogDatabase:       filepath.Join(catalogDir, "catalog_without_extension"),
+		ThreadHistoryDatabase: filepath.Join(threadDir, "threads_without_extension"),
+	}
+	d, err := r.Discover(context.Background())
+	if err == nil {
+		t.Fatal("Discover accepted a symbolic-link history file")
+	}
+	if !slices.Equal(d.ProtectedDirectories, []string{stateDir, catalogDir, threadDir}) {
+		t.Fatalf("failed discovery lost configured database parents: %#v", d.ProtectedDirectories)
+	}
+	for _, parent := range d.ProtectedDirectories {
+		if slices.Contains(d.Roots, parent) || slices.Contains(d.AuditFiles, parent) {
+			t.Fatalf("write protection unexpectedly expanded audit inventory: %#v", d)
+		}
+	}
+	empty, err := (Reader{}).Discover(context.Background())
+	if err != nil || len(empty.ProtectedDirectories) != 0 {
+		t.Fatalf("empty database paths protected an unrelated directory: %#v error=%v", empty.ProtectedDirectories, err)
+	}
+}
+
 func TestThreadHistoryDatabaseIsAuditedWithoutParsingOrInventingUsage(t *testing.T) {
 	t.Parallel()
 	for _, present := range []bool{false, true} {

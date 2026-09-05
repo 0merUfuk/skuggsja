@@ -18,7 +18,11 @@ type Discovery struct {
 	AuditFiles      []string
 	Roots           []string
 	ConfiguredFiles []string
-	Meta            map[string]string
+	// ProtectedDirectories prohibit output/private-copy creation inside source
+	// stores, including SQLite parents. They do not expand discovery or auditing.
+	// Readers declare them before fallible inspection, even for absent databases.
+	ProtectedDirectories []string
+	Meta                 map[string]string
 }
 
 // Reader discovers and parses one local harness.

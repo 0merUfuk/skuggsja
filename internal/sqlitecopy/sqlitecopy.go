@@ -41,12 +41,15 @@ func Open(ctx context.Context, source string) (*Database, error) {
 	if _, err := regularFileInfo(source); err != nil {
 		return nil, fmt.Errorf("inspect sqlite source: %w", err)
 	}
+	if err := ensureTempSeparate(ctx, source); err != nil {
+		return nil, err
+	}
 
 	for attempt := 1; attempt <= maxCopyAttempts; attempt++ {
 		if err := ctx.Err(); err != nil {
 			return nil, err
 		}
-		dir, err := makePrivateTempDir()
+		dir, err := makePrivateTempDir(ctx)
 		if err != nil {
 			return nil, fmt.Errorf("create private sqlite copy directory: %w", err)
 		}

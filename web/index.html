@@ -30,6 +30,10 @@
     </header>
 
     <main id="main-content">
+      <aside class="source-status" aria-label="Source access">
+        <p><strong>Read-only source access.</strong> skuggsja does not write to source paths.</p>
+        <p id="source-activity" aria-live="polite" hidden></p>
+      </aside>
       <section id="loading-state" class="state-page" aria-labelledby="loading-title" aria-live="polite">
         <p class="eyebrow">Opening the local archive</p>
         <h1 id="loading-title">Preparing your mirror<span class="loading-mark" aria-hidden="true">…</span></h1>
@@ -95,7 +99,7 @@
               <dd id="proof-days">—</dd>
             </div>
             <div>
-              <dt>Source audit</dt>
+              <dt>Source access</dt>
               <dd id="proof-audit">—</dd>
             </div>
           </dl>
@@ -309,27 +313,18 @@
                 <dd id="privacy-paths">—</dd>
               </div>
               <div>
-                <dt>Source changes detected</dt>
-                <dd id="privacy-changed">—</dd>
+                <dt>Source access</dt>
+                <dd id="privacy-source-access">Read-only</dd>
               </div>
               <div>
-                <dt>Audit coverage</dt>
+                <dt>Files observed</dt>
                 <dd id="privacy-audit-files">—</dd>
               </div>
             </dl>
             <div class="audit-stamp" aria-labelledby="audit-title">
-              <p id="audit-title">Source audit</p>
-              <strong id="audit-verdict">Not verified</strong>
-              <dl>
-                <div>
-                  <dt>Before</dt>
-                  <dd id="manifest-before">—</dd>
-                </div>
-                <div>
-                  <dt>After</dt>
-                  <dd id="manifest-after">—</dd>
-                </div>
-              </dl>
+              <p id="audit-title">Concurrent source activity</p>
+              <strong id="audit-verdict">Not observed</strong>
+              <p id="privacy-source-activity" class="audit-stamp__detail"></p>
             </div>
           </div>
         </section>

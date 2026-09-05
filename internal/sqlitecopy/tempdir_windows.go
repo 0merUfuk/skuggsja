@@ -1,6 +1,7 @@
 package sqlitecopy
 
 import (
+	"context"
 	"crypto/rand"
 	"encoding/hex"
 	"errors"
@@ -17,7 +18,7 @@ const windowsTempNameAttempts = 100
 // makePrivateTempDir atomically creates a directory whose protected DACL
 // grants access only to the current user and LocalSystem. Child files inherit
 // that DACL; os.Chmod is not a Windows privacy boundary.
-func makePrivateTempDir() (string, error) {
+func makePrivateTempDir(ctx context.Context) (string, error) {
 	user, err := windows.GetCurrentProcessToken().GetTokenUser()
 	if err != nil {
 		return "", fmt.Errorf("read current Windows user: %w", err)
@@ -40,7 +41,7 @@ func makePrivateTempDir() (string, error) {
 		if _, err := rand.Read(random[:]); err != nil {
 			return "", fmt.Errorf("generate private directory name: %w", err)
 		}
-		path := filepath.Join(os.TempDir(), "skuggsja-sqlite-"+hex.EncodeToString(random[:]))
+		path := filepath.Join(tempParent(ctx), "skuggsja-sqlite-"+hex.EncodeToString(random[:]))
 		pathUTF16, err := windows.UTF16PtrFromString(path)
 		if err != nil {
 			return "", fmt.Errorf("encode private directory path: %w", err)

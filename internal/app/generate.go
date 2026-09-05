@@ -11,6 +11,7 @@ import (
 	"github.com/0merUfuk/skuggsja/internal/audit"
 	"github.com/0merUfuk/skuggsja/internal/model"
 	"github.com/0merUfuk/skuggsja/internal/provider"
+	"github.com/0merUfuk/skuggsja/internal/sqlitecopy"
 )
 
 // GenerateOptions contains explicit seams for deterministic tests.
@@ -20,6 +21,9 @@ type GenerateOptions struct {
 	Now          func() time.Time
 	OutputPath   string
 	AuditSources bool
+	// TempParent optionally selects a private-workspace parent without changing
+	// process environment. Its prospective child must be separate from sources.
+	TempParent string
 }
 
 // Generation is the finished report plus measured operational evidence.
@@ -46,7 +50,7 @@ type discoveryInputs struct {
 }
 
 // Generate discovers, snapshots, reads, aggregates, re-snapshots, and persists.
-func Generate(ctx context.Context, options GenerateOptions) (Generation, error) {
+func Generate(ctx context.Context, options GenerateOptions) (generation Generation, returnErr error) {
 	started := time.Now()
 	now := options.Now
 	if now == nil {
@@ -65,6 +69,12 @@ func Generate(ctx context.Context, options GenerateOptions) (Generation, error) 
 	if err := EnsureOutputSeparate(outputPath, inputs.sourceRoots, inputs.sourceFiles); err != nil {
 		return Generation{}, err
 	}
+	workspace, err := newPrivateWorkspace(options.TempParent, inputs.sourceRoots, inputs.sourceFiles)
+	if err != nil {
+		return Generation{}, err
+	}
+	defer func() { returnErr = errors.Join(returnErr, workspace.close()) }()
+	ctx = sqlitecopy.WithTempDir(ctx, workspace.directory)
 
 	var before audit.Snapshot
 	var auditErr error
@@ -83,6 +93,9 @@ func Generate(ctx context.Context, options GenerateOptions) (Generation, error) 
 			}
 			inputs = refreshed
 			if err := EnsureOutputSeparate(outputPath, inputs.sourceRoots, inputs.sourceFiles); err != nil {
+				return Generation{}, err
+			}
+			if err := workspace.ensureSeparate(inputs.sourceRoots, inputs.sourceFiles); err != nil {
 				return Generation{}, err
 			}
 		}
@@ -106,23 +119,29 @@ func Generate(ctx context.Context, options GenerateOptions) (Generation, error) 
 	}
 
 	comparison := audit.Comparison{}
+	observationComplete := false
 	if options.AuditSources && auditErr == nil && inputs.hasAuditPaths() {
 		after, err := audit.CaptureConfigured(ctx, inputs.auditRoots, inputs.auditFiles, inputs.auditConfigured)
 		if err != nil {
 			auditErr = err
 		} else {
 			comparison = audit.Compare(before, after)
+			observationComplete = before.Complete && after.Complete
 		}
 	}
-	if options.AuditSources && auditErr != nil {
-		results = append(results, model.ProviderResult{
-			Harness: "system", DisplayName: "Source audit", Status: "unavailable",
-			Warnings: []model.Warning{{Code: "source_audit_failed", Count: 1, Message: "Source integrity could not be fully audited for this run."}},
-		})
+	// Observation says whether other writers changed the source window. It is
+	// independent of our read-only source access and never becomes a provider
+	// failure or a warning suggesting that Skuggsja modified a source.
+	observation := "disabled"
+	if options.AuditSources {
+		observation = "observed"
+		if auditErr != nil || !inputs.hasAuditPaths() || !observationComplete {
+			observation = "unavailable"
+		}
 	}
 
 	report := analytics.Build(results, analytics.Options{
-		Now: now(), Location: options.Location, SourceAudit: comparison,
+		Now: now(), Location: options.Location, SourceAudit: comparison, SourceObservation: observation,
 	})
 	if err := WriteReport(outputPath, report); err != nil {
 		return Generation{}, fmt.Errorf("persist Rewind: %w", err)
@@ -139,6 +158,7 @@ func discoverInputs(ctx context.Context, readers []provider.Reader) discoveryInp
 		inputs.items = append(inputs.items, discoveredReader{reader: reader, discovery: discovery, err: err})
 		inputs.auditRoots = append(inputs.auditRoots, discovery.Roots...)
 		inputs.sourceRoots = append(inputs.sourceRoots, discovery.Roots...)
+		inputs.sourceRoots = append(inputs.sourceRoots, discovery.ProtectedDirectories...)
 		inputs.auditFiles = append(inputs.auditFiles, discovery.Files...)
 		inputs.auditFiles = append(inputs.auditFiles, discovery.AuditFiles...)
 		inputs.auditConfigured = append(inputs.auditConfigured, discovery.ConfiguredFiles...)
@@ -161,6 +181,7 @@ func sameDiscoveryInputs(left, right discoveryInputs) bool {
 		if left.items[index].reader.Harness() != right.items[index].reader.Harness() ||
 			errorText(left.items[index].err) != errorText(right.items[index].err) ||
 			!samePaths(left.items[index].discovery.Roots, right.items[index].discovery.Roots) ||
+			!samePaths(left.items[index].discovery.ProtectedDirectories, right.items[index].discovery.ProtectedDirectories) ||
 			!samePaths(left.items[index].discovery.Files, right.items[index].discovery.Files) ||
 			!samePaths(left.items[index].discovery.AuditFiles, right.items[index].discovery.AuditFiles) ||
 			!samePaths(left.items[index].discovery.ConfiguredFiles, right.items[index].discovery.ConfiguredFiles) {

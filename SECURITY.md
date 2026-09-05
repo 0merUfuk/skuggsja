@@ -38,10 +38,11 @@ The macOS verification harness creates disposable synthetic histories for all fo
 ### Source isolation
 
 - JSONL and compressed history files are opened read-only.
-- SQLite sources and persistent sidecars must be regular, non-symlink files and are copied with raw file reads into a private temporary directory. SQLite opens only the copy.
+- SQLite sources and persistent sidecars must be regular, non-symlink files and are copied through read-only handles into a private workspace. SQLite opens only the copy. The prospective workspace is checked against every source root/file and protected SQLite parent before any directory is created; direct copy calls also reject a temporary parent within their source database directory.
 - A stable-copy check verifies source identity, size, and SHA-256 before, during, and after copying and retries up to five times with bounded backoff.
 - Copied databases must pass `PRAGMA quick_check`; provider queries reopen the copy read-only with `query_only` and defensive mode enabled, double-quoted-string parsing disabled, `trusted_schema` disabled, and temporary storage kept in memory.
-- The default before/after source audit compares parsed and audit-only source bytes, configured-path presence, root presence, and directory membership across the provider-reader phase. Discovery is repeated after the first capture; a changed set is recaptured up to three times. Persistent churn is parsed best-effort from the latest set, but no after comparison is claimed and a system warning marks the audit inconclusive.
+- Read-only source access is an architectural guarantee in every run, including when activity observation is disabled or unavailable. Source handles use read-only access; reviewed artifact/private-copy writers have separate destinations. The production binary does not drop the user's OS permissions. An architectural regression test guards the write API surface, while the release verifier separately enforces OS-level source-write denial.
+- The optional before/after observation compares source bytes, configured-path presence, root presence, and directory membership. Discovery is repeated after the first capture, with up to three capture attempts if the set changes. Concurrent activity is neutral information attributed to another process, never a source-integrity warning or runtime failure. Persistent discovery churn leaves best-effort analytics and an unavailable observation. Unchanged-source equality is a release-only check with an explicitly recorded scope.
 - Unknown schemas and ambiguous history modes are skipped or degraded with warnings rather than queried or counted speculatively.
 
 ### Data minimization
@@ -81,8 +82,8 @@ Skuggsja is intended for one user inspecting their own histories on a machine th
 | Threat | Mitigation | Residual risk |
 | --- | --- | --- |
 | Accidental source mutation by SQLite | SQLite opens a stable private copy, never the original | Raw OS reads can update filesystem access metadata; the audit does not compare all metadata |
-| Source/output collision | Generation and `clean` fail closed on root/artifact-directory overlap and source-file path/symlink/hard-link aliases; output symlink components are rejected | Misconfigured unrelated output handling outside Skuggsja remains the user's responsibility |
-| Discovery set changes around capture | Capture then rediscover, retrying up to three times; only a stable set can be verified | Persistent churn permits best-effort analytics but always yields an inconclusive audit warning |
+| Source/output collision | Generation, private-workspace creation and `clean` fail closed on source/protected-parent overlap and source-file path/symlink/hard-link aliases; output symlink components are rejected | Misconfigured unrelated output handling outside Skuggsja remains the user's responsibility |
+| Discovery set changes around capture | Capture then rediscover, retrying up to three times; retain the independent read-only guarantee | Persistent churn permits best-effort analytics with a neutral unavailable observation; coverage may change during the run |
 | Upstream database changes during copy | Hash source and copied sets, retry five times with bounded backoff | A continuously active source can be skipped; a sophisticated same-hash race is outside the model |
 | Raw content leaking into artifact | Content-free types, label sanitization, serialization tests | Project basenames and aggregates may still be identifying; uncovered parser bugs remain possible |
 | Browser asset exfiltration | Embedded assets, one same-origin fetch, strict CSP/no-referrer | Browser extensions and browser-level behavior are outside the process |

@@ -23,6 +23,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 - Claude nested child-session discovery, supplemental history/state/project-index reconciliation, copied-history diagnostics, streaming-response merging, and recorded thinking-token support.
 - Codex supplemental history/index/state/catalog evidence and exact boundary-validated pagination stitching.
 - Schema-v2 provider coverage assessments that distinguish recovered local records from account-lifetime usage.
+- An always-visible read-only source-access guarantee in CLI, JSON and UI, with neutral concurrent-source activity kept separate from release-only equality verification.
+- An opt-in release verifier that waits for a continuous quiet window, performs one generation, and can explicitly retain a private hash/inventory snapshot of its self-hosted Codex store while excluding only that store from release equality.
 
 ### Security
 
@@ -30,9 +32,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 - Raw prompt/response content, absolute source paths, and internal source identifiers are excluded from the persisted report.
 - SQLite libraries open only private temporary copies, never the original history database.
+- Private workspace destinations are checked against source roots, files and protected SQLite parents before creation, including when discovery fails; copy destinations are passed through context rather than a process-global environment change.
 - SQLite copies reject symlink sources and use private Unix modes or a validated protected Windows DACL; Windows runtime verification remains pending.
 - Generation and cleanup reject overlapping source roots, artifact-directory-contained source files, and path/symlink/hard-link/case aliases, including paths returned with discovery errors.
-- Source auditing commits configured missing paths and attempts bounded stabilization against the captured set; persistent churn remains parseable but explicitly unverified.
+- Source observation commits configured missing paths and attempts bounded stabilization against the captured set; persistent churn remains parseable with a neutral unavailable observation and no source-integrity warning.
 - The aggregate directory uses private Unix modes or a validated protected Windows DACL; Windows runtime verification remains pending.
 - Runtime assets and code perform no outbound requests after installation; build and install networking remain outside that guarantee.
 - macOS runtime isolation covers all four adapters and observes/denies external socket destinations with a calibrated verification-only guard.
@@ -42,7 +45,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 - Codex’s paginated-history database is audited but not interpreted; presence is an explicit coverage limitation.
 
 - All current real-data verification is macOS-only. Cursor is schema-verified with synthetic data and is not real-data verified.
-- Arbitrary alternate account/profile storage homes are not guessed automatically; one configured/default Claude and Codex home is traversed per run, with explicit overrides available for known alternates.
+- Arbitrary archived or nested account/profile homes are not guessed automatically. Claude includes configured/canonical homes and immediate native `.claude-*` siblings; explicit overrides cover known alternates. Codex traverses its configured/default home, including recovery histories.
 - Provider history schemas are upstream implementation details and may require adapter updates.
 - The local report server has no authentication or encryption and is not intended for remote exposure.
 - Abrupt termination can leave a private SQLite copy in the OS temporary directory.

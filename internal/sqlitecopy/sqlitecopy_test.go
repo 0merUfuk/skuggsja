@@ -138,7 +138,7 @@ func TestPrivateTempDirectoryPermissions(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("Windows DACL validation has a platform-specific test")
 	}
-	dir, err := makePrivateTempDir()
+	dir, err := makePrivateTempDir(context.Background())
 	if err != nil {
 		t.Fatal(err)
 	}

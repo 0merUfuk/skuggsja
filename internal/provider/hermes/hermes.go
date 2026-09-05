@@ -6,6 +6,7 @@ import (
 	"database/sql"
 	"errors"
 	"os"
+	"path/filepath"
 	"sort"
 	"strconv"
 	"time"
@@ -22,7 +23,12 @@ func (Reader) Harness() model.Harness { return model.Hermes }
 func (Reader) DisplayName() string    { return "Hermes Agent" }
 
 func (r Reader) Discover(_ context.Context) (provider.Discovery, error) {
-	d := provider.Discovery{Harness: model.Hermes, ConfiguredFiles: sqlitePaths(r.DatabasePath)}
+	d := provider.Discovery{Harness: model.Hermes}
+	if r.DatabasePath == "" {
+		return d, nil
+	}
+	d.ConfiguredFiles = sqlitePaths(r.DatabasePath)
+	d.ProtectedDirectories = []string{filepath.Dir(r.DatabasePath)}
 	info, err := os.Lstat(r.DatabasePath)
 	if errors.Is(err, os.ErrNotExist) {
 		return d, nil

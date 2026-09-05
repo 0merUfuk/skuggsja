@@ -96,7 +96,7 @@ type Reader interface {
 - Return stable, sorted file lists.
 - Treat a missing optional install as an empty discovery, not a fatal error.
 - Declare every configured root and standalone input before fallible discovery. Keep parsed files, supplemental/audit-only inputs, and configured-but-absent paths separate; all three participate in source/output safety. Never serialize these paths.
-- For SQLite, discover the primary database; the audit and copy layer handle present sidecars.
+- For SQLite, discover the primary database and declare its parent in `ProtectedDirectories` before any fallible inspection. Protected parents prevent artifact/copy writes but never expand recursive audit roots; the audit and copy layer handle present sidecars.
 
 ### Reading
 
@@ -133,7 +133,7 @@ Do not turn compilation on Linux or Windows into a real-data support claim. Do n
 - deterministic results;
 - unknown schema or history mode;
 - live SQLite WAL behavior when applicable;
-- before/after source audit unchanged;
+- unchanged synthetic sources and neutral handling of an external writer during generation;
 - serialization contains no fixture secrets or internal IDs.
 
 ## Fixtures
@@ -147,15 +147,23 @@ Only synthetic fixtures belong in Git.
 - Keep records minimal while still exercising the behavior.
 - Never add home-directory paths, API keys, access tokens, user IDs, real repository names, real prompts/responses, or database pages copied from a real source.
 
-If a real-data smoke test is necessary, run it locally, do not capture content in terminal output, verify the source audit, record only aggregate conclusions, and delete generated test exports afterward.
+If a real-data smoke test is necessary, run it locally, do not capture content in terminal output, record source activity separately from the read-only access guarantee, record only aggregate conclusions, and delete generated test exports afterward. Concurrent harness activity is normal runtime information, not a failure.
 
-The opt-in full-run verifier brackets discovery, parsing, internal auditing, and aggregate persistence with an independent outer source snapshot:
+The release-only opt-in verifier waits for 60 continuous seconds of unchanged source metadata, then performs exactly one generation bracketed by independent hash/inventory snapshots. It requires complete, equal snapshots in the declared release scope:
 
 ```sh
 SKUGGSJA_VERIFY_REAL_DATA=1 go test ./internal/app -run TestRealDataFullRunLeavesSourcesUnchanged -count=1 -v
 ```
 
-Run it only on a machine whose histories you are authorized to inspect. Its output is aggregate-only.
+Run it only on a machine whose histories you are authorized to inspect. Its terminal output is aggregate-only. If no quiet window occurs within ten minutes, generation remains unstarted; do not relabel this as a runtime source-write failure.
+
+For a self-hosted Codex verification session on macOS, explicitly snapshot and exclude only its Codex store from release equality:
+
+```sh
+scripts/verify-live-source-protection.sh --snapshot-codex-store --evidence-dir NEW_PRIVATE_DIRECTORY
+```
+
+This stores exact private hash/inventory manifests, including configured absence states. Generation still reads every original source, including Codex. The excluded manifest is not a byte-for-byte archive or an atomic snapshot of an active store. Record the precise exclusion and shared-store reasoning in `VERIFICATION.md`; exclude no other harness. Without the explicit flag, the release equality scope includes Codex too. The driver calibrates source-write denial and the external-connect observer independently of equality.
 
 On macOS, `make verify-offline` builds synthetic histories for every Tier-1 adapter, calibrates the external-connect observer with a deliberate Go probe, and exercises generation plus every localhost UI/API route with remote networking denied. The probe, fixture builder, and DYLD guard under `scripts/` are verification-only and are excluded from release builds.
 
@@ -178,6 +186,7 @@ Claims must match the current implementation and evidence:
 
 - Say “runtime” when discussing zero outbound; builds and installs can use the network.
 - Distinguish read-only source access from the raw private SQLite copy.
+- Keep the always-on read-only guarantee separate from optional, neutral runtime source activity and release-only unchanged-source equality.
 - Distinguish discovered transcript and supplemental-input counts from the audit manifest, which also includes sidecars and configured absences.
 - Keep local data coverage separate from lifetime usage; index-only evidence adds no invented usage.
 - Distinguish cross-platform code paths from real-data verification.

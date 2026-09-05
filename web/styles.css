@@ -281,6 +281,21 @@ main {
   padding-inline: var(--page-gutter);
 }
 
+.source-status {
+  padding-block: 0.85rem;
+  border-bottom: 1px solid var(--rule);
+  font-size: var(--text-sm);
+  line-height: 1.5;
+}
+
+.source-status p {
+  margin: 0;
+}
+
+.source-status p + p {
+  margin-top: 0.3rem;
+}
+
 main::before {
   position: absolute;
   z-index: -1;
@@ -1611,11 +1626,21 @@ meter::-moz-meter-bar {
 .audit-stamp > strong {
   display: block;
   margin: 0.5rem 0 2rem;
-  color: #ef795f;
+  color: var(--paper-light);
   font-family: var(--font-display);
   font-size: clamp(2.5rem, 5vw, 5rem);
   font-weight: 500;
   line-height: 0.9;
+}
+
+.audit-stamp > .audit-stamp__detail {
+  color: #d6cebc;
+  font-family: var(--font-body);
+  font-size: var(--text-sm);
+  font-weight: 400;
+  letter-spacing: normal;
+  line-height: 1.6;
+  text-transform: none;
 }
 
 .audit-stamp dl {

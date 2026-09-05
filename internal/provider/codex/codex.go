@@ -60,6 +60,7 @@ func (r Reader) Discover(_ context.Context) (provider.Discovery, error) {
 	for _, path := range []string{r.StateDatabase, r.CatalogDatabase, r.ThreadHistoryDatabase} {
 		if path != "" {
 			d.ConfiguredFiles = append(d.ConfiguredFiles, codexSQLitePaths(path)...)
+			d.ProtectedDirectories = append(d.ProtectedDirectories, filepath.Dir(path))
 		}
 	}
 	selected := make(map[string]string)

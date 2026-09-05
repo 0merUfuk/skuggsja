@@ -12,6 +12,26 @@ import (
 	_ "modernc.org/sqlite"
 )
 
+func TestDiscoverRetainsDatabaseParentProtectionOnFailure(t *testing.T) {
+	t.Parallel()
+	parent := t.TempDir()
+	path := filepath.Join(parent, "database_without_extension")
+	if err := os.Mkdir(path, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	d, err := (Reader{DatabasePath: path}).Discover(context.Background())
+	if err == nil || len(d.ProtectedDirectories) != 1 || d.ProtectedDirectories[0] != parent {
+		t.Fatalf("invalid database lost source-parent protection: %#v error=%v", d, err)
+	}
+	if len(d.Roots) != 0 || len(d.AuditFiles) != 0 {
+		t.Fatalf("write protection expanded audit inventory: %#v", d)
+	}
+	empty, err := (Reader{}).Discover(context.Background())
+	if err != nil || len(empty.ProtectedDirectories) != 0 || len(empty.ConfiguredFiles) != 0 {
+		t.Fatalf("empty database path protected unrelated paths: %#v error=%v", empty, err)
+	}
+}
+
 func TestReaderUsesCanonicalSessionAndModelUsageTables(t *testing.T) {
 	t.Parallel()
 	path := filepath.Join(t.TempDir(), "state.db")

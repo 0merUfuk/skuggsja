@@ -16,6 +16,8 @@ go run ./cmd/skuggsja
 
 That one command generates the aggregate report, prints a terminal summary, starts an HTTP server bound to `127.0.0.1`, and asks the operating system to open the local Rewind in the default browser. If browser launch is unavailable, open the printed loopback URL yourself. Stop the server with <kbd>Ctrl</kbd>+<kbd>C</kbd>.
 
+Source access is always read-only: **skuggsja does not write to source paths.** The terminal and UI show that guarantee on every run. Keep your agents running; source activity observed during generation is neutral information, for example: “2 files changed during the run by another process; skuggsja does not write to source paths.”
+
 `go run`, `go install`, and the first build may contact Go module or toolchain servers. The zero-outbound guarantee applies to the installed/built program at runtime: Skuggsja has no telemetry, update check, remote API call, CDN, remote font, or remote browser asset. Use `--no-open` if you also do not want Skuggsja to launch your browser.
 
 To install from a checkout and then use the single command `skuggsja` (with `GOBIN`, or the Go bin directory, on `PATH`):
@@ -50,7 +52,7 @@ skuggsja completion [bash|fish|powershell|zsh]
 | `--no-open` | Serve the report without launching the default browser. |
 | `--once` | Generate and persist the aggregate, print the summary, then exit without serving. |
 | `--json` | Generate and persist the aggregate, write it to standard output, then exit. |
-| `--no-source-audit` | Skip source snapshots and capture/rediscovery stabilization. This does not change the read-only parser design, but the first discovery is parsed best-effort and the run cannot claim a stable or integrity-verified source set. |
+| `--no-source-audit` | Skip optional before/after source activity observation and capture/rediscovery stabilization; parse the first discovery best-effort. Read-only source access remains guaranteed. |
 | `--port N` | Prefer loopback port `N`; default `4321`. Use `0` for an ephemeral port. If a requested port is busy, Skuggsja falls back to an ephemeral loopback port. |
 
 Examples:
@@ -105,7 +107,7 @@ Claude discovery retains the canonical home when `CLAUDE_CONFIG_DIR` points else
 
 `SKUGGSJA_OUTPUT_DIRECTORY` optionally sets an absolute artifact directory while retaining the fixed `rewind.json` filename and all source-separation checks. Generation and `clean` use the same selected directory. This lets verification isolate output without changing the user's home or harness environment.
 
-Overrides are useful for tests and nonstandard installs. Point them only at histories you intend the current process to read. A source root and the artifact directory may not contain one another; a source file may not be the artifact or lie within its directory. Generation and `clean` fail closed on cleaned-path, symlink-component, resolved-symlink, case-insensitive macOS/Windows, and existing hard-link aliases. Declared paths are guarded even when provider discovery fails.
+Overrides are useful for tests and nonstandard installs. Point them only at histories you intend the current process to read. A source root and the artifact directory may not contain one another; a source file may not be the artifact or lie within its directory. SQLite source directories are also protected from artifact and temporary-copy creation, even when the database is absent. This write protection does not add their other contents to discovery or auditing. Generation and `clean` fail closed on cleaned-path, symlink-component, resolved-symlink, case-insensitive macOS/Windows, and existing hard-link aliases. Declared paths are guarded even when provider discovery fails.
 
 ## What the numbers mean
 
@@ -128,12 +130,16 @@ The global displayed span runs from the earliest trustworthy top-level session s
 
 ## Privacy in one minute
 
-- JSONL histories are opened read-only. SQLite histories and present WAL or journal files must be regular, non-symlink files and are copied into a private temporary directory. SQLite may recover and check only that copy, then reopens it read-only with query-only protections for provider queries. The copy directory is mode `0700` with mode-`0600` files on Unix-like systems; Windows uses a validated protected DACL for the current user and LocalSystem.
+- Source handles are opened read-only (`O_RDONLY`). SQLite histories and present WAL or journal files must be regular, non-symlink files and are copied into a guarded workspace separate from every configured source and protected source directory. SQLite may recover and check only that copy, then reopens it read-only with query-only protections for provider queries. The copy directory is mode `0700` with mode-`0600` files on Unix-like systems; Windows uses a validated protected DACL for the current user and LocalSystem. This is an architectural guarantee; the production process does not drop its operating-system permissions.
 - Raw prompt text is used transiently to calculate counts and is absent from the normalized model and persisted report.
 - Source paths, session IDs, prompt IDs, call IDs, and tool IDs may exist temporarily for discovery or deduplication but are excluded from the JSON artifact.
 - The persisted artifact contains aggregate timestamps, counts, model labels, project basenames, provider warnings, and source-audit digests. It is privacy-reduced, not anonymous.
 - The default artifact is written through a synced same-directory temporary file and rename-over-existing. Unix-like systems receive a mode-`0700` artifact directory and mode-`0600` artifact. Windows applies and validates a protected directory DACL limited to the current user and LocalSystem; this path cross-compiles but has not been runtime-tested on Windows.
-- A before/after SHA-256 audit checks parsed and audit-only contents, configured/root presence, and directory membership unless disabled. Capture/rediscovery stabilization binds the snapshot to the reader input set. The audit does not compare metadata such as access times or prove which process caused a concurrent change.
+- Optional before/after SHA-256 observation checks parsed and audit-only contents, configured/root presence, and directory membership. Concurrent activity, unavailable observation, and disabled observation never become source-integrity failures or warnings. The observation does not compare metadata such as access times, identify the other writer, or detect changes reverted between captures.
+
+The JSON report records `privacy.source_access: "read-only"` independently of `privacy.source_observation` (`observed`, `disabled`, or `unavailable`). The retained `privacy.source_audit.verified` field describes snapshot equality only; the terminal and UI do not use it as a source-access verdict.
+
+An unchanged-source window is a separate opt-in release-verification check requiring quiet harnesses. When verification is itself running in Codex, its explicitly inventoried and hashed Codex store can be excluded from that release equality comparison because the verification agent writes its own rollout and shared indexes. Original Codex inputs remain included in normal ingestion and runtime observation; no other source is excluded. See [VERIFICATION.md](VERIFICATION.md) for the declared release scope and evidence.
 
 Read [PRIVACY.md](PRIVACY.md) before using real histories and [SECURITY.md](SECURITY.md) for the threat model.
 
@@ -151,7 +157,7 @@ Read [PRIVACY.md](PRIVACY.md) before using real histories and [SECURITY.md](SECU
 - Codex model-event counts cannot be joined exactly to its session-level token totals.
 - Hermes combines sessions created through all interfaces that share `state.db`.
 - Cursor reads only the canonical global composer store, does not merge derived search or legacy workspace stores, and reports no token totals for the supported schema.
-- A hard crash or `SIGKILL` can prevent cleanup of a private SQLite copy in the OS temporary directory.
+- A hard crash or `SIGKILL` can prevent cleanup of a private SQLite copy in a `skuggsja-run-*` workspace under the OS temporary directory.
 - The loopback report has no application authentication or encryption. Other local processes may be able to read it while the server runs.
 
 ## Development

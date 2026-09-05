@@ -1,6 +1,7 @@
 package sqlitecopy
 
 import (
+	"context"
 	"os"
 	"testing"
 
@@ -8,7 +9,7 @@ import (
 )
 
 func TestPrivateTempDirectoryDACL(t *testing.T) {
-	dir, err := makePrivateTempDir()
+	dir, err := makePrivateTempDir(context.Background())
 	if err != nil {
 		t.Fatal(err)
 	}

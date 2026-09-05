@@ -2,10 +2,24 @@ package webassets
 
 import (
 	"io/fs"
+	"os/exec"
 	"regexp"
 	"strings"
 	"testing"
 )
+
+func TestSourceActivityPresentation(t *testing.T) {
+	t.Parallel()
+	node, err := exec.LookPath("node")
+	if err != nil {
+		t.Skip("Node.js is needed for the production JavaScript presentation test")
+	}
+	output, err := exec.Command(node, "--test", "source_activity_test.cjs").CombinedOutput()
+	if err != nil {
+		t.Fatalf("source activity presentation: %v\n%s", err, output)
+	}
+	t.Logf("production JavaScript presentation checks:\n%s", output)
+}
 
 func TestEmbeddedAssetsHaveNoExternalOrigins(t *testing.T) {
 	t.Parallel()

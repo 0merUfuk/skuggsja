@@ -35,6 +35,9 @@
       activeController.abort();
     }
     activeController = new AbortController();
+    const sourceActivity = document.getElementById("source-activity");
+    sourceActivity.hidden = true;
+    sourceActivity.textContent = "";
     showState("loading");
     main.setAttribute("aria-busy", "true");
 
@@ -76,6 +79,7 @@
     const totals = recordOrEmpty(data.totals);
     const sessions = numeric(totals.sessions, 0);
     renderFooter(data);
+    renderSourceStatus(data);
 
     if (sessions <= 0) {
       renderEmptyState(data);
@@ -99,8 +103,6 @@
   function renderHero(data) {
     const coverage = recordOrEmpty(data.coverage);
     const totals = recordOrEmpty(data.totals);
-    const privacy = recordOrEmpty(data.privacy);
-    const audit = recordOrEmpty(privacy.source_audit);
     const providers = arrayOrEmpty(data.providers);
     const models = arrayOrEmpty(data.models);
     const sessions = numeric(totals.sessions, 0);
@@ -165,14 +167,7 @@
       );
     }
 
-    const auditChanges = auditChangeCount(audit, totals) + changeCount(audit.directory_changes);
-    if (audit.verified === true) {
-      setText("proof-audit", "0 changed · verified");
-    } else if (auditWasCompared(audit) && auditChanges > 0) {
-      setText("proof-audit", formatNumber(auditChanges) + " changed · detected");
-    } else {
-      setText("proof-audit", "Not verified");
-    }
+    setText("proof-audit", "Read-only");
 
     const sparse = sessions < 8 || activeDays < 3;
     const sparseNote = document.getElementById("sparse-note");
@@ -690,40 +685,61 @@
   }
 
   function renderPrivacy(data) {
-    const totals = recordOrEmpty(data.totals);
     const privacy = recordOrEmpty(data.privacy);
-    const audit = recordOrEmpty(privacy.source_audit);
     const raw = privacyBoolean(privacy.raw_content_persisted, "No · discarded", "Yes · review required");
     const paths = privacyBoolean(privacy.absolute_paths_persisted, "No · stripped", "Yes · review required");
-    const changes = auditChangeCount(audit, totals);
-    const directories = changeCount(audit.directory_changes);
-    const auditFiles = countValue(audit.files);
-    const compared = auditWasCompared(audit);
-    const unchanged = audit.verified === true && changes === 0 && directories === 0;
+    const activity = sourceActivity(data);
     setPrivacyOutput("privacy-raw", raw.label, raw.good);
     setPrivacyOutput("privacy-paths", paths.label, paths.good);
-    setPrivacyOutput(
-      "privacy-changed",
-      compared ? formatNumber(changes + directories) : "Not verified",
-      unchanged
-    );
-    setPrivacyOutput(
-      "privacy-audit-files",
-      compared ? formatNumber(auditFiles) + " files" : "Not verified",
-      audit.verified === true
-    );
+    setText("privacy-source-access", "Read-only");
+    setText("privacy-audit-files", activity.filesLabel);
+    setText("audit-verdict", activity.summary);
+    setText("privacy-source-activity", activity.detail);
+  }
 
-    let verdict = "Not verified";
-    if (audit.verified === true && unchanged) {
-      verdict = "Verified unchanged";
-    } else if (compared && changes + directories > 0) {
-      verdict = "Changes detected";
-    } else if (compared) {
-      verdict = "Inconclusive";
+  function renderSourceStatus(data) {
+    const activity = document.getElementById("source-activity");
+    activity.textContent = sourceActivity(data).detail;
+    activity.hidden = false;
+  }
+
+  function sourceActivity(data) {
+    const privacy = recordOrEmpty(data.privacy);
+    const audit = recordOrEmpty(privacy.source_audit);
+    const observation = privacy.source_observation;
+    if (observation === "disabled") {
+      return {
+        summary: "Observation skipped",
+        detail: "Optional source activity observation was skipped. Source access remains read-only.",
+        filesLabel: "Not observed"
+      };
     }
-    setText("audit-verdict", verdict);
-    setText("manifest-before", compactHash(audit.manifest_before));
-    setText("manifest-after", compactHash(audit.manifest_after));
+    if (observation === "unavailable" || (observation !== "observed" && !auditWasCompared(audit))) {
+      return {
+        summary: "Observation unavailable",
+        detail: "Source activity observation was unavailable. Source access remains read-only.",
+        filesLabel: "Not observed"
+      };
+    }
+    const changes = auditChangeCount(audit, recordOrEmpty(data.totals));
+    const directories = changeCount(audit.directory_changes);
+    const parts = [];
+    if (changes > 0) {
+      parts.push(formatNumber(changes) + " " + plural(changes, "file", "files") +
+        " changed during the run by another process; skuggsja does not write to source paths.");
+    }
+    if (directories > 0) {
+      parts.push(formatNumber(directories) + " directory " + plural(directories, "listing", "listings") +
+        " changed during the run by another process.");
+    }
+    if (parts.length === 0) {
+      parts.push("No concurrent source changes were observed during the run. Source access remains read-only.");
+    }
+    return {
+      summary: changes > 0 || directories > 0 ? "Concurrent activity" : "No changes observed",
+      detail: parts.join(" "),
+      filesLabel: formatNumber(countValue(audit.files)) + " files"
+    };
   }
 
   function renderMethodology(rawMethodology, rawWarnings) {
@@ -1002,17 +1018,6 @@
       return value.length;
     }
     return numeric(value, 0);
-  }
-
-  function compactHash(value) {
-    if (typeof value !== "string" || value.trim() === "") {
-      return "Not recorded";
-    }
-    const hash = cleanText(value, "Not recorded", 128);
-    if (hash.length <= 28) {
-      return hash;
-    }
-    return hash.slice(0, 16) + "…" + hash.slice(-8);
   }
 
   function formatHour(value) {

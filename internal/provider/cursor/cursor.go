@@ -31,7 +31,12 @@ func (Reader) Harness() model.Harness { return model.Cursor }
 func (Reader) DisplayName() string    { return "Cursor" }
 
 func (r Reader) Discover(_ context.Context) (provider.Discovery, error) {
-	d := provider.Discovery{Harness: model.Cursor, ConfiguredFiles: sqlitePaths(r.DatabasePath)}
+	d := provider.Discovery{Harness: model.Cursor}
+	if r.DatabasePath == "" {
+		return d, nil
+	}
+	d.ConfiguredFiles = sqlitePaths(r.DatabasePath)
+	d.ProtectedDirectories = []string{filepath.Dir(r.DatabasePath)}
 	info, err := os.Lstat(r.DatabasePath)
 	if errors.Is(err, os.ErrNotExist) {
 		return d, nil

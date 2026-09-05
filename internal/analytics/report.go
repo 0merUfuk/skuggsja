@@ -141,6 +141,8 @@ type LongestSession struct {
 type Privacy struct {
 	RawContentPersisted    bool             `json:"raw_content_persisted"`
 	AbsolutePathsPersisted bool             `json:"absolute_paths_persisted"`
+	SourceAccess           string           `json:"source_access"`
+	SourceObservation      string           `json:"source_observation"`
 	SourceAudit            audit.Comparison `json:"source_audit"`
 }
 
@@ -153,9 +155,10 @@ type ReportWarning struct {
 
 // Options supplies nondeterministic inputs explicitly for testability.
 type Options struct {
-	Now         time.Time
-	Location    *time.Location
-	SourceAudit audit.Comparison
+	Now               time.Time
+	Location          *time.Location
+	SourceAudit       audit.Comparison
+	SourceObservation string
 }
 
 // Build derives a report from every provider result.
@@ -173,6 +176,7 @@ func Build(results []model.ProviderResult, options Options) Report {
 		ProductName:   "skuggsja",
 		Privacy: Privacy{
 			RawContentPersisted: false, AbsolutePathsPersisted: false,
+			SourceAccess: "read-only", SourceObservation: options.SourceObservation,
 			SourceAudit: options.SourceAudit,
 		},
 		Methodology: []string{

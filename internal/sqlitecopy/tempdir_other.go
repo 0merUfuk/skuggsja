@@ -3,12 +3,13 @@
 package sqlitecopy
 
 import (
+	"context"
 	"fmt"
 	"os"
 )
 
-func makePrivateTempDir() (string, error) {
-	dir, err := os.MkdirTemp("", "skuggsja-sqlite-")
+func makePrivateTempDir(ctx context.Context) (string, error) {
+	dir, err := os.MkdirTemp(tempParent(ctx), "skuggsja-sqlite-")
 	if err != nil {
 		return "", err
 	}
