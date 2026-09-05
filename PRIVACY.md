@@ -87,7 +87,7 @@ Manifest digests can act as stable fingerprints of an unchanged source set acros
 
 ### Release equality check
 
-The opt-in real-data test separately waits for a continuous quiet window, runs generation once, and requires matching before/after snapshots for its declared release scope. This check asks whether any process changed those sources; it is not a runtime success condition.
+The opt-in real-data test separately tries up to eight direct generation windows, without waiting for an idle preflight, and stops at the first complete matching before/after comparison for its declared release scope. Each attempt captures fresh manifests and generates its own aggregate. A configured private evidence directory retains those files under distinct attempt names, including comparisons that detected activity. This check asks whether any process changed those sources during a completed window; it is not a runtime success condition.
 
 When the verification agent is itself hosted in Codex, the test can explicitly snapshot the configured Codex store's inventory and hashes and exclude that store only from the outer release equality comparison. The scope includes shared prompt history, indexes, and SQLite files as well as rollouts because the verification agent can update all of them. No other source is excluded. Generation still reads every original Codex source and includes it in ordinary runtime observation. The release record must name this exclusion and must not claim that the original Codex store stayed unchanged. Exact evidence belongs in [VERIFICATION.md](VERIFICATION.md), separate from the privacy-safe runtime artifact.
 
@@ -97,11 +97,13 @@ The default artifact is the OS user-cache path ending in `skuggsja/rewind.json`;
 
 - provider names, status, verification wording, limitations, and aggregate warnings;
 - global coverage timestamps/timezone plus each provider's content-free coverage status, confidence, earliest evidence/detail timestamps, and missing-detail counts;
-- counts by provider, day, hour, weekday, model, and project basename;
+- counts by provider, day, hour, weekday, model, and project basename; tool-call and model-event counts remain provider-scoped because their native units differ;
 - prompt-length aggregates;
 - provider-scoped source-recorded token ledgers where available, including their ledger-level exactness flag;
 - the read-only source-access contract, optional observation status, source-audit digests, and aggregate activity counts;
 - fixed methodology text.
+
+Schema 3 removes the global `totals.tool_calls` field. Provider counts remain paired with `tool_calls_available`; unavailable counts are never displayed as measured zero. Model ranking positions and meter scales are local to each harness, with no cross-provider winner.
 
 Before reading or writing, Skuggsja rejects source-root/artifact-directory overlap and any source file equal to the artifact or below its directory, including cleaned-path, resolved-symlink, case, and existing hard-link aliases. SQLite parent directories are separately protected from artifact and temporary-copy creation; protecting them does not make their other files usage or audit inputs. A standalone metadata source file may safely live in an ancestor directory. Declared paths remain guarded after discovery errors, and writing/cleaning rejects symlinks in output-directory components. The writer creates or changes the containing directory to mode `0700`, writes a mode-`0600` temporary file, syncs it, and renames it into place on Unix-like systems. On Windows it applies and validates a protected, inheritable directory DACL limited to the current user and LocalSystem before creating the artifact; this implementation has cross-compile coverage but no current Windows runtime evidence.
 
@@ -136,5 +138,7 @@ All aggregates are regenerable from the histories still present at the next run.
 ## Testing the boundary
 
 Repository tests use synthetic fixtures and temporary databases. They verify that serialized reports exclude absolute source paths and internal session/prompt/call/tool identifiers, that live WAL-backed SQLite data can be read through a private copy, that configured-path changes and discovery-set changes are detected, that nested Claude children and Codex pagination/index coverage behave deterministically, that provider coverage serializes without paths/content, and that browser assets contain no external origins. Source-access checks cover the production write surface, temporary-workspace/source overlap including absent SQLite paths, and separation between runtime observation and read-only guarantees. Terminal and JavaScript tests check neutral activity in full, empty, unavailable, disabled, and retry states.
+
+Browser verification serves a retained aggregate through `scripts/serve-report` and uses `scripts/verify-browser.cjs` with an isolated Chrome Headless profile. It records screenshots, rendered-value assertions, and intercepted requests in a private evidence directory; it does not reread source histories. Screenshots and retained aggregates can contain sensitive project basenames and usage patterns, and belong outside the repository. The temporary browser profile is removed when the verifier exits normally. Verification results are reported separately from the availability of these tools.
 
 Tests demonstrate the coded invariants for covered cases; they are not a formal proof. Please report a privacy or security issue through the process in [SECURITY.md](SECURITY.md) without attaching real history files.

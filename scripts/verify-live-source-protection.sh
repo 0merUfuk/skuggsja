@@ -176,12 +176,9 @@ fi
 live_result=failed
 live_status=1
 generation_runs=$(grep -Fc 'release_generation attempt=' "$test_log" || true)
-if [ "$generation_runs" -eq 0 ] && grep -F 'no genuine quiet window' "$test_log" >/dev/null; then
-  live_result=not_run_no_quiet_window
-fi
-if [ "$test_status" -eq 0 ] && [ "$generation_runs" -eq 1 ] && \
-   grep -F -- '--- PASS: TestRealDataFullRunLeavesSourcesUnchanged' "$test_log" >/dev/null && \
-   grep -E 'outer_source_audit .*verified=true' "$test_log" >/dev/null; then
+verified_windows=$(grep -Ec 'outer_source_audit .*verified=true' "$test_log" || true)
+if [ "$test_status" -eq 0 ] && [ "$generation_runs" -ge 1 ] && [ "$generation_runs" -le 8 ] && [ "$verified_windows" -ge 1 ] && \
+   grep -F -- '--- PASS: TestRealDataFullRunLeavesSourcesUnchanged' "$test_log" >/dev/null; then
   live_result=passed
   live_status=0
 fi
@@ -189,7 +186,7 @@ fi
   echo "source_write_enforcement=calibrated source_writes=denied_by_policy writable_paths=private_workspace_and_dev_null"
   echo "source_write_attempts=not_independently_traced"
   echo "network_guard_active=$guard_active observed_external_attempts=$external_attempts network_check_exit=$network_status"
-  echo "release_live_manifest_result=$live_result live_test_exit=$test_status excluded_codex_store=$snapshot_codex other_exclusions=0 generation_runs=$generation_runs"
+  echo "release_live_manifest_result=$live_result live_test_exit=$test_status excluded_codex_store=$snapshot_codex other_exclusions=0 generation_runs=$generation_runs verified_windows=$verified_windows"
   echo "runtime_source_observation=informational ingestion=all_original_sources"
 } | tee "$summary"
 if [ "$live_status" -ne 0 ] || [ "$network_status" -ne 0 ]; then

@@ -94,7 +94,7 @@ func TestAdditionalHomesCoalesceIdenticalAndPartialPhysicalCopies(t *testing.T) 
 			if partial {
 				wantPrompts, wantTools, wantOutput = 2, 2, 8
 			}
-			if report.Totals.Sessions != 1 || report.Totals.ChildSessions != 1 || report.Totals.Prompts != wantPrompts || report.Totals.ToolCalls != wantTools {
+			if report.Totals.Sessions != 1 || report.Totals.ChildSessions != 1 || report.Totals.Prompts != wantPrompts || report.Providers[0].ToolCalls != wantTools {
 				t.Fatalf("totals=%#v", report.Totals)
 			}
 			if report.Providers[0].TokenUsage.Output != wantOutput {

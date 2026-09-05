@@ -43,8 +43,8 @@ func TestBuildKeepsProviderSemanticsAndDiscardsSensitiveContent(t *testing.T) {
 	if report.Totals.Sessions != 1 || report.Totals.ChildSessions != 1 {
 		t.Fatalf("session totals = %d roots, %d children", report.Totals.Sessions, report.Totals.ChildSessions)
 	}
-	if report.Totals.Prompts != 1 || report.Totals.ToolCalls != 1 {
-		t.Fatalf("deduplicated totals = %d prompts, %d tools", report.Totals.Prompts, report.Totals.ToolCalls)
+	if report.Totals.Prompts != 1 || report.Providers[0].ToolCalls != 1 {
+		t.Fatalf("deduplicated totals = %d prompts, %d provider tools", report.Totals.Prompts, report.Providers[0].ToolCalls)
 	}
 	if !report.Providers[0].ToolCallsAvailable {
 		t.Fatal("mapped provider tool calls were reported as unavailable")
@@ -73,6 +73,71 @@ func TestBuildKeepsProviderSemanticsAndDiscardsSensitiveContent(t *testing.T) {
 		if strings.Contains(string(payload), forbidden) {
 			t.Errorf("persisted report contains forbidden source value %q", forbidden)
 		}
+	}
+}
+
+func TestNativeToolAndModelCountsRemainProviderScopedInJSON(t *testing.T) {
+	t.Parallel()
+	at := time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC)
+	report := Build([]model.ProviderResult{
+		{
+			Harness: model.Hermes, DisplayName: "Hermes Agent", ToolCallsAvailable: true,
+			Sessions: []model.Session{{
+				Harness: model.Hermes, ID: "hermes-root", StartedAt: at, ToolCalls: 7,
+				Models: map[string]model.ModelActivity{"native-api-model": {Turns: 12}},
+			}},
+		},
+		{
+			Harness: model.Claude, DisplayName: "Claude Code", ToolCallsAvailable: true,
+			Sessions: []model.Session{{
+				Harness: model.Claude, ID: "claude-root", StartedAt: at,
+				Calls: []model.CallMetric{
+					{ID: "response", Model: "native-response-model", ToolIDs: []string{"tool-a", "tool-b"}},
+					{ID: "response", Model: "native-response-model", ToolIDs: []string{"tool-a"}},
+				},
+			}},
+		},
+		{Harness: model.Cursor, DisplayName: "Cursor", ToolCallsAvailable: false},
+	}, Options{Now: at, Location: time.UTC})
+
+	payload, err := json.Marshal(report)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var decoded struct {
+		SchemaVersion int                        `json:"schema_version"`
+		Totals        map[string]json.RawMessage `json:"totals"`
+		Providers     []ProviderSummary          `json:"providers"`
+		Models        []ModelSummary             `json:"models"`
+	}
+	if err := json.Unmarshal(payload, &decoded); err != nil {
+		t.Fatal(err)
+	}
+	if decoded.SchemaVersion != 3 {
+		t.Fatalf("schema = %d; removal of the global tool-call field requires version 3", decoded.SchemaVersion)
+	}
+	for _, forbidden := range []string{"tool_calls", "turns", "model_events"} {
+		if _, exists := decoded.Totals[forbidden]; exists {
+			t.Errorf("serialized totals contain cross-provider native count %q", forbidden)
+		}
+	}
+	want := map[model.Harness]struct {
+		count     int64
+		available bool
+	}{model.Claude: {2, true}, model.Hermes: {7, true}, model.Cursor: {0, false}}
+	for _, provider := range decoded.Providers {
+		expected := want[provider.ID]
+		if provider.ToolCalls != expected.count || provider.ToolCallsAvailable != expected.available {
+			t.Errorf("%s native tools = %d available=%t; want %d available=%t", provider.ID, provider.ToolCalls, provider.ToolCallsAvailable, expected.count, expected.available)
+		}
+		delete(want, provider.ID)
+	}
+	if len(want) != 0 {
+		t.Fatalf("serialized providers missing: %#v", want)
+	}
+	if len(decoded.Models) != 2 || decoded.Models[0].Harness != model.Claude || decoded.Models[0].Turns != 1 ||
+		decoded.Models[1].Harness != model.Hermes || decoded.Models[1].Turns != 12 {
+		t.Fatalf("models must retain native counts grouped by harness rather than rank across harnesses: %#v", decoded.Models)
 	}
 }
 

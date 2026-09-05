@@ -117,9 +117,9 @@ Overrides are useful for tests and nonstandard installs. Point them only at hist
 | Child sessions | Histories identified as children or subagents. They are counted separately and excluded from session-derived totals and rhythm metrics. |
 | Prompts | Unique human prompt events recognized by each adapter. Text is reduced immediately to word and character counts; supported attachment-only events may count as prompts but not as prompt-style samples. |
 | Projects | Distinct final directory names associated with top-level sessions. Absolute project paths are not persisted. |
-| Tool calls | Deduplicated call identifiers where the source exposes them; otherwise a mapped source count. Totals exclude harnesses such as Cursor where this metric is unavailable. |
+| Tool calls | Provider-scoped native counts: deduplicated call identifiers where exposed, otherwise a mapped source count. There is no cross-provider sum or ranking. An unsupported count, such as Cursor's, is shown as unavailable rather than measured zero. |
 | Active days | Local calendar dates on which at least one countable top-level session has a trustworthy provider-defined activity time. |
-| Model events | Provider-native model/API activity: for example, assistant responses, turn contexts, API-call counts, or eligible Cursor prompt bubbles carrying a model label. These events are not a comparable cross-provider unit. |
+| Model events | Provider-native model/API activity: for example, assistant responses, turn contexts, API-call counts, or eligible Cursor prompt bubbles carrying a model label. Rankings and meter scales compare models only within one harness; there is no global winner or combined event count. |
 | Tokens | A provider-scoped ledger copied from recognized source usage records when available. Skuggsja does not estimate an unavailable provider ledger or combine unlike cache semantics. A zero category can mean recorded zero or an absent/null field in formats that do not distinguish those cases. |
 | Longest session | Largest non-negative `end - start` duration among countable top-level sessions with trustworthy times. |
 | Late night | Percentage of time-binned top-level sessions whose trustworthy activity hour is 00:00 through 04:59 in the machine's local timezone. |
@@ -139,7 +139,9 @@ The global displayed span runs from the earliest trustworthy top-level session s
 
 The JSON report records `privacy.source_access: "read-only"` independently of `privacy.source_observation` (`observed`, `disabled`, or `unavailable`). The retained `privacy.source_audit.verified` field describes snapshot equality only; the terminal and UI do not use it as a source-access verdict.
 
-An unchanged-source window is a separate opt-in release-verification check requiring quiet harnesses. When verification is itself running in Codex, its explicitly inventoried and hashed Codex store can be excluded from that release equality comparison because the verification agent writes its own rollout and shared indexes. Original Codex inputs remain included in normal ingestion and runtime observation; no other source is excluded. See [VERIFICATION.md](VERIFICATION.md) for the declared release scope and evidence.
+The aggregate uses schema **3**, which removes `totals.tool_calls`. Consumers should read `providers[].tool_calls` together with `tool_calls_available` and preserve each provider's native semantics.
+
+An unchanged-source window is a separate opt-in release-verification check. It starts generation directly, without an idle preflight, and tries up to eight windows with fresh before/after manifests and aggregates, stopping at the first complete equality result. When verification is itself running in Codex, its explicitly inventoried and hashed Codex store can be excluded from that release equality comparison because the verification agent writes its own rollout and shared indexes. Original Codex inputs remain included in normal ingestion and runtime observation; no other source is excluded. See [VERIFICATION.md](VERIFICATION.md) for the declared release scope and evidence.
 
 Read [PRIVACY.md](PRIVACY.md) before using real histories and [SECURITY.md](SECURITY.md) for the threat model.
 
@@ -169,6 +171,8 @@ go build -trimpath -o ./skuggsja ./cmd/skuggsja
 ```
 
 Tests use synthetic fixtures and temporary databases. Never add real agent histories to the repository. See [CONTRIBUTING.md](CONTRIBUTING.md) for provider and privacy requirements.
+
+Browser verification uses a retained aggregate, the production loopback handler, and a separate Chrome Headless session controlled through CDP. The verification-only scripts capture responsive screenshots, rendered values, and request evidence without rereading source histories. See [the browser verification procedure](CONTRIBUTING.md#browser-verification) and [VERIFICATION.md](VERIFICATION.md) for recorded results.
 
 ## Documentation
 

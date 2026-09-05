@@ -65,6 +65,8 @@ The web UI has no package-manager dependencies, remote fonts, remote scripts, or
 
 `scripts/verify-live-source-protection.sh` additionally applies a verification-only OS write-denial policy outside its private work area and calibrates that policy using disposable controls. These release tools test the architectural contract; the production binary does not drop its OS permissions or install this sandbox.
 
+For browser verification, `scripts/serve-report` serves a retained aggregate through the production handler without reading histories again. `scripts/verify-browser.cjs` uses Node 22+ and Chrome Headless through direct CDP, with an isolated profile, desktop/mobile screenshots, rendered-value assertions, and a calibrated request observer. On macOS it also applies the verification network-denial profile. These tools and browser dependencies are separate from product runtime; their recorded outcomes belong in `VERIFICATION.md`.
+
 ## Generation lifecycle
 
 1. `platform.DefaultPaths` resolves candidate locations without network access.
@@ -143,17 +145,17 @@ Raw prompt or response text has no field in this model. Source paths remain in `
 
 ## Persisted report contract
 
-The JSON artifact is `analytics.Report`, currently schema version `2`.
+The JSON artifact is `analytics.Report`, currently schema version `3`. Version 3 removes `totals.tool_calls`; the provider-level count and availability fields remain.
 
 | Field | Meaning |
 | --- | --- |
 | `schema_version`, `product_name`, `generated_at` | Format identity and generation time |
 | `coverage` | Earliest start, latest end, local timezone, honest display label, and `calendar_framing` presentation hint |
-| `totals` | Root sessions, prompts, unique projects, tool calls from providers that expose that metric, active days, child sessions, declared provider-input count, changed-source count |
+| `totals` | Root sessions, prompts, unique projects, active days, child sessions, declared provider-input count, and changed-source count; no combined tool-call or model-event count |
 | `providers` | Per-harness status, verification scope, metrics, span, time basis, token ledger, limitations, warnings, declared input-file count, and explicit coverage assessment |
 | `rhythm` | Activity by local date, 24 local hours, Monday-first weekdays, favorite hour, late-night percentage, streak, busiest day/month |
 | `prompt_style` | Availability, textual-prompt sample count, median/average words, average characters, and deterministic label |
-| `models` | Provider-qualified, provider-native model-event counts (the schema field remains `turns`) |
+| `models` | Provider-qualified, provider-native model-event counts, grouped by harness and ordered within each group (the schema field remains `turns`) |
 | `projects` | Project basenames ranked by root-session count |
 | `longest_session` | Availability, provider, and rounded duration in minutes |
 | `privacy.source_access` | Always `read-only`; the architectural guarantee that Skuggsja does not write to source paths |
@@ -165,6 +167,8 @@ The JSON artifact is `analytics.Report`, currently schema version `2`.
 `totals.source_files` counts parsed and audit-only files returned by adapters. `privacy.source_audit.files` counts existing files in the before snapshot and can be larger because of present SQLite sidecars; configured-but-absent paths affect the manifest and change detection but not that count. `totals.source_files_changed` counts changed file states; directory/root-membership changes are a separate audit field.
 
 The terminal and UI always show read-only source access. An observed file change is reported neutrally as “2 files changed during the run by another process; skuggsja does not write to source paths.” They do not render `source_audit.verified` as an integrity verdict. Disabled or unavailable observation leaves the access guarantee intact. Snapshot comparison cannot identify the other process or detect a change that was reverted between captures.
+
+`providers[].tool_calls` retains each adapter's native count, while `tool_calls_available` distinguishes recorded counts from an unavailable metric. The UI shows these values only in their provider folios, with unavailable values labeled explicitly. Tool calls are neither summed nor ranked across providers. The model index groups events by harness and restarts ranking positions and meter maxima within each group; the overview names no cross-provider leading model.
 
 ### Metric rules
 
@@ -218,7 +222,7 @@ This degradation policy favors visible omission over fabricated comparability.
 
 ## Release-only source equality
 
-`TestRealDataFullRunLeavesSourcesUnchanged` is opt-in release verification. It waits for a continuous quiet preflight, runs generation once, then requires matching outer snapshots for the declared live scope. That asks whether any process changed the observed sources during the window; it is separate from production's architectural source-write protection and normal runtime success.
+`TestRealDataFullRunLeavesSourcesUnchanged` is opt-in release verification. It performs up to eight direct generation windows without an idle preflight or quiet wait. Each attempt rediscovers its live scope, captures fresh independent before/after snapshots, and generates a distinct aggregate. With a private evidence directory configured, each manifest pair and aggregate is retained under its attempt number. The first complete equality result ends the sequence; unsuccessful comparisons are never overwritten. Context cancellation, generation errors, or exhausted attempts remain explicit release outcomes. This check asks whether any process changed the observed sources during a completed window; it is separate from production's architectural source-write protection and normal runtime success.
 
 When the verifier is itself a Codex agent, `SKUGGSJA_RELEASE_SNAPSHOT_CODEX=1` explicitly snapshots the configured Codex store's inventory and hashes and excludes that store only from the outer equality comparison. The exclusion covers rollouts and shared history/index/SQLite files because the verification session can update each. No other source is excluded. Generation and its internal runtime observation still use all original sources, including Codex. The release record must retain the exact private exclusion inventory and reasoning in the scope recorded by [VERIFICATION.md](VERIFICATION.md); it must not claim unchanged original Codex sources.
 

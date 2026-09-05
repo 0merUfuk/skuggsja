@@ -91,7 +91,7 @@
     renderActivity(data);
     renderRhythm(data);
     renderPromptStyle(data);
-    renderModels(data.models);
+    renderModels(data.models, data.providers);
     renderProviders(data.providers);
     renderProjects(data.projects, data.longest_session);
     renderPrivacy(data);
@@ -104,7 +104,6 @@
     const coverage = recordOrEmpty(data.coverage);
     const totals = recordOrEmpty(data.totals);
     const providers = arrayOrEmpty(data.providers);
-    const models = arrayOrEmpty(data.models);
     const sessions = numeric(totals.sessions, 0);
     const prompts = numeric(totals.prompts, 0);
     const projects = numeric(totals.projects, 0);
@@ -115,10 +114,6 @@
       .filter(isRecord)
       .slice()
       .sort(function (a, b) { return numeric(b.sessions, 0) - numeric(a.sessions, 0); })[0];
-    const leadingModel = models
-      .filter(isRecord)
-      .slice()
-      .sort(function (a, b) { return numeric(b.turns, 0) - numeric(a.turns, 0); })[0];
 
     setText("hero-edition", "Personal archive · " + coverageLabel);
     setText("hero-session-count", formatNumber(sessions));
@@ -134,9 +129,6 @@
     );
     if (leadingProvider && numeric(leadingProvider.sessions, 0) > 0) {
       clauses.push(cleanText(leadingProvider.name, cleanText(leadingProvider.id, "One harness", 80), 80) + " carried the largest recovered share.");
-    }
-    if (leadingModel && numeric(leadingModel.turns, 0) > 0) {
-      clauses.push(cleanText(leadingModel.name, "The leading model", 100) + " appears most often in model-attributed events.");
     }
     if (childSessions > 0) {
       clauses.push(formatNumber(childSessions) + " child " + plural(childSessions, "session was", "sessions were") + " recorded alongside that total and remain separately labeled.");
@@ -315,7 +307,6 @@
 
   function renderRhythm(data) {
     const rhythm = recordOrEmpty(data.rhythm);
-    const totals = recordOrEmpty(data.totals);
     const hours = fixedNumberArray(rhythm.hours, 24);
     const weekdays = fixedNumberArray(rhythm.weekdays, 7);
 
@@ -327,7 +318,6 @@
       "late-night-percent",
       isFiniteNumber(rhythm.late_night_percent) ? formatDecimal(rhythm.late_night_percent) + "%" : "—"
     );
-    setText("tool-call-count", formatNumber(totals.tool_calls));
   }
 
   function renderClock(hours) {
@@ -427,19 +417,41 @@
     );
   }
 
-  function renderModels(rawModels) {
-    const models = arrayOrEmpty(rawModels)
-      .filter(isRecord)
-      .map(function (model) {
-        return {
-          name: cleanText(model.name, "Unknown model", 110),
-          meta: cleanText(model.harness, "Unattributed harness", 80),
-          value: numeric(model.turns, 0),
-          unit: "events"
-        };
-      })
-      .sort(function (a, b) { return b.value - a.value || a.name.localeCompare(b.name); });
-    renderRankedIndex(document.getElementById("model-list"), models, "No model-attributed events were recorded.");
+  function renderModels(rawModels, rawProviders) {
+    const container = document.getElementById("model-list");
+    const providers = new Map();
+    arrayOrEmpty(rawProviders).filter(isRecord).forEach(function (provider) {
+      providers.set(cleanText(provider.id, "Unattributed harness", 80), cleanText(provider.name, provider.id, 90));
+    });
+    const groups = new Map();
+    arrayOrEmpty(rawModels).filter(isRecord).forEach(function (model) {
+      const harness = cleanText(model.harness, "Unattributed harness", 80);
+      if (!groups.has(harness)) groups.set(harness, []);
+      groups.get(harness).push({
+        name: cleanText(model.name, "Unknown model", 110),
+        meta: providers.get(harness) || harness,
+        value: numeric(model.turns, 0),
+        unit: "native events"
+      });
+    });
+    container.replaceChildren();
+    if (groups.size === 0) {
+      container.appendChild(emptyLedger("No model-attributed events were recorded."));
+      return;
+    }
+    Array.from(groups.keys()).sort().forEach(function (harness) {
+      const section = element("section", "model-provider-index");
+      section.setAttribute("data-harness", harness);
+      section.setAttribute("aria-label", (providers.get(harness) || harness) + " model events");
+      section.appendChild(element("h4", "", providers.get(harness) || harness));
+      const list = element("div", "");
+      const models = groups.get(harness).sort(function (a, b) {
+        return b.value - a.value || a.name.localeCompare(b.name);
+      });
+      renderRankedIndex(list, models, "No model-attributed events were recorded.");
+      section.appendChild(list);
+      container.appendChild(section);
+    });
   }
 
   function renderProviders(rawProviders) {
@@ -485,6 +497,7 @@
     const coverageSection = providerCoverage(coverage);
 
     details.className = "provider-entry";
+    details.setAttribute("data-harness", cleanText(provider.id, "unknown", 80));
     details.open = shouldOpen;
     title.append(statusMark, name);
     summary.append(
@@ -495,7 +508,7 @@
     [
       ["Prompts", formatNumber(provider.prompts)],
       ["Projects", formatNumber(provider.projects)],
-      ["Tool calls", provider.tool_calls_available === true ? formatNumber(provider.tool_calls) : "Not available"],
+      ["Tool calls · native count", provider.tool_calls_available === true ? formatNumber(provider.tool_calls) : "Not available"],
       ["Child sessions", formatNumber(provider.child_sessions)],
       ["Span", providerSpan(provider)],
       ["Time basis", cleanText(provider.time_basis, "Not reported", 90)]

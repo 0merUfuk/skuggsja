@@ -92,6 +92,47 @@ test("retry clears previous source activity before a failed response", async () 
   assert.equal(activity.textContent, "");
 });
 
+test("tool counts stay in provider folios and ignore a legacy global total", async () => {
+  const elements = await render({
+    totals: { sessions: 2, tool_calls: 999999 },
+    providers: [
+      { id: "claude", name: "Claude Code", sessions: 1, tool_calls: 2, tool_calls_available: true },
+      { id: "hermes", name: "Hermes Agent", sessions: 1, tool_calls: 7, tool_calls_available: true },
+      { id: "cursor", name: "Cursor", sessions: 0, tool_calls: 0, tool_calls_available: false }
+    ]
+  });
+  assert.doesNotMatch(html, /tool-call-count|from reporting harnesses/);
+  assert.match(html, /Tool-call units differ by harness/);
+  assert.equal(elements.has("tool-call-count"), false);
+  const folios = elements.get("provider-list").children;
+  assert.deepEqual(folios.map((folio) => folio.attributes["data-harness"]), ["claude", "hermes", "cursor"]);
+  const counts = folios.map((folio) => {
+    const facts = folio.children[1].children.find((child) => child.className === "provider-facts");
+    const toolFact = facts.children.find((fact) => fact.children[0].textContent === "Tool calls · native count");
+    return toolFact.children[1].textContent;
+  });
+  assert.deepEqual(counts, ["2", "7", "Not available"]);
+});
+
+test("model rankings and meter scales restart within each harness", async () => {
+  const elements = await render({
+    totals: { sessions: 2 },
+    providers: [{ id: "claude", name: "Claude Code" }, { id: "hermes", name: "Hermes Agent" }],
+    models: [
+      { harness: "hermes", name: "api-model", turns: 12 },
+      { harness: "claude", name: "response-model-small", turns: 1 },
+      { harness: "claude", name: "response-model-large", turns: 3 }
+    ]
+  });
+  const groups = elements.get("model-list").children;
+  assert.deepEqual(groups.map((group) => group.attributes["data-harness"]), ["claude", "hermes"]);
+  const rows = groups.map((group) => group.children[1].children[0].children);
+  assert.deepEqual(rows.map((groupRows) => groupRows[0].children[0].textContent), ["01", "01"]);
+  assert.deepEqual(rows.map((groupRows) => groupRows.map((row) => row.children[2].max)), [[3, 3], [12]]);
+  assert.deepEqual(rows.map((groupRows) => groupRows.map((row) => row.children[2].value)), [[3, 1], [12]]);
+  assert.doesNotMatch(elements.get("hero-narrative").textContent, /appears most often|api-model|response-model/);
+});
+
 for (const scenario of [
   { name: "quiet", observation: "observed", audit: { files: 8, verified: true }, want: /No concurrent source changes were observed/ },
   { name: "incomplete equality is neutral", observation: "observed", audit: { files: 8, verified: false }, want: /No concurrent source changes were observed/ },

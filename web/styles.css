@@ -1095,6 +1095,18 @@ meter::-moz-meter-bar {
   margin-top: clamp(4rem, 8vw, 8rem);
 }
 
+.model-provider-index {
+  margin-top: 1.5rem;
+}
+
+.model-provider-index > h4 {
+  margin: 0;
+  padding-block: 0.75rem;
+  border-bottom: 1px solid var(--rule-strong);
+  font-family: var(--font-data);
+  font-size: var(--text-sm);
+}
+
 .index-heading {
   padding-bottom: 1rem;
   border-bottom: 1px solid var(--rule-strong);
@@ -1310,6 +1322,11 @@ meter::-moz-meter-bar {
   border-top: 1px solid var(--rule);
   gap: clamp(2rem, 5vw, 5rem);
   background: var(--paper-light);
+  overflow-wrap: anywhere;
+}
+
+.provider-body > * {
+  min-width: 0;
 }
 
 .provider-coverage {
@@ -1476,6 +1493,7 @@ meter::-moz-meter-bar {
 
 .long-session {
   position: relative;
+  container-type: inline-size;
   padding: 1.5rem;
   border: 0.2rem solid var(--cobalt);
   background: var(--paper-light);
@@ -1500,10 +1518,12 @@ meter::-moz-meter-bar {
 .long-session h3 span {
   display: block;
   font-family: var(--font-display);
-  font-size: clamp(5rem, 9vw, 9rem);
+  font-size: clamp(2rem, 5vw, 5rem);
+  font-size: clamp(2rem, 30cqw, 5rem);
   font-weight: 400;
   letter-spacing: -0.08em;
   line-height: 0.75;
+  overflow-wrap: anywhere;
 }
 
 .long-session h3 small {
@@ -2050,11 +2070,11 @@ meter::-moz-meter-bar {
   }
 
   .provider-body {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .provider-notes {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .long-session {

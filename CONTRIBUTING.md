@@ -7,6 +7,7 @@ Thank you for helping improve Skuggsja. The project treats privacy claims as par
 - Go 1.25.6 or newer compatible toolchain
 - Git
 - A POSIX-like shell for the commands below; equivalent Go commands work on Windows
+- Node.js 22+ and Chrome Headless for browser verification; these are development tools, not product dependencies
 
 Dependency and toolchain installation may use the network. The product's zero-outbound statement applies to the built program at runtime, not to development tooling.
 
@@ -73,8 +74,11 @@ Every contribution must preserve these invariants unless an explicit, reviewed d
 8. An unavailable provider ledger or unrecognized core schema must stay unavailable. Do not estimate tokens, infer unknown schemas, or silently merge histories with incompatible semantics. A provider may expose an available ledger whose individual numeric categories use zero for either recorded zero or source-level absence; document that ambiguity because the aggregate token model does not represent per-category presence independently.
 9. Runtime code and embedded browser assets must not add outbound requests, remote assets, telemetry, update checks, or analytics.
 10. The UI must render source-provided values with `textContent`, `createElement`, or equivalent text-safe DOM APIs, never HTML interpolation.
+11. Tool-call and model-event units remain provider-scoped. Do not add a global sum, ranking, or leading-model claim across harnesses; preserve unavailable counts as unavailable.
 
 The serialization regression test should be expanded whenever a normalized or report field changes. Use unmistakably sensitive synthetic values and assert that none reach JSON.
+
+The current report schema is 3. The removal of `totals.tool_calls` is intentional; consumers use provider counts and `tool_calls_available`. A fixture spanning distinct provider-native count mechanisms must preserve both counts without serializing a combined tool-call or model-event total.
 
 ## Adding or changing a provider
 
@@ -127,7 +131,7 @@ Do not turn compilation on Linux or Windows into a real-data support claim. Do n
 - malformed and partial records;
 - child/root classification;
 - prompt filtering and deduplication;
-- model and tool-call semantics;
+- model and tool-call semantics, including provider-native counts and unavailable metrics without a cross-provider total;
 - token availability/exactness semantics, including zero-versus-missing ambiguity;
 - project basename with no path persistence;
 - deterministic results;
@@ -149,13 +153,16 @@ Only synthetic fixtures belong in Git.
 
 If a real-data smoke test is necessary, run it locally, do not capture content in terminal output, record source activity separately from the read-only access guarantee, record only aggregate conclusions, and delete generated test exports afterward. Concurrent harness activity is normal runtime information, not a failure.
 
-The release-only opt-in verifier waits for 60 continuous seconds of unchanged source metadata, then performs exactly one generation bracketed by independent hash/inventory snapshots. It requires complete, equal snapshots in the declared release scope:
+The release-only opt-in verifier performs up to eight direct generation windows, with no idle preflight or quiet wait. Every attempt gets fresh independent hash/inventory snapshots and a distinct aggregate; the first complete equality result wins. Configure a private evidence directory to retain every attempted comparison and aggregate:
 
 ```sh
-SKUGGSJA_VERIFY_REAL_DATA=1 go test ./internal/app -run TestRealDataFullRunLeavesSourcesUnchanged -count=1 -v
+mkdir -m 700 /path/to/new-release-evidence
+SKUGGSJA_VERIFY_REAL_DATA=1 \
+  SKUGGSJA_RELEASE_EVIDENCE_DIR=/path/to/new-release-evidence \
+  go test ./internal/app -run TestRealDataFullRunLeavesSourcesUnchanged -count=1 -v
 ```
 
-Run it only on a machine whose histories you are authorized to inspect. Its terminal output is aggregate-only. If no quiet window occurs within ten minutes, generation remains unstarted; do not relabel this as a runtime source-write failure.
+Run it only on a machine whose histories you are authorized to inspect. Terminal output contains aggregate counts and digests; exact source paths remain in private manifests. Attempts that detect activity stay in the evidence record. The verifier stops on generation errors or cancellation, or after eight comparisons without equality; none of these release outcomes changes the runtime source-access guarantee. A successful selected report is retained as `rewind.json`; when eight comparisons end without equality, the last report is labeled `rewind-observed-changing.json`.
 
 For a self-hosted Codex verification session on macOS, explicitly snapshot and exclude only its Codex store from release equality:
 
@@ -179,6 +186,31 @@ The three embedded assets are `web/index.html`, `web/styles.css`, and `web/app.j
 - Update `web/embed_test.go` if the embedded asset contract intentionally changes.
 
 Run `go test ./...` after any asset edit because the UI and CSP invariants are tested from the embedded filesystem.
+
+### Browser verification
+
+Use Node.js 22+ and an installed Chrome for Testing Headless Shell executable. Keep the executable, retained aggregate, screenshots, and browser evidence outside the repository. The procedure exercises the real embedded UI through Chrome DevTools Protocol (CDP); the DOM stubs in the JavaScript unit tests do not replace browser rendering.
+
+Build the verification-only server and serve the current-schema aggregate retained by the release run:
+
+```sh
+go build -trimpath -o /path/to/private/serve-report ./scripts/serve-report
+/path/to/private/serve-report -report /path/to/new-release-evidence/rewind.json
+```
+
+The server prints the report SHA-256 and its loopback URL. Keep it running and pass that URL, the same aggregate, and a new evidence directory to the browser verifier:
+
+```sh
+node scripts/verify-browser.cjs \
+  --chrome /path/to/chrome-headless-shell \
+  --url http://127.0.0.1:PORT \
+  --report /path/to/new-release-evidence/rewind.json \
+  --evidence-dir /path/to/new-browser-evidence
+```
+
+The verifier creates its evidence directory and isolated browser profile, checks that the served aggregate matches the retained file, exercises provider disclosures, records desktop/mobile screenshots, and observes requests. It calibrates interception with a deliberately denied external control; on macOS it also applies the verification-only remote-network denial policy. Inspect `browser-result.json` and the screenshots before claiming a pass. This establishes browser evidence without rereading histories or changing the release input set. Stop the verification server afterward. The profile is removed on normal exit; screenshots and the aggregate remain private evidence.
+
+Verify that tool-call values appear only in provider folios, unavailable counts remain unavailable, and model rankings and meter scales restart for each harness. The mere presence of the browser tools is not a completed rendering or zero-outbound check; record actual outcomes in `VERIFICATION.md`.
 
 ## Documentation changes
 

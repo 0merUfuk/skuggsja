@@ -24,7 +24,15 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 - Codex supplemental history/index/state/catalog evidence and exact boundary-validated pagination stitching.
 - Schema-v2 provider coverage assessments that distinguish recovered local records from account-lifetime usage.
 - An always-visible read-only source-access guarantee in CLI, JSON and UI, with neutral concurrent-source activity kept separate from release-only equality verification.
-- An opt-in release verifier that waits for a continuous quiet window, performs one generation, and can explicitly retain a private hash/inventory snapshot of its self-hosted Codex store while excluding only that store from release equality.
+- An opt-in release verifier that performs up to eight direct generation windows with fresh per-attempt manifests and aggregates, stops at the first complete equality result, and can explicitly retain a private hash/inventory snapshot of its self-hosted Codex store while excluding only that store from release equality.
+- Verification-only serving of retained aggregates and direct-CDP Chrome Headless checks for rendered values, responsive screenshots, and observed requests without rereading source histories.
+
+### Changed
+
+- Report schema 3 removes the global `totals.tool_calls` field. Native tool-call counts and availability remain on each provider; unavailable counts remain labeled unavailable.
+- Model-event lists are grouped by harness, with ranking positions and meter scales local to each group. The overview no longer names a cross-provider leading model.
+- Release equality verification starts directly without an idle preflight. Comparisons that detect activity remain in the evidence record rather than being overwritten by a later attempt.
+- Long-session typography and mobile provider grids retain complete real values without horizontal clipping; desktop and mobile behavior is checked in actual Chrome.
 
 ### Security
 

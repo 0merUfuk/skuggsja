@@ -13,7 +13,7 @@ import (
 	"github.com/0merUfuk/skuggsja/internal/model"
 )
 
-const SchemaVersion = 2
+const SchemaVersion = 3
 
 // Report is the only persisted representation. It contains no raw text,
 // source identifiers, or absolute filesystem paths.
@@ -43,14 +43,13 @@ type Coverage struct {
 }
 
 type Totals struct {
-	Sessions           int   `json:"sessions"`
-	Prompts            int   `json:"prompts"`
-	Projects           int   `json:"projects"`
-	ToolCalls          int64 `json:"tool_calls"`
-	ActiveDays         int   `json:"active_days"`
-	ChildSessions      int   `json:"child_sessions"`
-	SourceFiles        int   `json:"source_files"`
-	SourceFilesChanged int   `json:"source_files_changed"`
+	Sessions           int `json:"sessions"`
+	Prompts            int `json:"prompts"`
+	Projects           int `json:"projects"`
+	ActiveDays         int `json:"active_days"`
+	ChildSessions      int `json:"child_sessions"`
+	SourceFiles        int `json:"source_files"`
+	SourceFilesChanged int `json:"source_files_changed"`
 }
 
 type ProviderSummary struct {
@@ -183,6 +182,7 @@ func Build(results []model.ProviderResult, options Options) Report {
 			"A session is a top-level local history record; child and subagent runs are counted separately.",
 			"Activity uses each harness's session start or composer creation time, converted to the machine's local timezone.",
 			"Prompt lengths are Unicode word and character counts derived transiently in memory; raw text is discarded.",
+			"Tool calls and model events use each harness's native units. Counts remain provider-scoped and are not summed or ranked across harnesses.",
 			"Token fields are shown only when recorded by the source. Harness totals remain separate because cache semantics differ.",
 			"Coverage describes surviving histories on this machine, not a complete account lifetime.",
 		},
@@ -204,9 +204,6 @@ func Build(results []model.ProviderResult, options Options) Report {
 		report.Totals.Sessions += summary.Sessions
 		report.Totals.ChildSessions += summary.ChildSessions
 		report.Totals.Prompts += summary.Prompts
-		if summary.ToolCallsAvailable {
-			report.Totals.ToolCalls += summary.ToolCalls
-		}
 		report.Totals.SourceFiles += summary.SourceFileCount
 		for _, warning := range result.Warnings {
 			report.Warnings = append(report.Warnings, ReportWarning{
@@ -289,11 +286,11 @@ func Build(results []model.ProviderResult, options Options) Report {
 	report.Totals.Projects = len(report.Projects)
 	report.Totals.SourceFilesChanged = options.SourceAudit.ChangedFiles
 	sort.Slice(report.Models, func(i, j int) bool {
-		if report.Models[i].Turns == report.Models[j].Turns {
-			if report.Models[i].Harness == report.Models[j].Harness {
-				return report.Models[i].Name < report.Models[j].Name
-			}
+		if report.Models[i].Harness != report.Models[j].Harness {
 			return report.Models[i].Harness < report.Models[j].Harness
+		}
+		if report.Models[i].Turns == report.Models[j].Turns {
+			return report.Models[i].Name < report.Models[j].Name
 		}
 		return report.Models[i].Turns > report.Models[j].Turns
 	})
