@@ -131,7 +131,7 @@
       ", the surviving histories hold " + formatNumber(sessions) + " " + plural(sessions, "session", "sessions") + "."
     );
     if (leadingProvider && numeric(leadingProvider.sessions, 0) > 0) {
-      clauses.push(cleanText(leadingProvider.name, cleanText(leadingProvider.id, "One harness", 80), 80) + " carried the largest recorded share.");
+      clauses.push(cleanText(leadingProvider.name, cleanText(leadingProvider.id, "One harness", 80), 80) + " carried the largest recovered share.");
     }
     if (leadingModel && numeric(leadingModel.turns, 0) > 0) {
       clauses.push(cleanText(leadingModel.name, "The leading model", 100) + " appears most often in model-attributed events.");
@@ -146,6 +146,24 @@
     const zone = cleanText(coverage.timezone, "local time", 80);
     const framing = coverage.calendar_framing === true ? "Calendar framing supported" : "Recorded span only";
     setText("coverage-stamp", framing + " · " + range + " · " + zone);
+
+    const incompleteProviders = providers.filter(function (provider) {
+      if (!isRecord(provider)) {
+        return false;
+      }
+      const status = cleanText(recordOrEmpty(provider.coverage).status, "", 60).toLowerCase();
+      return status === "known incomplete" || status === "coverage assessment incomplete" || status === "assessment unavailable";
+    });
+    const coverageNotice = document.getElementById("coverage-notice");
+    coverageNotice.hidden = incompleteProviders.length === 0;
+    if (incompleteProviders.length > 0) {
+      setText(
+        "coverage-notice-copy",
+        formatNumber(incompleteProviders.length) + " " + plural(incompleteProviders.length, "harness has", "harnesses have") +
+        " incomplete local-history " + plural(incompleteProviders.length, "assessment", "assessments") +
+        ". Some records are proven missing or could not be fully assessed. Every total on this page means recoverable local records—not how little or how much the owner actually used a harness."
+      );
+    }
 
     const auditChanges = auditChangeCount(audit, totals) + changeCount(audit.directory_changes);
     if (audit.verified === true) {
@@ -468,6 +486,8 @@
     const facts = element("dl", "provider-facts");
     const tokenSection = element("section", "token-section");
     const notes = element("div", "provider-notes");
+    const coverage = recordOrEmpty(provider.coverage);
+    const coverageSection = providerCoverage(coverage);
 
     details.className = "provider-entry";
     details.open = shouldOpen;
@@ -486,10 +506,10 @@
     });
 
     tokenSection.appendChild(element("h3", "", "Token ledger"));
-    tokenSection.appendChild(renderTokenLedger(recordOrEmpty(provider.token_usage), cleanText(provider.id, "", 40)));
+    tokenSection.appendChild(renderTokenLedger(recordOrEmpty(provider.token_usage)));
     appendProviderNotes(notes, "Limitations", provider.limitations);
     appendProviderNotes(notes, "Parser notes", provider.warnings);
-    body.append(facts, tokenSection);
+    body.append(coverageSection, facts, tokenSection);
     if (notes.childElementCount > 0) {
       body.appendChild(notes);
     }
@@ -497,7 +517,37 @@
     return details;
   }
 
-  function renderTokenLedger(tokens, providerID) {
+  function providerCoverage(coverage) {
+    const status = cleanText(coverage.status, "Completeness unknown", 70);
+    const confidence = cleanText(coverage.confidence, "not established", 40);
+    const knownIncomplete = status.toLowerCase() === "known incomplete";
+    const section = element("section", "provider-coverage" + (knownIncomplete ? " provider-coverage--incomplete" : ""));
+    section.setAttribute("aria-label", "Local data coverage");
+    const heading = element("div", "provider-coverage__heading");
+    heading.append(
+      element("h3", "", "Data coverage"),
+      element("span", "coverage-status", status + " · " + confidence + " confidence")
+    );
+    section.appendChild(heading);
+    section.appendChild(element(
+      "p",
+      "provider-coverage__note",
+      cleanText(coverage.note, "Surviving local records do not establish account-lifetime completeness.", MAX_TEXT)
+    ));
+    const facts = element("dl", "coverage-facts");
+    [
+      ["Earliest local evidence", formatLocalInstantDate(coverage.earliest_local_evidence)],
+      ["Earliest detailed record", formatLocalInstantDate(coverage.earliest_detailed_record)],
+      ["History-only sessions", formatNumber(coverage.history_only_sessions)],
+      ["Known refs without detail", formatNumber(coverage.unmaterialized_sessions)]
+    ].forEach(function (fact) {
+      facts.appendChild(definition(fact[0], fact[1]));
+    });
+    section.appendChild(facts);
+    return section;
+  }
+
+  function renderTokenLedger(tokens) {
     const wrapper = element("div", "");
     if (tokens.available !== true) {
       const reason = cleanText(tokens.source, "This harness did not expose compatible token usage.", 180);
@@ -525,9 +575,7 @@
       ["Cache read", tokens.cache_read],
       ["Cache write", tokens.cache_write]
     ];
-    if (providerID !== "claude") {
-      categories.push(["Reasoning", tokens.reasoning]);
-    }
+    categories.push(["Reasoning", tokens.reasoning]);
     categories.forEach(function (rowData) {
       const row = document.createElement("tr");
       row.append(element("td", "", rowData[0]), element("td", "", formatNumber(rowData[1])));
@@ -725,7 +773,8 @@
         summary.appendChild(element(
           "p",
           "",
-          cleanText(provider.name, cleanText(provider.id, "Unknown harness", 80), 80) + " — " + status.label
+          cleanText(provider.name, cleanText(provider.id, "Unknown harness", 80), 80) + " — " + status.label +
+          " · coverage: " + cleanText(recordOrEmpty(provider.coverage).status, "unknown", 70)
         ));
       });
     }

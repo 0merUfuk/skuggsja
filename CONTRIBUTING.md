@@ -91,11 +91,11 @@ type Reader interface {
 
 ### Discovery
 
-- Resolve only canonical source locations.
+- Resolve verified native source locations and explicit path overrides; document excluded metadata stores separately.
 - Avoid merging primary and derived indexes unless their identities and duplication semantics are proven.
 - Return stable, sorted file lists.
 - Treat a missing optional install as an empty discovery, not a fatal error.
-- Include enough root metadata for auditing, but do not serialize it.
+- Declare every configured root and standalone input before fallible discovery. Keep parsed files, supplemental/audit-only inputs, and configured-but-absent paths separate; all three participate in source/output safety. Never serialize these paths.
 - For SQLite, discover the primary database; the audit and copy layer handle present sidecars.
 
 ### Reading
@@ -178,7 +178,8 @@ Claims must match the current implementation and evidence:
 
 - Say “runtime” when discussing zero outbound; builds and installs can use the network.
 - Distinguish read-only source access from the raw private SQLite copy.
-- Distinguish a primary file count from audit sidecar counts.
+- Distinguish discovered transcript and supplemental-input counts from the audit manifest, which also includes sidecars and configured absences.
+- Keep local data coverage separate from lifetime usage; index-only evidence adds no invented usage.
 - Distinguish cross-platform code paths from real-data verification.
 - State Cursor's synthetic/schema verification explicitly until real-data evidence exists.
 - Keep provider limitations and metric definitions aligned with code.

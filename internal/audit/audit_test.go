@@ -150,6 +150,61 @@ func TestMissingDiscoveredFileKeepsComparisonUnverified(t *testing.T) {
 	}
 }
 
+func TestOptionalConfiguredAbsenceIsVerifiedAndAppearanceIsDetected(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	stable := filepath.Join(dir, "stable.jsonl")
+	optional := filepath.Join(dir, "future-index.jsonl")
+	if err := os.WriteFile(stable, []byte("synthetic\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	before, err := CaptureConfigured(context.Background(), nil, []string{stable}, []string{optional})
+	if err != nil {
+		t.Fatal(err)
+	}
+	unchanged, err := CaptureConfigured(context.Background(), nil, []string{stable}, []string{optional})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if comparison := Compare(before, unchanged); !comparison.Verified {
+		t.Fatalf("stable optional absence was not verified: %+v", comparison)
+	}
+	if err := os.WriteFile(optional, []byte("appeared\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	after, err := CaptureConfigured(context.Background(), nil, []string{stable}, []string{optional})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if comparison := Compare(before, after); comparison.Verified || comparison.ChangedFiles != 1 || comparison.DirectoryChanges == 0 {
+		t.Fatalf("appearing optional source was not detected: %+v", comparison)
+	}
+}
+
+func TestConfiguredRootAppearanceIsDetected(t *testing.T) {
+	t.Parallel()
+	base := t.TempDir()
+	stable := filepath.Join(base, "stable.jsonl")
+	futureRoot := filepath.Join(base, "future-sessions")
+	if err := os.WriteFile(stable, []byte("synthetic\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	before, err := CaptureConfigured(context.Background(), []string{futureRoot}, []string{stable}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Mkdir(futureRoot, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	after, err := CaptureConfigured(context.Background(), []string{futureRoot}, []string{stable}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if comparison := Compare(before, after); comparison.Verified || comparison.DirectoryChanges == 0 {
+		t.Fatalf("appearing configured root was not detected: %+v", comparison)
+	}
+}
+
 func TestCaptureRejectsSymbolicLinkDiscoveredFile(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()

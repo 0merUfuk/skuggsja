@@ -36,8 +36,17 @@ func TestRealDataFullRunLeavesSourcesUnchanged(t *testing.T) {
 		t.Fatal("resolve default source locations")
 	}
 	readers := []provider.Reader{
-		claude.Reader{ProjectsDir: paths.ClaudeProjects},
-		codex.Reader{SessionsDir: paths.CodexSessions, ArchivedDir: paths.CodexArchived},
+		claude.Reader{
+			ProjectsDir: paths.ClaudeProjects, HistoryFile: paths.ClaudeHistory,
+			StatsFile: paths.ClaudeStats, GlobalStateFile: paths.ClaudeGlobalState,
+			DesktopSessionsDir: paths.ClaudeDesktopSessions, CodeSessionsDir: paths.ClaudeCodeSessions,
+		},
+		codex.Reader{
+			SessionsDir: paths.CodexSessions, ArchivedDir: paths.CodexArchived,
+			HistoryFile: paths.CodexHistory, SessionIndexFile: paths.CodexSessionIndex,
+			ExternalImportsFile: paths.CodexExternalImports, StateDatabase: paths.CodexStateDatabase,
+			CatalogDatabase: paths.CodexCatalogDatabase, ThreadHistoryDatabase: paths.CodexThreadHistoryDatabase,
+		},
 		hermes.Reader{DatabasePath: paths.HermesDatabase},
 		cursor.Reader{DatabasePath: paths.CursorStateDB},
 	}
@@ -47,7 +56,7 @@ func TestRealDataFullRunLeavesSourcesUnchanged(t *testing.T) {
 	var generation app.Generation
 	verified := false
 	for attempt := 1; attempt <= 3; attempt++ {
-		var roots, files []string
+		var roots, files, configured []string
 		for _, reader := range readers {
 			discovery, discoverErr := reader.Discover(ctx)
 			if discoverErr != nil {
@@ -55,11 +64,13 @@ func TestRealDataFullRunLeavesSourcesUnchanged(t *testing.T) {
 			}
 			roots = append(roots, discovery.Roots...)
 			files = append(files, discovery.Files...)
+			files = append(files, discovery.AuditFiles...)
+			configured = append(configured, discovery.ConfiguredFiles...)
 		}
-		if err := waitForQuietSourceMetadata(ctx, roots, files); err != nil {
+		if err := waitForQuietSourceMetadata(ctx, roots, append(append([]string(nil), files...), configured...)); err != nil {
 			t.Fatalf("wait for a quiet source window: %v", err)
 		}
-		before, err := audit.CaptureDiscovered(ctx, roots, files)
+		before, err := audit.CaptureConfigured(ctx, roots, files, configured)
 		if err != nil {
 			t.Fatal("capture outer before snapshot")
 		}
@@ -72,7 +83,7 @@ func TestRealDataFullRunLeavesSourcesUnchanged(t *testing.T) {
 		if err != nil {
 			t.Fatalf("generate Rewind: %v", err)
 		}
-		after, err := audit.CaptureDiscovered(ctx, roots, files)
+		after, err := audit.CaptureConfigured(ctx, roots, files, configured)
 		if err != nil {
 			t.Fatal("capture outer after snapshot")
 		}
@@ -96,17 +107,23 @@ func TestRealDataFullRunLeavesSourcesUnchanged(t *testing.T) {
 			break
 		}
 	}
-	if !verified {
-		t.Fatal("no complete audited full-run window retained identical source hashes and directory listings after three attempts")
-	}
 
 	for _, summary := range generation.Report.Providers {
 		t.Logf(
-			"provider=%s status=%q verification=%q source_files=%d sessions=%d child_sessions=%d prompts=%d warnings=%d span_start=%s span_end=%s",
+			"provider=%s status=%q verification=%q source_files=%d sessions=%d child_sessions=%d prompts=%d warnings=%d span_start=%s span_end=%s coverage_status=%q confidence=%q earliest_local=%s earliest_detail=%s history_only=%d unmaterialized=%d",
 			summary.ID, summary.Status, summary.Verification, summary.SourceFileCount,
 			summary.Sessions, summary.ChildSessions, summary.Prompts, len(summary.Warnings),
 			summary.SpanStart.Format(time.RFC3339), summary.SpanEnd.Format(time.RFC3339),
+			summary.Coverage.Status, summary.Coverage.Confidence,
+			summary.Coverage.EarliestLocalEvidence.Format(time.RFC3339), summary.Coverage.EarliestDetailedRecord.Format(time.RFC3339),
+			summary.Coverage.HistoryOnlySessions, summary.Coverage.UnmaterializedSessions,
 		)
+		for _, warning := range summary.Warnings {
+			t.Logf("provider_warning provider=%s code=%s count=%d", summary.ID, warning.Code, warning.Count)
+		}
+	}
+	if !verified {
+		t.Fatal("no complete audited full-run window retained identical source hashes and directory listings after three attempts")
 	}
 }
 
@@ -131,7 +148,17 @@ func logChangedProviders(t *testing.T, comparison audit.Comparison, before, afte
 			changedByProvider["cursor"]++
 		case withinRoot(paths.ClaudeProjects, path):
 			changedByProvider["claude"]++
+		case withinRoot(paths.ClaudeDesktopSessions, path) || withinRoot(paths.ClaudeCodeSessions, path) || path == paths.ClaudeHistory || path == paths.ClaudeStats || path == paths.ClaudeGlobalState:
+			changedByProvider["claude"]++
 		case withinRoot(paths.CodexSessions, path) || withinRoot(paths.CodexArchived, path):
+			changedByProvider["codex"]++
+		case path == paths.CodexHistory || path == paths.CodexSessionIndex || path == paths.CodexExternalImports:
+			changedByProvider["codex"]++
+		case path == paths.CodexStateDatabase || path == paths.CodexStateDatabase+"-wal" || path == paths.CodexStateDatabase+"-shm" || path == paths.CodexStateDatabase+"-journal":
+			changedByProvider["codex"]++
+		case path == paths.CodexThreadHistoryDatabase || path == paths.CodexThreadHistoryDatabase+"-wal" || path == paths.CodexThreadHistoryDatabase+"-shm" || path == paths.CodexThreadHistoryDatabase+"-journal":
+			changedByProvider["codex"]++
+		case path == paths.CodexCatalogDatabase || path == paths.CodexCatalogDatabase+"-wal" || path == paths.CodexCatalogDatabase+"-shm" || path == paths.CodexCatalogDatabase+"-journal":
 			changedByProvider["codex"]++
 		default:
 			changedByProvider["other"]++

@@ -59,3 +59,36 @@ func TestEmbeddedAssetsHaveNoExternalOrigins(t *testing.T) {
 		t.Fatal("the only permitted fetch must target the same-origin aggregate API")
 	}
 }
+
+func TestEmbeddedReportMakesLocalCoverageExplicit(t *testing.T) {
+	t.Parallel()
+	index, err := fs.ReadFile(Files, "index.html")
+	if err != nil {
+		t.Fatal(err)
+	}
+	app, err := fs.ReadFile(Files, "app.js")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, required := range []string{
+		"Locally recovered sessions",
+		"Local history is not lifetime usage.",
+		`id="coverage-notice"`,
+	} {
+		if !strings.Contains(string(index), required) {
+			t.Errorf("index.html is missing coverage language %q", required)
+		}
+	}
+	for _, required := range []string{
+		"Data coverage",
+		"Earliest local evidence",
+		"Earliest detailed record",
+		"History-only sessions",
+		"Known refs without detail",
+		"recoverable local records",
+	} {
+		if !strings.Contains(string(app), required) {
+			t.Errorf("app.js is missing coverage language %q", required)
+		}
+	}
+}

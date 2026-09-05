@@ -41,7 +41,7 @@ The macOS verification harness creates disposable synthetic histories for all fo
 - SQLite sources and persistent sidecars must be regular, non-symlink files and are copied with raw file reads into a private temporary directory. SQLite opens only the copy.
 - A stable-copy check verifies source identity, size, and SHA-256 before, during, and after copying and retries up to five times with bounded backoff.
 - Copied databases must pass `PRAGMA quick_check`; provider queries reopen the copy read-only with `query_only` and defensive mode enabled, double-quoted-string parsing disabled, `trusted_schema` disabled, and temporary storage kept in memory.
-- The default before/after source audit compares source bytes and directory membership across the provider-reader phase.
+- The default before/after source audit compares parsed and audit-only source bytes, configured-path presence, root presence, and directory membership across the provider-reader phase. Discovery is repeated after the first capture; a changed set is recaptured up to three times. Persistent churn is parsed best-effort from the latest set, but no after comparison is claimed and a system warning marks the audit inconclusive.
 - Unknown schemas and ambiguous history modes are skipped or degraded with warnings rather than queried or counted speculatively.
 
 ### Data minimization
@@ -57,7 +57,7 @@ The macOS verification harness creates disposable synthetic histories for all fo
 
 - The aggregate is encoded to a same-directory temporary file, set to mode `0600` where supported, synced, and renamed over the previous artifact.
 - The default product directory is set to mode `0700` on Unix-like systems. Windows applies and validates a protected, inheritable DACL limited to the current user and LocalSystem before artifact creation; the Windows path is compile-tested but not runtime-verified.
-- Generation fails before reads when source and output directories are equal or contain one another, or a source aliases the artifact; `clean` performs the corresponding configured-source check before deletion. Cleaned paths, resolved symlinks, conservative macOS/Windows case folding, existing ancestor identity, and hard-link identity are checked. Declared paths remain protected after discovery errors.
+- Generation fails before reads when a source root overlaps the artifact directory, or a source file equals the artifact, lies below its directory, or aliases it; `clean` performs the corresponding configured-source check before deletion. A standalone source file may live in an ancestor directory. Cleaned paths, resolved symlinks, conservative macOS/Windows case folding, existing ancestor identity, and hard-link identity are checked. Write and clean operations also reject output-directory symlink components. Declared paths remain protected after discovery errors.
 - `clean` also refuses to remove an unexpected artifact filename.
 - The server never binds a wildcard or LAN address; an occupied requested port falls back to another loopback port.
 - HTTP requests whose normalized `Host` is not exactly `127.0.0.1`, `localhost`, or `::1` are rejected with status 421 to reduce DNS-rebinding exposure.
@@ -81,12 +81,13 @@ Skuggsja is intended for one user inspecting their own histories on a machine th
 | Threat | Mitigation | Residual risk |
 | --- | --- | --- |
 | Accidental source mutation by SQLite | SQLite opens a stable private copy, never the original | Raw OS reads can update filesystem access metadata; the audit does not compare all metadata |
-| Source/output collision | Generation and `clean` fail closed on root containment and path/symlink/hard-link aliases | Misconfigured unrelated output handling outside Skuggsja remains the user's responsibility |
+| Source/output collision | Generation and `clean` fail closed on root/artifact-directory overlap and source-file path/symlink/hard-link aliases; output symlink components are rejected | Misconfigured unrelated output handling outside Skuggsja remains the user's responsibility |
+| Discovery set changes around capture | Capture then rediscover, retrying up to three times; only a stable set can be verified | Persistent churn permits best-effort analytics but always yields an inconclusive audit warning |
 | Upstream database changes during copy | Hash source and copied sets, retry five times with bounded backoff | A continuously active source can be skipped; a sophisticated same-hash race is outside the model |
 | Raw content leaking into artifact | Content-free types, label sanitization, serialization tests | Project basenames and aggregates may still be identifying; uncovered parser bugs remain possible |
 | Browser asset exfiltration | Embedded assets, one same-origin fetch, strict CSP/no-referrer | Browser extensions and browser-level behavior are outside the process |
 | Remote access to report | Bind `127.0.0.1` only and reject non-loopback hostnames | Any sufficiently privileged local process can connect with an allowed Host header; there is no app authentication |
-| Partial/malformed history causing false precision | Warnings, record bounds, SQLite-schema and Codex-mode refusal, provider-scoped semantics | Upstream private formats can change; Claude/Codex filename-matched valid JSON with no recognized records may currently look supported but empty |
+| Partial/malformed history causing false precision | Warnings, record bounds, SQLite-schema and Codex-mode refusal, per-provider coverage status, and provider-scoped semantics | Upstream private formats can change; Claude/Codex filename-matched valid JSON with no recognized records may currently look supported but empty |
 | Artifact disclosure | Private Unix modes or a protected Windows DACL, plus a privacy-reduced schema | No encryption at rest; Windows runtime behavior is not yet validated; custom copies inherit downstream handling |
 | Temporary SQLite disclosure | Private Unix modes or a validated protected Windows DACL, plus normal-path cleanup | Crash or `SIGKILL` may leave a raw copy in the OS temp directory; Windows runtime behavior has not been validated on a Windows machine |
 | Dependency or build-chain compromise | Small dependency surface, reproducible module versions, reviewable Go build | Dependency acquisition is networked and remains a supply-chain trust decision |

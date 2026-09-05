@@ -18,7 +18,7 @@ The persisted boundary is `analytics.Report`. Raw prompt and response text, abso
 | Model label | Read, control-character filtered, and length-limited | Yes | Yes |
 | Dates, durations, rhythm, counts, token fields | Derived from source metadata | Yes | Yes |
 | Provider status, limitations, warning codes/messages | Derived from parser outcomes | Yes | Yes |
-| Source-audit manifests | SHA-256 over paths, content digests, sizes, and directory listings | Yes | Digest and aggregate comparison only |
+| Source-audit manifests | SHA-256 over paths, configured/root presence states, content digests, sizes, and directory listings | Yes | Digest and aggregate comparison only |
 
 Prompt text is reduced with Unicode-aware character counting and Unicode-whitespace word splitting. Once a `PromptMetric` is created, the normalized model retains only counts, an internal event ID, a timestamp, and a text-availability flag. The internal ID is later dropped.
 
@@ -45,7 +45,7 @@ Parsers may decode raw content to distinguish human prompts from injected contex
 
 ### SQLite
 
-SQLite itself never receives a source database path. For Hermes and Cursor, Skuggsja:
+SQLite itself never receives a source database path. For Hermes, Cursor, and Codex's supplemental state/catalog indexes, Skuggsja:
 
 1. requires the database and present WAL or journal to be regular, non-symlink files;
 2. hashes that source set;
@@ -62,31 +62,33 @@ An abrupt process termination, machine crash, or `SIGKILL` can prevent deferred 
 
 The source audit is enabled by default. It captures:
 
-- SHA-256 and byte size for every discovered primary file;
+- SHA-256 and byte size for every parsed file;
+- SHA-256 and byte size for every present audit-only supplemental file;
 - present `-wal`, `-shm`, and `-journal` files for SQLite sources;
-- sorted entry names and file/directory/symlink kinds recursively below existing file-oriented discovery roots, plus SQLite source-containing directories.
+- explicit missing-state entries for configured optional paths and absent discovery roots;
+- sorted entry names and file/directory/symlink kinds recursively below existing discovery roots, plus the nearest existing directories for configured paths.
 
-The capture runs before and after all readers. The report persists the before-snapshot file count, before/after manifest digests, changed-file count, changed-directory count, and a `verified` flag. Absolute paths and directory entries participate in the digest but are not serialized.
+After the before capture, discovery runs again. If roots or file sets differ, Skuggsja restarts capture and retries up to three times; on success, the reader receives the exact discovery set paired with the retained snapshot. Persistent discovery churn permits best-effort parsing of the latest set but makes the audit inconclusive. A final capture runs after all readers only for a stable set. The report persists the before-snapshot existing-file count, before/after manifest digests, changed-file-state count, changed-directory/root count, and a `verified` flag. Configured missing paths participate in the digest but not the existing-file count; absolute paths and directory entries are not serialized.
 
-Verification means the captured bytes and directory membership matched at those two points. It does not compare permissions, ownership, access times, or every filesystem metadata field. It cannot identify which process caused a concurrent change, and it cannot prove no change occurred and was reverted between snapshots.
+Verification means the captured bytes, configured-file/root presence, and directory membership matched at those two points. It does not compare permissions, ownership, access times, or every filesystem metadata field. It cannot identify which process caused a concurrent change, and it cannot prove no change occurred and was reverted between snapshots.
 
 Manifest digests can act as stable fingerprints of an unchanged source set across reports. Treat them as sensitive aggregate metadata, not as anonymity.
 
-If a source is actively changing, verification may be inconclusive even though Skuggsja only read it. If auditing itself fails, the report remains available with an aggregate warning. `--no-source-audit` skips both snapshots and makes the report explicitly unverified.
+If a source is actively changing, verification may be inconclusive even though Skuggsja only read it. If auditing itself fails, the report remains available with an aggregate warning. `--no-source-audit` skips snapshots and discovery stabilization, parses the first discovery best-effort, and makes the report explicitly unverified.
 
 ## Persisted artifact
 
 The default artifact is the OS user-cache path ending in `skuggsja/rewind.json`. Its contents include:
 
 - provider names, status, verification wording, limitations, and aggregate warnings;
-- coverage timestamps and timezone;
+- global coverage timestamps/timezone plus each provider's content-free coverage status, confidence, earliest evidence/detail timestamps, and missing-detail counts;
 - counts by provider, day, hour, weekday, model, and project basename;
 - prompt-length aggregates;
 - provider-scoped source-recorded token ledgers where available, including their ledger-level exactness flag;
 - source-audit digests and aggregate change counts;
 - fixed methodology text.
 
-Before reading or writing, Skuggsja refuses source and output directories that are equal or contain one another, as well as cleaned-path, resolved-symlink, case, and existing hard-link aliases. Declared paths remain guarded after discovery errors. The writer creates or changes the containing directory to mode `0700`, writes a mode-`0600` temporary file, syncs it, and renames it into place on Unix-like systems. On Windows it applies and validates a protected, inheritable directory DACL limited to the current user and LocalSystem before creating the artifact; this implementation has cross-compile coverage but no current Windows runtime evidence.
+Before reading or writing, Skuggsja rejects source-root/artifact-directory overlap and any source file equal to the artifact or below its directory, including cleaned-path, resolved-symlink, case, and existing hard-link aliases. A standalone source file may safely live in an ancestor directory. Declared paths remain guarded after discovery errors, and writing/cleaning rejects symlinks in output-directory components. The writer creates or changes the containing directory to mode `0700`, writes a mode-`0600` temporary file, syncs it, and renames it into place on Unix-like systems. On Windows it applies and validates a protected, inheritable directory DACL limited to the current user and LocalSystem before creating the artifact; this implementation has cross-compile coverage but no current Windows runtime evidence.
 
 `--json` still writes the normal artifact before emitting the same aggregate to standard output. Shell redirection, terminal scrollback, pipelines, logs, and any duplicate file created from stdout are controlled by your shell and downstream tools, not by Skuggsja.
 
@@ -118,6 +120,6 @@ All aggregates are regenerable from the histories still present at the next run.
 
 ## Testing the boundary
 
-Repository tests use synthetic fixtures and temporary databases. They verify that serialized reports exclude absolute source paths and internal session/prompt/call/tool identifiers, that live WAL-backed SQLite data can be read through a private copy, that source audit detects directory changes, and that browser assets contain no external origins.
+Repository tests use synthetic fixtures and temporary databases. They verify that serialized reports exclude absolute source paths and internal session/prompt/call/tool identifiers, that live WAL-backed SQLite data can be read through a private copy, that configured-path changes and discovery-set changes are detected, that nested Claude children and Codex pagination/index coverage behave deterministically, that provider coverage serializes without paths/content, and that browser assets contain no external origins.
 
 Tests demonstrate the coded invariants for covered cases; they are not a formal proof. Please report a privacy or security issue through the process in [SECURITY.md](SECURITY.md) without attaching real history files.

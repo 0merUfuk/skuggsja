@@ -26,8 +26,10 @@ func DefaultOutputPath() (string, error) {
 }
 
 // EnsureOutputSeparate rejects lexical, symlink-resolved, and hard-link
-// overlap between the fixed generated artifact and source inputs. Source and
-// output directories must not contain one another.
+// overlap between the fixed generated artifact and source inputs. Source roots
+// and output directories must not contain one another; a standalone source
+// file may live in an ancestor directory (for example ~/.claude.json above a
+// cache directory), but may not be the output or live beneath its directory.
 func EnsureOutputSeparate(output string, roots, files []string) error {
 	outputAbsolute, err := absolutePath(output)
 	if err != nil {
@@ -85,18 +87,9 @@ func EnsureOutputSeparate(output string, roots, files []string) error {
 		if samePath(sourceAbsolute, outputAbsolute) || samePath(resolvedSource, resolvedOutput) || sameFileIdentity(source, output) {
 			return errOutputOverlapsSource
 		}
-		sourceDirectories, err := pathForms(filepath.Dir(source))
-		if err != nil {
-			return fmt.Errorf("resolve discovered source directory: %w", err)
-		}
-		resolvedDirectories, err := pathForms(filepath.Dir(resolvedSource))
-		if err != nil {
-			return fmt.Errorf("resolve discovered source target directory: %w", err)
-		}
-		sourceDirectories = append(sourceDirectories, resolvedDirectories...)
 		for _, outputDirectory := range outputDirectories {
-			for _, sourceDirectory := range sourceDirectories {
-				if directoriesOverlap(outputDirectory, sourceDirectory) {
+			for _, sourcePath := range []string{sourceAbsolute, resolvedSource} {
+				if directoriesOverlap(outputDirectory, sourcePath) {
 					return errOutputOverlapsSource
 				}
 			}
@@ -183,11 +176,75 @@ func sameFileIdentity(left, right string) bool {
 	return leftErr == nil && rightErr == nil && os.SameFile(leftInfo, rightInfo)
 }
 
+// rejectOutputSymlinkComponents refuses redirection below the user's trusted
+// home or temporary-directory anchor. Those anchors can themselves be native
+// platform aliases (for example /var on macOS), but every output component
+// beneath them must be a real directory or not exist yet.
+func rejectOutputSymlinkComponents(path string) error {
+	absolute, err := absolutePath(path)
+	if err != nil {
+		return err
+	}
+	anchor := filepath.VolumeName(absolute) + string(filepath.Separator)
+	for _, candidate := range outputPathAnchors() {
+		candidateAbsolute, err := absolutePath(candidate)
+		if err != nil || !lexicallyContainsPath(candidateAbsolute, absolute) {
+			continue
+		}
+		if len(candidateAbsolute) > len(anchor) {
+			anchor = candidateAbsolute
+		}
+	}
+
+	for current := absolute; !samePath(current, anchor); current = filepath.Dir(current) {
+		info, err := os.Lstat(current)
+		switch {
+		case err == nil && info.Mode()&os.ModeSymlink != 0:
+			return errors.New("refusing to write through a symbolic-link output path component")
+		case err == nil:
+		case errors.Is(err, os.ErrNotExist):
+		default:
+			return fmt.Errorf("inspect output path component: %w", err)
+		}
+		parent := filepath.Dir(current)
+		if parent == current {
+			break
+		}
+	}
+	return nil
+}
+
+func outputPathAnchors() []string {
+	anchors := []string{os.TempDir()}
+	if home, err := os.UserHomeDir(); err == nil {
+		anchors = append(anchors, home)
+	}
+	return anchors
+}
+
+func lexicallyContainsPath(root, candidate string) bool {
+	for current := candidate; ; current = filepath.Dir(current) {
+		if samePath(root, current) {
+			return true
+		}
+		parent := filepath.Dir(current)
+		if parent == current {
+			return false
+		}
+	}
+}
+
 // WriteReport atomically writes only the aggregate report with private permissions.
 func WriteReport(path string, report analytics.Report) (returnErr error) {
 	dir := filepath.Dir(path)
+	if err := rejectOutputSymlinkComponents(dir); err != nil {
+		return fmt.Errorf("validate output directory: %w", err)
+	}
 	if err := secureOutputDirectory(dir); err != nil {
 		return fmt.Errorf("secure output directory: %w", err)
+	}
+	if err := rejectOutputSymlinkComponents(dir); err != nil {
+		return fmt.Errorf("validate secured output directory: %w", err)
 	}
 	payload, err := json.MarshalIndent(report, "", "  ")
 	if err != nil {
@@ -234,10 +291,10 @@ func Clean(path string) error {
 	if filepath.Base(path) != artifactName {
 		return errors.New("refusing to clean an unexpected artifact path")
 	}
-	if err := os.Remove(path); err != nil && !errors.Is(err, os.ErrNotExist) {
-		return fmt.Errorf("remove aggregate report: %w", err)
-	}
 	directory := filepath.Dir(path)
+	if err := rejectOutputSymlinkComponents(directory); err != nil {
+		return fmt.Errorf("validate aggregate directory: %w", err)
+	}
 	info, err := os.Lstat(directory)
 	if errors.Is(err, os.ErrNotExist) {
 		return nil
@@ -246,10 +303,13 @@ func Clean(path string) error {
 		return fmt.Errorf("inspect aggregate directory: %w", err)
 	}
 	if info.Mode()&os.ModeSymlink != 0 {
-		return nil
+		return errors.New("refusing to clean through a symbolic-link aggregate directory")
 	}
 	if !info.IsDir() {
 		return errors.New("aggregate directory path is not a directory")
+	}
+	if err := os.Remove(path); err != nil && !errors.Is(err, os.ErrNotExist) {
+		return fmt.Errorf("remove aggregate report: %w", err)
 	}
 	entries, err := os.ReadDir(directory)
 	if err != nil {

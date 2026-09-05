@@ -28,6 +28,7 @@ type FileState struct {
 type Snapshot struct {
 	Files       map[string]FileState
 	Directories map[string][]string
+	Roots       map[string]bool
 	Manifest    string
 	TotalBytes  int64
 	Complete    bool
@@ -66,10 +67,35 @@ func Capture(ctx context.Context, paths []string) (Snapshot, error) {
 // file's containing directory. Missing discovered files make the snapshot
 // incomplete instead of silently shrinking the audited set.
 func CaptureDiscovered(ctx context.Context, roots, discoveredFiles []string) (Snapshot, error) {
+	return captureDiscovered(ctx, roots, discoveredFiles, nil)
+}
+
+// CaptureConfigured also watches configured optional paths. Their absence is a
+// valid, hashed state rather than an incomplete audit; appearing or disappearing
+// during the run is still detected exactly.
+func CaptureConfigured(ctx context.Context, roots, discoveredFiles, configuredFiles []string) (Snapshot, error) {
+	return captureDiscovered(ctx, roots, discoveredFiles, configuredFiles)
+}
+
+func captureDiscovered(ctx context.Context, roots, discoveredFiles, configuredFiles []string) (Snapshot, error) {
 	snapshot := Snapshot{
-		Files: make(map[string]FileState), Directories: make(map[string][]string), Complete: true,
+		Files: make(map[string]FileState), Directories: make(map[string][]string), Roots: make(map[string]bool), Complete: true,
 	}
+	var absentRootWatchPaths []string
 	for _, root := range uniqueSorted(roots) {
+		info, err := os.Lstat(root)
+		if errors.Is(err, os.ErrNotExist) {
+			snapshot.Roots[root] = false
+			absentRootWatchPaths = append(absentRootWatchPaths, filepath.Join(root, ".source-root-watch"))
+			continue
+		}
+		if err != nil {
+			return Snapshot{}, fmt.Errorf("inspect source root: %w", err)
+		}
+		if info.Mode()&os.ModeSymlink != 0 || !info.IsDir() {
+			return Snapshot{}, fmt.Errorf("source root is not a real directory")
+		}
+		snapshot.Roots[root] = true
 		if err := inventoryTree(ctx, root, &snapshot); err != nil {
 			return Snapshot{}, fmt.Errorf("inventory source root: %w", err)
 		}
@@ -79,11 +105,26 @@ func CaptureDiscovered(ctx context.Context, roots, discoveredFiles []string) (Sn
 	if err != nil {
 		return Snapshot{}, err
 	}
+	optionalFiles, optionalMissing, err := filesWithSidecars(configuredFiles)
+	if err != nil {
+		return Snapshot{}, err
+	}
+	files = uniqueSorted(append(files, optionalFiles...))
 	for _, path := range missing {
 		snapshot.Files[path] = FileState{}
 		snapshot.Complete = false
 	}
-	for _, dir := range containingDirectories(append(append([]string(nil), files...), missing...)) {
+	for _, path := range optionalMissing {
+		if _, required := snapshot.Files[path]; !required {
+			snapshot.Files[path] = FileState{}
+		}
+	}
+	watchPaths := append(append(append(append([]string(nil), files...), missing...), optionalMissing...), absentRootWatchPaths...)
+	watchDirectories, err := nearestExistingDirectories(watchPaths)
+	if err != nil {
+		return Snapshot{}, err
+	}
+	for _, dir := range watchDirectories {
 		if err := inventoryDirectory(dir, &snapshot); err != nil {
 			return Snapshot{}, fmt.Errorf("list source directory: %w", err)
 		}
@@ -132,6 +173,35 @@ func CaptureDiscovered(ctx context.Context, roots, discoveredFiles []string) (Sn
 	}
 	snapshot.Manifest = manifest(snapshot)
 	return snapshot, nil
+}
+
+func nearestExistingDirectories(paths []string) ([]string, error) {
+	directories := make(map[string]struct{})
+	for _, path := range paths {
+		current := filepath.Dir(path)
+		for {
+			info, err := os.Lstat(current)
+			switch {
+			case err == nil && info.Mode()&os.ModeSymlink != 0:
+				return nil, fmt.Errorf("source directory is a symbolic link")
+			case err == nil && info.IsDir():
+				directories[current] = struct{}{}
+				goto nextPath
+			case err == nil:
+				return nil, fmt.Errorf("source parent is not a directory")
+			case errors.Is(err, os.ErrNotExist):
+				parent := filepath.Dir(current)
+				if parent == current {
+					return nil, fmt.Errorf("no existing source-directory ancestor")
+				}
+				current = parent
+			default:
+				return nil, fmt.Errorf("inspect source directory: %w", err)
+			}
+		}
+	nextPath:
+	}
+	return sortedKeys(directories), nil
 }
 
 func inventoryTree(ctx context.Context, root string, snapshot *Snapshot) error {
@@ -226,6 +296,18 @@ func Compare(before, after Snapshot) Comparison {
 	}
 	for path := range allDirs {
 		if strings.Join(before.Directories[path], "\x00") != strings.Join(after.Directories[path], "\x00") {
+			comparison.DirectoryChanges++
+		}
+	}
+	allRoots := make(map[string]struct{}, len(before.Roots)+len(after.Roots))
+	for path := range before.Roots {
+		allRoots[path] = struct{}{}
+	}
+	for path := range after.Roots {
+		allRoots[path] = struct{}{}
+	}
+	for path := range allRoots {
+		if before.Roots[path] != after.Roots[path] {
 			comparison.DirectoryChanges++
 		}
 	}
@@ -347,6 +429,14 @@ func isSQLite(path string) bool {
 
 func manifest(snapshot Snapshot) string {
 	h := sha256.New()
+	rootPaths := make([]string, 0, len(snapshot.Roots))
+	for path := range snapshot.Roots {
+		rootPaths = append(rootPaths, path)
+	}
+	sort.Strings(rootPaths)
+	for _, path := range rootPaths {
+		fmt.Fprintf(h, "root\x00%s\x00%t\n", path, snapshot.Roots[path])
+	}
 	filePaths := make([]string, 0, len(snapshot.Files))
 	for path := range snapshot.Files {
 		filePaths = append(filePaths, path)

@@ -13,7 +13,7 @@ import (
 	"github.com/0merUfuk/skuggsja/internal/model"
 )
 
-const SchemaVersion = 1
+const SchemaVersion = 2
 
 // Report is the only persisted representation. It contains no raw text,
 // source identifiers, or absolute filesystem paths.
@@ -54,23 +54,36 @@ type Totals struct {
 }
 
 type ProviderSummary struct {
-	ID              model.Harness    `json:"id"`
-	Name            string           `json:"name"`
-	Status          string           `json:"status"`
-	Verification    string           `json:"verification"`
-	Sessions        int              `json:"sessions"`
-	ChildSessions   int              `json:"child_sessions"`
-	Prompts         int              `json:"prompts"`
-	Projects        int              `json:"projects"`
+	ID                 model.Harness    `json:"id"`
+	Name               string           `json:"name"`
+	Status             string           `json:"status"`
+	Verification       string           `json:"verification"`
+	Sessions           int              `json:"sessions"`
+	ChildSessions      int              `json:"child_sessions"`
+	Prompts            int              `json:"prompts"`
+	Projects           int              `json:"projects"`
 	ToolCalls          int64            `json:"tool_calls"`
 	ToolCallsAvailable bool             `json:"tool_calls_available"`
-	SpanStart       time.Time        `json:"span_start"`
-	SpanEnd         time.Time        `json:"span_end"`
-	TimeBasis       string           `json:"time_basis"`
-	TokenUsage      model.TokenUsage `json:"token_usage"`
-	Limitations     []string         `json:"limitations"`
-	Warnings        []model.Warning  `json:"warnings"`
-	SourceFileCount int              `json:"source_file_count"`
+	SpanStart          time.Time        `json:"span_start"`
+	SpanEnd            time.Time        `json:"span_end"`
+	TimeBasis          string           `json:"time_basis"`
+	TokenUsage         model.TokenUsage `json:"token_usage"`
+	Limitations        []string         `json:"limitations"`
+	Warnings           []model.Warning  `json:"warnings"`
+	SourceFileCount    int              `json:"source_file_count"`
+	Coverage           ProviderCoverage `json:"coverage"`
+}
+
+// ProviderCoverage makes local-data completeness explicit instead of allowing
+// a small recovered count to imply light real-world usage.
+type ProviderCoverage struct {
+	Status                 string    `json:"status"`
+	Confidence             string    `json:"confidence"`
+	EarliestLocalEvidence  time.Time `json:"earliest_local_evidence"`
+	EarliestDetailedRecord time.Time `json:"earliest_detailed_record"`
+	HistoryOnlySessions    int       `json:"history_only_sessions"`
+	UnmaterializedSessions int       `json:"unmaterialized_sessions"`
+	Note                   string    `json:"note"`
 }
 
 type Rhythm struct {
@@ -202,6 +215,15 @@ func Build(results []model.ProviderResult, options Options) Report {
 			if session.IsChild {
 				continue
 			}
+			if session.Unanchored || strings.HasPrefix(session.ActivityBasis, "file modification time") {
+				continue
+			}
+			if session.Project != "" {
+				projectCounts[session.Project]++
+			}
+			if session.TimeUnavailable {
+				continue
+			}
 			start := session.StartedAt
 			end := session.EndedAt
 			if end.IsZero() {
@@ -220,9 +242,6 @@ func Build(results []model.ProviderResult, options Options) Report {
 					Available: true, Harness: session.Harness,
 					DurationMinutes: int64(math.Round(duration.Minutes())),
 				}
-			}
-			if session.Project != "" {
-				projectCounts[session.Project]++
 			}
 			activityAt := session.ActivityAt
 			if activityAt.IsZero() {
@@ -284,6 +303,14 @@ func summarizeProvider(result model.ProviderResult) (ProviderSummary, []ModelSum
 		Verification: result.VerificationLevel, Limitations: result.Limitations,
 		Warnings: result.Warnings, SourceFileCount: len(result.SourceFiles),
 		ToolCallsAvailable: result.ToolCallsAvailable,
+		Coverage: ProviderCoverage{
+			Status: result.Coverage.Status, Confidence: result.Coverage.Confidence,
+			EarliestLocalEvidence:  result.Coverage.EarliestLocalEvidence,
+			EarliestDetailedRecord: result.Coverage.EarliestDetailedRecord,
+			HistoryOnlySessions:    result.Coverage.HistoryOnlySessions,
+			UnmaterializedSessions: result.Coverage.UnmaterializedSessions,
+			Note:                   result.Coverage.Note,
+		},
 	}
 	projects := make(map[string]struct{})
 	promptIDs := make(map[string]struct{})
@@ -298,24 +325,28 @@ func summarizeProvider(result model.ProviderResult) (ProviderSummary, []ModelSum
 			summary.ChildSessions++
 			continue
 		}
-		summary.Sessions++
-		if summary.SpanStart.IsZero() || session.StartedAt.Before(summary.SpanStart) {
-			summary.SpanStart = session.StartedAt
-		}
-		spanEnd := session.EndedAt
-		if spanEnd.IsZero() {
-			spanEnd = session.StartedAt
-		}
-		if summary.SpanEnd.IsZero() || spanEnd.After(summary.SpanEnd) {
-			summary.SpanEnd = spanEnd
-		}
-		if summary.TimeBasis == "" {
-			summary.TimeBasis = session.ActivityBasis
-		} else if summary.TimeBasis != session.ActivityBasis {
-			summary.TimeBasis = "mixed recorded times"
-		}
-		if session.Project != "" {
-			projects[session.Project] = struct{}{}
+		if !session.Unanchored && !strings.HasPrefix(session.ActivityBasis, "file modification time") {
+			summary.Sessions++
+			if !session.TimeUnavailable {
+				if summary.SpanStart.IsZero() || session.StartedAt.Before(summary.SpanStart) {
+					summary.SpanStart = session.StartedAt
+				}
+				spanEnd := session.EndedAt
+				if spanEnd.IsZero() {
+					spanEnd = session.StartedAt
+				}
+				if summary.SpanEnd.IsZero() || spanEnd.After(summary.SpanEnd) {
+					summary.SpanEnd = spanEnd
+				}
+				if summary.TimeBasis == "" {
+					summary.TimeBasis = session.ActivityBasis
+				} else if summary.TimeBasis != session.ActivityBasis {
+					summary.TimeBasis = "mixed recorded times"
+				}
+			}
+			if session.Project != "" {
+				projects[session.Project] = struct{}{}
+			}
 		}
 		for _, prompt := range session.Prompts {
 			key := prompt.EventID
@@ -334,6 +365,13 @@ func summarizeProvider(result model.ProviderResult) (ProviderSummary, []ModelSum
 
 		if len(session.Calls) > 0 {
 			for _, call := range session.Calls {
+				for _, id := range call.ToolIDs {
+					if id == "" {
+						unnamedTool++
+						id = fmt.Sprintf("_unnamed_tool_%d", unnamedTool)
+					}
+					toolIDs[id] = struct{}{}
+				}
 				key := call.ID
 				if key == "" {
 					unnamedCall++
@@ -357,18 +395,40 @@ func summarizeProvider(result model.ProviderResult) (ProviderSummary, []ModelSum
 		if call.Model != "" {
 			modelTurns[call.Model]++
 		}
-		for _, id := range call.ToolIDs {
-			if id == "" {
-				unnamedTool++
-				id = fmt.Sprintf("_unnamed_tool_%d", unnamedTool)
-			}
-			toolIDs[id] = struct{}{}
-		}
 	}
 	if len(callIDs) > 0 {
 		summary.ToolCalls = int64(len(toolIDs))
 	}
 	summary.Projects = len(projects)
+	if summary.Coverage.EarliestLocalEvidence.IsZero() {
+		summary.Coverage.EarliestLocalEvidence = summary.SpanStart
+	}
+	if summary.Coverage.EarliestDetailedRecord.IsZero() && summary.Sessions > 0 {
+		for _, session := range result.Sessions {
+			if session.IsChild || session.HistoryOnly || session.Unanchored || session.TimeUnavailable || session.StartedAt.IsZero() ||
+				strings.HasPrefix(session.ActivityBasis, "file modification time") {
+				continue
+			}
+			if summary.Coverage.EarliestDetailedRecord.IsZero() || session.StartedAt.Before(summary.Coverage.EarliestDetailedRecord) {
+				summary.Coverage.EarliestDetailedRecord = session.StartedAt
+			}
+		}
+	}
+	if summary.Coverage.Status == "" {
+		if result.Status == "unavailable" || result.Status == "unsupported schema" {
+			summary.Coverage.Status = "assessment unavailable"
+			summary.Coverage.Confidence = "low"
+			summary.Coverage.Note = "The configured local source could not be assessed, so neither absence nor completeness can be inferred."
+		} else if summary.Sessions == 0 && summary.ChildSessions == 0 {
+			summary.Coverage.Status = "no local evidence"
+			summary.Coverage.Confidence = "high"
+			summary.Coverage.Note = "No supported local records were found for this harness."
+		} else {
+			summary.Coverage.Status = "completeness unknown"
+			summary.Coverage.Confidence = "medium"
+			summary.Coverage.Note = "Surviving local records were read, but account-lifetime completeness cannot be established."
+		}
+	}
 	models := make([]ModelSummary, 0, len(modelTurns))
 	for name, turns := range modelTurns {
 		if name != "" && turns > 0 {

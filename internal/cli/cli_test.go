@@ -78,3 +78,38 @@ func TestCleanRefusesConfiguredSQLiteSidecarAlias(t *testing.T) {
 		t.Fatalf("configured sidecar target changed: content=%q error=%v", got, err)
 	}
 }
+
+func TestCleanAllowsGlobalStateInHomeAncestor(t *testing.T) {
+	root := t.TempDir()
+	t.Setenv("HOME", root)
+	t.Setenv("XDG_CACHE_HOME", filepath.Join(root, "cache"))
+	t.Setenv("LOCALAPPDATA", filepath.Join(root, "local-app-data"))
+	t.Setenv("APPDATA", filepath.Join(root, "app-data"))
+
+	globalState := filepath.Join(root, ".claude.json")
+	if err := os.WriteFile(globalState, []byte("{}\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	artifact, err := app.DefaultOutputPath()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Dir(artifact), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(artifact, []byte("synthetic aggregate"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	command := New("test")
+	command.SetArgs([]string{"clean"})
+	if err := command.ExecuteContext(context.Background()); err != nil {
+		t.Fatalf("clean error = %v", err)
+	}
+	if _, err := os.Stat(artifact); !os.IsNotExist(err) {
+		t.Fatalf("artifact still exists: %v", err)
+	}
+	if got, err := os.ReadFile(globalState); err != nil || string(got) != "{}\n" {
+		t.Fatalf("global state changed: content=%q error=%v", got, err)
+	}
+}

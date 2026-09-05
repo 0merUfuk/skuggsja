@@ -13,7 +13,73 @@ import (
 
 	"github.com/0merUfuk/skuggsja/internal/model"
 	"github.com/0merUfuk/skuggsja/internal/provider"
+	"github.com/0merUfuk/skuggsja/internal/provider/claude"
+	"github.com/0merUfuk/skuggsja/internal/provider/codex"
 )
+
+func TestGenerateProtectsSupplementalSourcesAfterDiscoveryFailure(t *testing.T) {
+	t.Parallel()
+	for _, test := range []struct {
+		name   string
+		reader func(root, broken, source string) provider.Reader
+	}{
+		{"claude transcript", func(root, broken, source string) provider.Reader {
+			return claude.Reader{ProjectsDir: root, HistoryFile: source}
+		}},
+		{"claude supplemental", func(root, broken, source string) provider.Reader {
+			return claude.Reader{HistoryFile: broken, GlobalStateFile: source}
+		}},
+		{"claude later root", func(root, broken, source string) provider.Reader {
+			return claude.Reader{ProjectsDir: root, DesktopSessionsDir: filepath.Dir(source)}
+		}},
+		{"codex transcript", func(root, broken, source string) provider.Reader {
+			return codex.Reader{SessionsDir: root, HistoryFile: source}
+		}},
+		{"codex supplemental", func(root, broken, source string) provider.Reader {
+			return codex.Reader{HistoryFile: broken, CatalogDatabase: source}
+		}},
+		{"codex thread history", func(root, broken, source string) provider.Reader {
+			return codex.Reader{SessionsDir: root, ThreadHistoryDatabase: source}
+		}},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			root := t.TempDir()
+			project := filepath.Join(root, "synthetic-project")
+			if err := os.Mkdir(project, 0o700); err != nil {
+				t.Fatal(err)
+			}
+			target := filepath.Join(t.TempDir(), "synthetic.jsonl")
+			if err := os.WriteFile(target, []byte("{}\n"), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			broken := filepath.Join(project, "rollout-synthetic.jsonl")
+			if err := os.Symlink(target, broken); err != nil {
+				t.Skipf("symlinks unavailable: %v", err)
+			}
+			output := filepath.Join(t.TempDir(), artifactName)
+			const sentinel = "synthetic configured source, not a generated report"
+			if err := os.WriteFile(output, []byte(sentinel), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			reader := test.reader(root, broken, output)
+			if _, err := reader.Discover(context.Background()); err == nil {
+				t.Fatal("fixture did not trigger a discovery failure")
+			}
+			for _, auditSources := range []bool{true, false} {
+				_, err := Generate(context.Background(), GenerateOptions{
+					Readers: []provider.Reader{reader}, OutputPath: output, AuditSources: auditSources,
+				})
+				if !errors.Is(err, errOutputOverlapsSource) {
+					t.Errorf("Generate(audit=%t) error = %v, want source-overlap refusal", auditSources, err)
+				}
+				if got, readErr := os.ReadFile(output); readErr != nil || string(got) != sentinel {
+					t.Fatalf("Generate(audit=%t) changed configured source: read error=%v, sentinel retained=%t", auditSources, readErr, string(got) == sentinel)
+				}
+			}
+		})
+	}
+}
 
 func TestGenerateRunsAuditedContentFreePipeline(t *testing.T) {
 	t.Parallel()
@@ -113,6 +179,25 @@ func TestGenerateRejectsArtifactInsideSourceRoot(t *testing.T) {
 	}
 	if got, err := os.ReadFile(source); err != nil || string(got) != "synthetic\n" {
 		t.Fatalf("source changed: content=%q error=%v", got, err)
+	}
+}
+
+func TestGenerateRejectsArtifactAliasingAuditOnlyFile(t *testing.T) {
+	t.Parallel()
+	output := filepath.Join(t.TempDir(), artifactName)
+	if err := os.WriteFile(output, []byte("synthetic audit source"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	reader := fixtureReader{discovery: provider.Discovery{
+		Harness: model.Claude, AuditFiles: []string{output},
+	}}
+	if _, err := Generate(context.Background(), GenerateOptions{
+		Readers: []provider.Reader{reader}, OutputPath: output, AuditSources: true,
+	}); !errors.Is(err, errOutputOverlapsSource) {
+		t.Fatalf("Generate() error = %v, want audit-only source/output overlap", err)
+	}
+	if got, err := os.ReadFile(output); err != nil || string(got) != "synthetic audit source" {
+		t.Fatalf("audit-only source changed: content=%q error=%v", got, err)
 	}
 }
 
@@ -242,6 +327,27 @@ func TestEnsureOutputSeparateRejectsArtifactBesideSourceFile(t *testing.T) {
 	}
 }
 
+func TestGenerateAllowsStandaloneSourceFileInOutputAncestor(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	source := filepath.Join(root, ".claude.json")
+	if err := os.WriteFile(source, []byte("{}\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	output := filepath.Join(root, "cache", "skuggsja", artifactName)
+	reader := fixtureReader{discovery: provider.Discovery{
+		Harness: model.Claude, ConfiguredFiles: []string{source}, AuditFiles: []string{source},
+	}}
+	if _, err := Generate(context.Background(), GenerateOptions{
+		Readers: []provider.Reader{reader}, OutputPath: output, AuditSources: true,
+	}); err != nil {
+		t.Fatalf("Generate() error = %v", err)
+	}
+	if got, err := os.ReadFile(source); err != nil || string(got) != "{}\n" {
+		t.Fatalf("ancestor source changed: content=%q error=%v", got, err)
+	}
+}
+
 func TestEnsureOutputSeparateRejectsSourceRootInsideOutputDirectory(t *testing.T) {
 	t.Parallel()
 	base := t.TempDir()
@@ -305,12 +411,75 @@ func TestGenerateChecksConfiguredFilesFromFailedDiscovery(t *testing.T) {
 	}
 }
 
+func TestGenerateRestartsAuditWhenOptionalSourceAppearsDuringDiscovery(t *testing.T) {
+	t.Parallel()
+	sourceDir := t.TempDir()
+	optional := filepath.Join(sourceDir, "history.jsonl")
+	reader := &appearingSourceReader{optional: optional}
+
+	generation, err := Generate(context.Background(), GenerateOptions{
+		Readers:      []provider.Reader{reader},
+		OutputPath:   filepath.Join(t.TempDir(), artifactName),
+		AuditSources: true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if generation.AuditError != nil {
+		t.Fatalf("AuditError = %v", generation.AuditError)
+	}
+	if !generation.Report.Privacy.SourceAudit.Verified {
+		t.Fatalf("source audit = %#v", generation.Report.Privacy.SourceAudit)
+	}
+	if reader.discoverCalls < 3 {
+		t.Fatalf("Discover() calls = %d, want at least 3", reader.discoverCalls)
+	}
+	if !reader.readSawOptional {
+		t.Fatal("Read() did not receive the source that appeared between discovery and capture")
+	}
+}
+
 type fixtureReader struct {
 	harness     model.Harness
 	displayName string
 	discovery   provider.Discovery
 	discoverErr error
 	result      model.ProviderResult
+}
+
+type appearingSourceReader struct {
+	optional        string
+	discoverCalls   int
+	readSawOptional bool
+}
+
+func (r *appearingSourceReader) Harness() model.Harness { return model.Claude }
+
+func (r *appearingSourceReader) DisplayName() string { return "Appearing source" }
+
+func (r *appearingSourceReader) Discover(context.Context) (provider.Discovery, error) {
+	r.discoverCalls++
+	discovery := provider.Discovery{
+		Harness:         model.Claude,
+		ConfiguredFiles: []string{r.optional},
+	}
+	if r.discoverCalls == 1 {
+		if err := os.WriteFile(r.optional, []byte("synthetic\n"), 0o600); err != nil {
+			return discovery, err
+		}
+		return discovery, nil
+	}
+	discovery.AuditFiles = []string{r.optional}
+	return discovery, nil
+}
+
+func (r *appearingSourceReader) Read(_ context.Context, discovery provider.Discovery) model.ProviderResult {
+	for _, path := range discovery.AuditFiles {
+		if path == r.optional {
+			r.readSawOptional = true
+		}
+	}
+	return model.ProviderResult{Harness: model.Claude, DisplayName: r.DisplayName(), Status: "supported"}
 }
 
 func (r fixtureReader) Harness() model.Harness {

@@ -104,8 +104,49 @@ func TestPromptMedianPreservesHalfWord(t *testing.T) {
 	}
 }
 
+func TestUnavailableProviderDoesNotClaimNoLocalEvidence(t *testing.T) {
+	t.Parallel()
+	report := Build([]model.ProviderResult{{
+		Harness: model.Codex, DisplayName: "Codex", Status: "unavailable",
+		Warnings: []model.Warning{{Code: "discovery_failed", Count: 1, Message: "Source could not be inspected."}},
+	}}, Options{Now: time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC), Location: time.UTC})
+	coverage := report.Providers[0].Coverage
+	if coverage.Status != "assessment unavailable" || coverage.Confidence != "low" {
+		t.Fatalf("coverage = %#v", coverage)
+	}
+}
+
+func TestFilesystemMtimeIsNotPromotedToDetailedActivity(t *testing.T) {
+	t.Parallel()
+	at := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	report := Build([]model.ProviderResult{{
+		Harness: model.Claude, DisplayName: "Claude Code", Status: "supported with warnings",
+		ToolCallsAvailable: true,
+		Sessions: []model.Session{{
+			Harness: model.Claude, ID: "unanchored", StartedAt: at, EndedAt: at, ActivityAt: at,
+			ActivityBasis: "file modification time (no physical-session record)", Unanchored: true, Project: "must-not-count",
+			Prompts: []model.PromptMetric{{EventID: "copied-prompt", Words: 2, Characters: 12, HasText: true}},
+			Calls:   []model.CallMetric{{ID: "copied-call", Model: "claude-test", Usage: exactUsage(7, 3), ToolIDs: []string{"copied-tool"}}},
+		}},
+	}}, Options{Now: at, Location: time.UTC})
+	provider := report.Providers[0]
+	if !provider.Coverage.EarliestDetailedRecord.IsZero() || provider.Sessions != 0 || provider.Projects != 0 ||
+		provider.Prompts != 1 || provider.ToolCalls != 1 || provider.TokenUsage.Input != 7 ||
+		len(report.Models) != 1 || report.Totals.ActiveDays != 0 || !report.Coverage.Start.IsZero() {
+		t.Fatalf("provider/global coverage = %#v / %#v", report.Providers[0].Coverage, report.Coverage)
+	}
+}
+
 func exactUsage(input, output int64) model.TokenUsage {
 	return model.TokenUsage{
 		Available: true, Exact: true, Input: input, Output: output, Source: "fixture exact fields",
+	}
+}
+
+func TestUntimedPhysicalSessionRetainsProjectWithoutRhythm(t *testing.T) {
+	t.Parallel()
+	report := Build([]model.ProviderResult{{Harness: model.Claude, Status: "supported", Sessions: []model.Session{{Harness: model.Claude, ID: "untimed", Project: "synthetic-project", TimeUnavailable: true}}}}, Options{Now: time.Now(), Location: time.UTC})
+	if report.Totals.Sessions != 1 || report.Totals.Projects != 1 || report.Providers[0].Projects != 1 || len(report.Projects) != 1 || report.Totals.ActiveDays != 0 || !report.Coverage.Start.IsZero() || report.Longest.Available {
+		t.Fatalf("untimed session incorrectly counted: %#v", report)
 	}
 }

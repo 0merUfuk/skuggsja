@@ -90,8 +90,17 @@ func New(version string) *cobra.Command {
 
 func readers(paths platform.Paths) []provider.Reader {
 	return []provider.Reader{
-		claude.Reader{ProjectsDir: paths.ClaudeProjects},
-		codex.Reader{SessionsDir: paths.CodexSessions, ArchivedDir: paths.CodexArchived},
+		claude.Reader{
+			ProjectsDir: paths.ClaudeProjects, HistoryFile: paths.ClaudeHistory,
+			StatsFile: paths.ClaudeStats, GlobalStateFile: paths.ClaudeGlobalState,
+			DesktopSessionsDir: paths.ClaudeDesktopSessions, CodeSessionsDir: paths.ClaudeCodeSessions,
+		},
+		codex.Reader{
+			SessionsDir: paths.CodexSessions, ArchivedDir: paths.CodexArchived,
+			HistoryFile: paths.CodexHistory, SessionIndexFile: paths.CodexSessionIndex,
+			ExternalImportsFile: paths.CodexExternalImports, StateDatabase: paths.CodexStateDatabase,
+			CatalogDatabase: paths.CodexCatalogDatabase, ThreadHistoryDatabase: paths.CodexThreadHistoryDatabase,
+		},
 		hermes.Reader{DatabasePath: paths.HermesDatabase},
 		cursor.Reader{DatabasePath: paths.CursorStateDB},
 	}
@@ -103,8 +112,19 @@ func applyPathOverrides(paths *platform.Paths) {
 		target *string
 	}{
 		{"SKUGGSJA_CLAUDE_PROJECTS", &paths.ClaudeProjects},
+		{"SKUGGSJA_CLAUDE_HISTORY", &paths.ClaudeHistory},
+		{"SKUGGSJA_CLAUDE_STATS", &paths.ClaudeStats},
+		{"SKUGGSJA_CLAUDE_GLOBAL_STATE", &paths.ClaudeGlobalState},
+		{"SKUGGSJA_CLAUDE_DESKTOP_SESSIONS", &paths.ClaudeDesktopSessions},
+		{"SKUGGSJA_CLAUDE_CODE_SESSIONS", &paths.ClaudeCodeSessions},
 		{"SKUGGSJA_CODEX_SESSIONS", &paths.CodexSessions},
 		{"SKUGGSJA_CODEX_ARCHIVED", &paths.CodexArchived},
+		{"SKUGGSJA_CODEX_HISTORY", &paths.CodexHistory},
+		{"SKUGGSJA_CODEX_SESSION_INDEX", &paths.CodexSessionIndex},
+		{"SKUGGSJA_CODEX_EXTERNAL_IMPORTS", &paths.CodexExternalImports},
+		{"SKUGGSJA_CODEX_STATE_DATABASE", &paths.CodexStateDatabase},
+		{"SKUGGSJA_CODEX_CATALOG_DATABASE", &paths.CodexCatalogDatabase},
+		{"SKUGGSJA_CODEX_THREAD_HISTORY_DATABASE", &paths.CodexThreadHistoryDatabase},
 		{"SKUGGSJA_HERMES_DATABASE", &paths.HermesDatabase},
 		{"SKUGGSJA_CURSOR_DATABASE", &paths.CursorStateDB},
 	}
@@ -118,9 +138,9 @@ func applyPathOverrides(paths *platform.Paths) {
 func printSummary(out io.Writer, generation app.Generation, auditSkipped bool) {
 	report := generation.Report
 	fmt.Fprintln(out, "Your Rewind is ready.")
-	fmt.Fprintf(out, "Sessions analyzed      %s\n", formatInt(int64(report.Totals.Sessions)))
-	fmt.Fprintf(out, "Human prompts          %s\n", formatInt(int64(report.Totals.Prompts)))
-	fmt.Fprintf(out, "Coverage               %s\n", report.Coverage.Label)
+	fmt.Fprintf(out, "Sessions recovered     %s\n", formatInt(int64(report.Totals.Sessions)))
+	fmt.Fprintf(out, "Prompts recovered      %s\n", formatInt(int64(report.Totals.Prompts)))
+	fmt.Fprintf(out, "Recoverable span       %s\n", report.Coverage.Label)
 	if auditSkipped {
 		fmt.Fprintln(out, "Source integrity       not audited (--no-source-audit)")
 	} else if report.Privacy.SourceAudit.Verified {
@@ -148,10 +168,18 @@ func cleanCommand() *cobra.Command {
 				return err
 			}
 			applyPathOverrides(&paths)
-			if err := app.EnsureOutputSeparate(path,
-				[]string{paths.ClaudeProjects, paths.CodexSessions, paths.CodexArchived},
-				append(sqliteGuardPaths(paths.HermesDatabase), sqliteGuardPaths(paths.CursorStateDB)...),
-			); err != nil {
+			var sourceRoots, sourceFiles []string
+			for _, reader := range readers(paths) {
+				discovery, err := reader.Discover(cmd.Context())
+				if err != nil {
+					return fmt.Errorf("discover %s sources before clean: %w", reader.DisplayName(), err)
+				}
+				sourceRoots = append(sourceRoots, discovery.Roots...)
+				sourceFiles = append(sourceFiles, discovery.Files...)
+				sourceFiles = append(sourceFiles, discovery.AuditFiles...)
+				sourceFiles = append(sourceFiles, discovery.ConfiguredFiles...)
+			}
+			if err := app.EnsureOutputSeparate(path, sourceRoots, sourceFiles); err != nil {
 				return err
 			}
 			if err := app.Clean(path); err != nil {
@@ -161,10 +189,6 @@ func cleanCommand() *cobra.Command {
 			return nil
 		},
 	}
-}
-
-func sqliteGuardPaths(path string) []string {
-	return []string{path, path + "-wal", path + "-shm", path + "-journal"}
 }
 
 func versionCommand(version string) *cobra.Command {

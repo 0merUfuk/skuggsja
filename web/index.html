@@ -77,17 +77,17 @@
             <p id="coverage-stamp" class="coverage-stamp"></p>
           </div>
           <figure class="hero-total" aria-labelledby="hero-session-count hero-session-label">
-            <figcaption class="hero-total__overline">Recorded sessions</figcaption>
+            <figcaption class="hero-total__overline">Locally recovered sessions</figcaption>
             <strong id="hero-session-count" class="hero-total__number">0</strong>
             <p id="hero-session-label" class="hero-total__label">sessions held in this mirror</p>
           </figure>
           <dl class="proof-strip" aria-label="Archive proof points">
             <div>
-              <dt>Prompts</dt>
+              <dt>Prompts recovered</dt>
               <dd id="proof-prompts">—</dd>
             </div>
             <div>
-              <dt>Projects</dt>
+              <dt>Projects represented</dt>
               <dd id="proof-projects">—</dd>
             </div>
             <div>
@@ -100,6 +100,14 @@
             </div>
           </dl>
         </section>
+
+        <aside id="coverage-notice" class="coverage-notice" aria-labelledby="coverage-notice-title" hidden>
+          <p class="coverage-notice__mark" aria-hidden="true">!</p>
+          <div>
+            <h2 id="coverage-notice-title">Local history is not lifetime usage.</h2>
+            <p id="coverage-notice-copy"></p>
+          </div>
+        </aside>
 
         <aside id="sparse-note" class="field-note" aria-labelledby="sparse-title" hidden>
           <p class="field-note__mark" aria-hidden="true">※</p>
@@ -256,7 +264,7 @@
           </header>
           <div class="ledger-labels" aria-hidden="true">
             <span>Harness</span>
-            <span>Sessions</span>
+            <span>Recovered sessions</span>
             <span>Verification</span>
           </div>
           <div id="provider-list" class="provider-list"></div>

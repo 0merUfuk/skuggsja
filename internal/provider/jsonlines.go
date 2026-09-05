@@ -3,6 +3,7 @@ package provider
 import (
 	"bufio"
 	"context"
+	"encoding/json"
 	"errors"
 	"io"
 	"os"
@@ -10,6 +11,30 @@ import (
 	"unicode"
 	"unicode/utf8"
 )
+
+// DecodeJSONFile reads one JSON document through a hard byte limit. Callers
+// can distinguish an oversize source from malformed JSON without ever asking
+// the decoder to allocate from an unbounded local file.
+func DecodeJSONFile(path string, maxBytes int, destination any) (bool, error) {
+	file, err := os.Open(path) // Intentionally read-only.
+	if err != nil {
+		return false, err
+	}
+	defer file.Close()
+	if info, statErr := file.Stat(); statErr != nil {
+		return false, statErr
+	} else if info.Size() > int64(maxBytes) {
+		return true, nil
+	}
+	data, err := io.ReadAll(io.LimitReader(file, int64(maxBytes)+1))
+	if err != nil {
+		return false, err
+	}
+	if len(data) > maxBytes {
+		return true, nil
+	}
+	return false, json.Unmarshal(data, destination)
+}
 
 // ForEachLine reads bounded lines without giving a malformed source record an
 // opportunity to allocate unbounded memory. Oversize lines are discarded and

@@ -28,7 +28,7 @@ analytics aggregation ────► Report (content-free contract)
                                       embedded HTML/CSS/JS
 ```
 
-The ordering matters. Every reader must disclose its intended files during `Discover` before `Read` opens them. With the source audit enabled, Skuggsja hashes those files, recursively inventories declared history roots, and inventories file-containing directories before parsing. It repeats the capture afterward and records only aggregate comparison results.
+The ordering matters. Every reader must disclose parsed files, audit-only files, configured optional files, and roots during `Discover` before `Read` opens them. With the source audit enabled, Skuggsja captures that set and discovers again. A match pairs the retained before snapshot with the exact set sent to readers; a mismatch retries boundedly. Persistent churn still permits best-effort parsing of the latest discovery but makes the audit explicitly inconclusive.
 
 ## Package map
 
@@ -65,10 +65,10 @@ The web UI has no package-manager dependencies, remote fonts, remote scripts, or
 
 1. `platform.DefaultPaths` resolves candidate locations without network access.
 2. CLI environment overrides replace individual locations.
-3. Each provider performs discovery. Missing paths produce an empty discovery rather than an error.
-4. The source/output guard checks every declared root, discovered file, and configured SQLite path even after a discovery error. It rejects shared directories, containment in either direction, symlink/case aliases, and existing hard-link aliases.
-5. If enabled and at least one discovery file or root was supplied, the audit hashes every discovered regular file and relevant SQLite sidecar, recursively inventories existing discovery roots, and inventories file-containing directories. A discovered file that disappears makes the snapshot incomplete rather than silently shrinking the set. A directory-only snapshot remains unverified because verification requires at least one hashed file.
-6. Readers parse each discovery into `model.ProviderResult`. Provider failures become scoped statuses and aggregate warnings where possible.
+3. Each provider performs discovery. A missing source yields no parsed/audit-only file, while the declared missing root or configured optional path remains part of audit/change detection.
+4. The source/output guard checks every declared root, parsed file, audit-only file, and configured optional path even after a discovery error. It rejects shared directories, containment in either direction, symlink/case aliases, existing hard-link aliases, and intermediate-component symlink aliases.
+5. If enabled and at least one parsed, audit-only, configured, or root path was supplied, the audit hashes every present declared file and relevant SQLite sidecar, records absence for configured optional paths, recursively inventories existing discovery roots, and inventories nearest existing containing directories. Discovery then runs again. A changed set restarts capture; repeated churn makes the audit explicitly inconclusive.
+6. Readers parse the stable discovery set paired with the retained before snapshot, or the latest discovery after bounded persistent churn, into `model.ProviderResult`. The latter cannot produce a verified source audit. Provider failures become scoped statuses and aggregate warnings where possible.
 7. SQLite readers call `sqlitecopy.Open`; the SQLite driver never receives the original database path.
 8. A second audit snapshot is compared with the first. An audit failure adds a `system` provider warning rather than suppressing otherwise usable analytics.
 9. `analytics.Build` creates the serializable `Report` and drops internal identifiers and source paths.
@@ -81,25 +81,29 @@ Provider discovery and reads currently run in deterministic provider order. File
 
 ### Claude Code
 
-Claude discovery selects only files shaped as `<projects-root>/<encoded-project>/<session>.jsonl`. Nested transcript files are intentionally excluded. Each selected file is streamed as bounded JSONL.
+Claude discovery selects direct `<projects-root>/<encoded-project>/<session>.jsonl` histories and nested `.../<session>/subagents/agent-*.jsonl` child histories. The nested path/filename establishes a child; matching `agentId`/`sessionId` records anchor its own time. `isSidechain` is decoded but is not the discovery or classification gate. Workflow journals, metadata sidecars, debug logs, file-history snapshots, and third-party memory stores are not treated as Claude Code sessions. On macOS, embedded Claude Desktop Cowork/local-agent transcripts are audited and counted in an exclusion warning, but are not added to Claude Code usage.
+
+The adapter also audits and reconciles `history.jsonl`, `stats-cache.json`, the global `.claude.json` plus recognized backups, and Claude Desktop Code-session indexes. These sources can prove that detailed transcripts are missing; they contribute only the fields they actually retain and never fabricate lost model, token, tool, response, or full transcript detail.
 
 The adapter derives:
 
-- session start/end from valid record timestamps;
+- physical session identity from the filename/path plus matching records, and start/end from valid record timestamps rather than filesystem mtime;
 - project basename from `cwd`;
 - human prompts from eligible user-message text or supported attachment blocks, excluding metadata, compact summaries, visible-transcript-only records, and tool-result echoes;
-- provider-native model events and the source-recorded token ledger from assistant messages;
+- provider-native model events and the source-recorded token ledger, including recorded thinking tokens, from assistant messages;
 - distinct tool calls from assistant `tool_use` block IDs.
 
-Assistant responses, prompt events, and tool IDs are deduplicated where stable source IDs exist. Copied fork history generates aggregate warnings; conflicting copies retain one concrete record rather than synthesizing a value.
+Repeated streaming updates for one assistant response are merged by response ID: distinct tool blocks are retained and the last complete cumulative usage snapshot wins. Copied fork history is then deduplicated globally by stable response, prompt, and tool identifiers. Every suppression/conflict class emits an aggregate warning. Child histories remain visible as child-session counts but do not contribute owner/root activity totals.
 
 ### Codex
 
-Codex discovery walks active and archived roots for `rollout-*.jsonl` and `rollout-*.jsonl.zst`. Plain and compressed siblings are one logical rollout; the plain file wins when both exist. Compressed input is streamed through a memory-bounded zstd decoder before the same bounded-line parser.
+Codex discovery walks active and archived roots for `rollout-*.jsonl` and `rollout-*.jsonl.zst`. Plain and compressed siblings are one logical rollout candidate; the plain file wins when both exist. The adapter additionally audits `history.jsonl`, `session_index.jsonl`, the external-import index, the thread-state SQLite database, and the local app catalog. State-referenced paths outside configured rollout roots are never probed.
 
-The adapter uses the first `session_meta` record as rollout identity and physical start, detects children from parent/thread metadata, derives project basename from `cwd`, and counts provider-native model events from turn context. The end is the latest valid record timestamp. Prompt extraction is history-mode-aware: legacy histories use human `user_message` events, while paginated histories use completed `UserMessage` items. Unknown modes skip prompt extraction and emit a warning rather than risk double-counting copied user representations. `response_item` records are used for tool calls, not as a second prompt source.
+The adapter uses a valid first `session_meta` record as rollout identity and physical start, detects children from parent/thread metadata, derives project basename from `cwd`, and counts provider-native model events from turn context. The end is the latest valid record timestamp. Prompt extraction is history-mode-aware: legacy histories use human `user_message` events, while paginated histories use completed `UserMessage` items. Unknown modes skip prompt extraction and emit a warning rather than risk double-counting copied user representations. `response_item` records are used for tool calls, not as a second prompt source.
 
-Token usage is the largest/final cumulative `total_token_usage` snapshot recorded for the session. It is exact as a session total but cannot be assigned exactly to individual model events.
+When a paginated continuation supplies an exact base thread, byte boundary, and ordinal boundary, both physical segments are parsed at that boundary and stitched. Same-ID files without a validated chain are not merged speculatively. Supplemental indexes add history-only sessions or aggregate missing-detail evidence; remote ChatGPT catalog rows and account/workspace host keys are context only and are excluded from local usage totals.
+
+Within each physical segment, token usage is the largest/final cumulative `total_token_usage` snapshot. Validated pagination stitches segments and sums their segment ledgers; a logical session total still cannot be assigned exactly to individual model events.
 
 ### Hermes Agent
 
@@ -121,24 +125,25 @@ Cursor is schema-verified with synthetic SQLite fixtures and is not real-data ve
 
 `internal/model` is intentionally not the persisted schema. It contains only what aggregation needs:
 
-- `Session`: provider, internal IDs for parent/deduplication, child flag, times, activity basis, project basename, prompt metrics, calls, model activity, token fields, and tool-call count;
+- `Session`: provider, internal IDs for parent/deduplication, child/history-only/unanchored/time-unavailable flags, times, activity basis, project basename, prompt metrics, calls, model activity, token fields, and tool-call count;
 - `PromptMetric`: internal event ID, time, word count, character count, and whether text existed;
 - `CallMetric`: internal response/call ID, model label, token fields, and internal tool IDs;
 - `TokenUsage`: availability, exactness, source label, and input/output/cache-read/cache-write/reasoning counts;
 - `Warning`: stable code, count, and content-free message.
+- `CoverageAssessment`: per-provider status/confidence, earliest local evidence, earliest detailed record, and aggregate counts of history-only or unmaterialized sessions.
 
 Raw prompt or response text has no field in this model. Source paths remain in `provider.Discovery` and `ProviderResult.SourceFiles` only long enough to read, audit, and count them. Session, prompt, call, and tool IDs are used in memory and never copied into `analytics.Report`.
 
 ## Persisted report contract
 
-The JSON artifact is `analytics.Report`, currently schema version `1`.
+The JSON artifact is `analytics.Report`, currently schema version `2`.
 
 | Field | Meaning |
 | --- | --- |
 | `schema_version`, `product_name`, `generated_at` | Format identity and generation time |
 | `coverage` | Earliest start, latest end, local timezone, honest display label, and `calendar_framing` presentation hint |
-| `totals` | Root sessions, prompts, unique projects, tool calls from providers that expose that metric, active days, child sessions, primary source-file count, changed-source count |
-| `providers` | Per-harness status, verification scope, metrics, span, time basis, token ledger, limitations, warnings, and primary file count |
+| `totals` | Root sessions, prompts, unique projects, tool calls from providers that expose that metric, active days, child sessions, declared provider-input count, changed-source count |
+| `providers` | Per-harness status, verification scope, metrics, span, time basis, token ledger, limitations, warnings, declared input-file count, and explicit coverage assessment |
 | `rhythm` | Activity by local date, 24 local hours, Monday-first weekdays, favorite hour, late-night percentage, streak, busiest day/month |
 | `prompt_style` | Availability, textual-prompt sample count, median/average words, average characters, and deterministic label |
 | `models` | Provider-qualified, provider-native model-event counts (the schema field remains `turns`) |
@@ -148,11 +153,12 @@ The JSON artifact is `analytics.Report`, currently schema version `1`.
 | `methodology` | Human-readable interpretation rules |
 | `warnings` | Provider-qualified aggregate warning codes, counts, and fixed messages |
 
-`totals.source_files` counts primary files returned by adapters. `privacy.source_audit.files` can be larger because the audit also includes present SQLite WAL, SHM, or journal sidecars. `totals.source_files_changed` counts changed files only; directory-membership changes are a separate audit field.
+`totals.source_files` counts parsed and audit-only files returned by adapters. `privacy.source_audit.files` counts existing files in the before snapshot and can be larger because of present SQLite sidecars; configured-but-absent paths affect the manifest and change detection but not that count. `totals.source_files_changed` counts changed file states; directory/root-membership changes are a separate audit field.
 
 ### Metric rules
 
-- Root sessions alone contribute prompts, projects, calls, models, tokens, rhythm, coverage, and longest-session statistics. Children are counted separately.
+- Root sessions alone contribute prompts, projects, calls, models, tokens, rhythm, and longest-session statistics. Children are counted separately. Unanchored copied transcripts can contribute only globally deduplicated evidence, never session/time/activity counts. History-only sessions contribute only explicitly retained provider fields, including Claude prompt/time/project-basename evidence.
+- Global span and rhythm use trustworthy detailed/history timestamps. Per-provider coverage independently reports earlier aggregate/index evidence and missing-detail counts; neither is an account-lifetime completeness claim.
 - Activity is placed on each adapter's documented activity time and converted to the process's local timezone.
 - Weekday bins are Monday through Sunday. Favorite-hour ties select the earliest hour. Busiest-day and busiest-month ties select the earliest chronological entry.
 - Late night is 00:00–04:59 local time.
@@ -164,7 +170,7 @@ The JSON artifact is `analytics.Report`, currently schema version `1`.
 
 ## Output and serving
 
-The destination is `<user-cache>/skuggsja/rewind.json`. Before any reader runs, generation rejects source and output directories that are equal or contain one another; `clean` performs the same check against configured source locations before deleting. Checks cover cleaned and symlink-resolved forms, conservative case folding on macOS and Windows, existing ancestor identity, and hard-link identity. Discovery-error paths do not bypass the guard.
+The destination is `<user-cache>/skuggsja/rewind.json`. Before any reader runs, generation rejects a source root that overlaps the artifact directory and any source file that equals the artifact or lies below its directory; an ordinary source file may safely be in an ancestor directory. `clean` performs the corresponding configured-source check before deleting. Checks cover cleaned and symlink-resolved forms, conservative case folding on macOS and Windows, existing ancestor identity, and hard-link identity. The writer and cleaner separately reject symlinks in output-directory components. Discovery-error paths do not bypass the guard.
 
 The writer creates and syncs a temporary file beside the destination, then renames it over the prior artifact. On Unix-like systems, the product directory is set to mode `0700` and the temporary/final artifact to mode `0600`. On Windows, the product directory is created or updated with a protected, inheritable DACL limited to the current user and LocalSystem and validated before the artifact is created. This code cross-compiles but remains runtime-unverified on Windows.
 
@@ -180,7 +186,8 @@ It binds IPv4 loopback only. Requests are accepted only when the normalized `Hos
 
 | Condition | Behavior |
 | --- | --- |
-| Source path missing | Provider status `not found`; run continues |
+| All supported inputs for a harness are absent | Provider status `not found`; run continues |
+| Detailed history absent but supplemental evidence survives | Provider remains usable with warnings and `known incomplete` coverage; only retained fields count |
 | Discovery cannot inspect a location | Provider status `unavailable` plus `discovery_failed`; run continues |
 | Malformed or oversized JSONL record | Record skipped, aggregate warning emitted |
 | Unknown history mode | Ambiguous prompts skipped, warning emitted; other supported metrics continue |
@@ -189,7 +196,12 @@ It binds IPv4 loopback only. Requests are accepted only when the normalized `Hos
 | Required SQLite schema unknown | Provider status `unsupported schema`; no guessed queries |
 | Optional SQLite metric unavailable | Supported session metrics remain, warning emitted |
 | Source audit fails | Audit remains unverified and a system warning is added |
+| Discovery changes between the before snapshot and confirmation | Capture is retried up to three times; persistent churn makes the audit inconclusive |
 | Artifact cannot be written | Generation fails; no server starts |
 | Requested loopback port is occupied | An ephemeral loopback port is selected |
 
 This degradation policy favors visible omission over fabricated comparability.
+
+### Unparsed Codex paginated database
+
+`thread_history_1.sqlite` and configured sidecars participate in output protection and source auditing. Its contents do not contribute usage because the paginated database format is not supported. A fixed warning makes that omission explicit. A malformed source remains untouched. All configured sources are declared before discovery can fail, so a provider error cannot remove them from output protection.

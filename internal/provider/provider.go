@@ -8,12 +8,14 @@ import (
 	"github.com/0merUfuk/skuggsja/internal/model"
 )
 
-// Discovery lists only the files a reader intends to open and the directories
-// that contain provider histories. Paths stay in process memory and are never
-// serialized into the generated Rewind.
+// Discovery separates parsed files, audit-only inputs, and configured paths.
+// ConfiguredFiles may include absent optional paths so output-safety checks
+// cannot create an artifact where a harness may later create source data.
+// Paths stay in process memory and are never serialized into the Rewind.
 type Discovery struct {
 	Harness         model.Harness
 	Files           []string
+	AuditFiles      []string
 	Roots           []string
 	ConfiguredFiles []string
 	Meta            map[string]string

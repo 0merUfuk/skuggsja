@@ -10,13 +10,24 @@ import (
 
 // Paths contains all candidate source locations. Tests can construct it directly.
 type Paths struct {
-	ClaudeProjects       string
-	CodexSessions        string
-	CodexArchived        string
-	HermesDatabase       string
-	CursorStateDB        string
-	CursorConversationDB string
-	CursorWorkspaceRoot  string
+	ClaudeProjects             string
+	ClaudeHistory              string
+	ClaudeStats                string
+	ClaudeGlobalState          string
+	ClaudeDesktopSessions      string
+	ClaudeCodeSessions         string
+	CodexSessions              string
+	CodexArchived              string
+	CodexHistory               string
+	CodexSessionIndex          string
+	CodexExternalImports       string
+	CodexStateDatabase         string
+	CodexCatalogDatabase       string
+	CodexThreadHistoryDatabase string
+	HermesDatabase             string
+	CursorStateDB              string
+	CursorConversationDB       string
+	CursorWorkspaceRoot        string
 }
 
 // DefaultPaths returns native harness locations for the running OS.
@@ -49,14 +60,31 @@ func DefaultPaths() (Paths, error) {
 	}
 
 	cursorUser := cursorUserDir(home)
+	claudeDesktopSessions := ""
+	claudeCodeSessions := ""
+	if runtime.GOOS == "darwin" {
+		claudeDesktopSessions = filepath.Join(home, "Library", "Application Support", "Claude", "local-agent-mode-sessions")
+		claudeCodeSessions = filepath.Join(home, "Library", "Application Support", "Claude", "claude-code-sessions")
+	}
 	return Paths{
-		ClaudeProjects:       filepath.Join(claudeHome, "projects"),
-		CodexSessions:        filepath.Join(codexHome, "sessions"),
-		CodexArchived:        filepath.Join(codexHome, "archived_sessions"),
-		HermesDatabase:       filepath.Join(hermesHome, "state.db"),
-		CursorStateDB:        filepath.Join(cursorUser, "globalStorage", "state.vscdb"),
-		CursorConversationDB: filepath.Join(cursorUser, "globalStorage", "conversation-search.db"),
-		CursorWorkspaceRoot:  filepath.Join(cursorUser, "workspaceStorage"),
+		ClaudeProjects:             filepath.Join(claudeHome, "projects"),
+		ClaudeHistory:              filepath.Join(claudeHome, "history.jsonl"),
+		ClaudeStats:                filepath.Join(claudeHome, "stats-cache.json"),
+		ClaudeGlobalState:          filepath.Join(home, ".claude.json"),
+		ClaudeDesktopSessions:      claudeDesktopSessions,
+		ClaudeCodeSessions:         claudeCodeSessions,
+		CodexSessions:              filepath.Join(codexHome, "sessions"),
+		CodexArchived:              filepath.Join(codexHome, "archived_sessions"),
+		CodexHistory:               filepath.Join(codexHome, "history.jsonl"),
+		CodexSessionIndex:          filepath.Join(codexHome, "session_index.jsonl"),
+		CodexExternalImports:       filepath.Join(codexHome, "external_agent_session_imports.json"),
+		CodexStateDatabase:         filepath.Join(codexHome, "state_5.sqlite"),
+		CodexCatalogDatabase:       filepath.Join(codexHome, "sqlite", "codex-dev.db"),
+		CodexThreadHistoryDatabase: filepath.Join(codexHome, "thread_history_1.sqlite"),
+		HermesDatabase:             filepath.Join(hermesHome, "state.db"),
+		CursorStateDB:              filepath.Join(cursorUser, "globalStorage", "state.vscdb"),
+		CursorConversationDB:       filepath.Join(cursorUser, "globalStorage", "conversation-search.db"),
+		CursorWorkspaceRoot:        filepath.Join(cursorUser, "workspaceStorage"),
 	}, nil
 }
 

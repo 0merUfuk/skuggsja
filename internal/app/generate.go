@@ -2,7 +2,9 @@ package app
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"sort"
 	"time"
 
 	"github.com/0merUfuk/skuggsja/internal/analytics"
@@ -28,6 +30,21 @@ type Generation struct {
 	AuditError error
 }
 
+type discoveredReader struct {
+	reader    provider.Reader
+	discovery provider.Discovery
+	err       error
+}
+
+type discoveryInputs struct {
+	items           []discoveredReader
+	auditRoots      []string
+	auditFiles      []string
+	auditConfigured []string
+	sourceRoots     []string
+	sourceFiles     []string
+}
+
 // Generate discovers, snapshots, reads, aggregates, re-snapshots, and persists.
 func Generate(ctx context.Context, options GenerateOptions) (Generation, error) {
 	started := time.Now()
@@ -44,41 +61,42 @@ func Generate(ctx context.Context, options GenerateOptions) (Generation, error) 
 		}
 	}
 
-	type discovered struct {
-		reader    provider.Reader
-		discovery provider.Discovery
-		err       error
-	}
-	discoveries := make([]discovered, 0, len(options.Readers))
-	var auditRoots []string
-	var auditFiles []string
-	var sourceRoots []string
-	var sourceFiles []string
-	for _, reader := range options.Readers {
-		d, err := reader.Discover(ctx)
-		discoveries = append(discoveries, discovered{reader: reader, discovery: d, err: err})
-		auditRoots = append(auditRoots, d.Roots...)
-		sourceRoots = append(sourceRoots, d.Roots...)
-		auditFiles = append(auditFiles, d.Files...)
-		sourceFiles = append(sourceFiles, d.Files...)
-		sourceFiles = append(sourceFiles, d.ConfiguredFiles...)
-	}
-	if err := EnsureOutputSeparate(outputPath, sourceRoots, sourceFiles); err != nil {
+	inputs := discoverInputs(ctx, options.Readers)
+	if err := EnsureOutputSeparate(outputPath, inputs.sourceRoots, inputs.sourceFiles); err != nil {
 		return Generation{}, err
 	}
 
 	var before audit.Snapshot
 	var auditErr error
-	if options.AuditSources && len(auditRoots)+len(auditFiles) > 0 {
-		before, auditErr = audit.CaptureDiscovered(ctx, auditRoots, auditFiles)
+	if options.AuditSources && inputs.hasAuditPaths() {
+		stable := false
+		for attempt := 0; attempt < 3; attempt++ {
+			before, auditErr = audit.CaptureConfigured(ctx, inputs.auditRoots, inputs.auditFiles, inputs.auditConfigured)
+			if auditErr != nil {
+				break
+			}
+			refreshed := discoverInputs(ctx, options.Readers)
+			if sameDiscoveryInputs(inputs, refreshed) {
+				inputs = refreshed
+				stable = true
+				break
+			}
+			inputs = refreshed
+			if err := EnsureOutputSeparate(outputPath, inputs.sourceRoots, inputs.sourceFiles); err != nil {
+				return Generation{}, err
+			}
+		}
+		if !stable && auditErr == nil {
+			auditErr = errors.New("source discovery did not stabilize before parsing")
+		}
 	}
 
-	results := make([]model.ProviderResult, 0, len(discoveries))
-	for _, item := range discoveries {
+	results := make([]model.ProviderResult, 0, len(inputs.items))
+	for _, item := range inputs.items {
 		if item.err != nil {
 			result := model.ProviderResult{
 				Harness: item.reader.Harness(), DisplayName: item.reader.DisplayName(),
-				Status: "unavailable", SourceFiles: item.discovery.Files,
+				Status: "unavailable", SourceFiles: append(append([]string(nil), item.discovery.Files...), item.discovery.AuditFiles...),
 			}
 			result.AddWarning("discovery_failed", "This provider's history location could not be inspected.")
 			results = append(results, result)
@@ -88,8 +106,8 @@ func Generate(ctx context.Context, options GenerateOptions) (Generation, error) 
 	}
 
 	comparison := audit.Comparison{}
-	if options.AuditSources && auditErr == nil && len(auditRoots)+len(auditFiles) > 0 {
-		after, err := audit.CaptureDiscovered(ctx, auditRoots, auditFiles)
+	if options.AuditSources && auditErr == nil && inputs.hasAuditPaths() {
+		after, err := audit.CaptureConfigured(ctx, inputs.auditRoots, inputs.auditFiles, inputs.auditConfigured)
 		if err != nil {
 			auditErr = err
 		} else {
@@ -112,4 +130,65 @@ func Generate(ctx context.Context, options GenerateOptions) (Generation, error) 
 	return Generation{
 		Report: report, OutputPath: outputPath, Duration: time.Since(started), AuditError: auditErr,
 	}, nil
+}
+
+func discoverInputs(ctx context.Context, readers []provider.Reader) discoveryInputs {
+	inputs := discoveryInputs{items: make([]discoveredReader, 0, len(readers))}
+	for _, reader := range readers {
+		discovery, err := reader.Discover(ctx)
+		inputs.items = append(inputs.items, discoveredReader{reader: reader, discovery: discovery, err: err})
+		inputs.auditRoots = append(inputs.auditRoots, discovery.Roots...)
+		inputs.sourceRoots = append(inputs.sourceRoots, discovery.Roots...)
+		inputs.auditFiles = append(inputs.auditFiles, discovery.Files...)
+		inputs.auditFiles = append(inputs.auditFiles, discovery.AuditFiles...)
+		inputs.auditConfigured = append(inputs.auditConfigured, discovery.ConfiguredFiles...)
+		inputs.sourceFiles = append(inputs.sourceFiles, discovery.Files...)
+		inputs.sourceFiles = append(inputs.sourceFiles, discovery.AuditFiles...)
+		inputs.sourceFiles = append(inputs.sourceFiles, discovery.ConfiguredFiles...)
+	}
+	return inputs
+}
+
+func (inputs discoveryInputs) hasAuditPaths() bool {
+	return len(inputs.auditRoots)+len(inputs.auditFiles)+len(inputs.auditConfigured) > 0
+}
+
+func sameDiscoveryInputs(left, right discoveryInputs) bool {
+	if len(left.items) != len(right.items) {
+		return false
+	}
+	for index := range left.items {
+		if left.items[index].reader.Harness() != right.items[index].reader.Harness() ||
+			errorText(left.items[index].err) != errorText(right.items[index].err) ||
+			!samePaths(left.items[index].discovery.Roots, right.items[index].discovery.Roots) ||
+			!samePaths(left.items[index].discovery.Files, right.items[index].discovery.Files) ||
+			!samePaths(left.items[index].discovery.AuditFiles, right.items[index].discovery.AuditFiles) ||
+			!samePaths(left.items[index].discovery.ConfiguredFiles, right.items[index].discovery.ConfiguredFiles) {
+			return false
+		}
+	}
+	return true
+}
+
+func samePaths(left, right []string) bool {
+	if len(left) != len(right) {
+		return false
+	}
+	leftCopy := append([]string(nil), left...)
+	rightCopy := append([]string(nil), right...)
+	sort.Strings(leftCopy)
+	sort.Strings(rightCopy)
+	for index := range leftCopy {
+		if leftCopy[index] != rightCopy[index] {
+			return false
+		}
+	}
+	return true
+}
+
+func errorText(err error) string {
+	if err == nil {
+		return ""
+	}
+	return err.Error()
 }

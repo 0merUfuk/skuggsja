@@ -88,6 +88,30 @@ type Session struct {
 	Models        map[string]ModelActivity
 	Usage         TokenUsage
 	ToolCalls     int64
+	// Unanchored means the physical transcript contains no trustworthy record
+	// for its own session identity. Copied events may still contribute after
+	// global deduplication, but filesystem mtime is never treated as usage.
+	Unanchored bool
+	// HistoryOnly marks a session reconstructed from a harness's prompt-history
+	// index because its detailed transcript no longer exists locally.
+	HistoryOnly bool
+	// TimeUnavailable means a physical logical session was observed and remains
+	// countable, but no trustworthy activity timestamp survived for span/rhythm.
+	TimeUnavailable bool
+}
+
+// CoverageAssessment describes what can—and cannot—be inferred from the local
+// files for one harness. It is deliberately content-free and path-free.
+type CoverageAssessment struct {
+	Status                 string
+	Confidence             string
+	EarliestLocalEvidence  time.Time
+	EarliestDetailedRecord time.Time
+	HistoryOnlySessions    int
+	// UnmaterializedSessions is the union of known session references for which
+	// neither a detailed record nor a countable prompt-history session survives.
+	UnmaterializedSessions int
+	Note                   string
 }
 
 // Warning is deliberately aggregate-only so source paths or content cannot leak.
@@ -108,6 +132,7 @@ type ProviderResult struct {
 	SourceFiles        []string
 	Warnings           []Warning
 	Limitations        []string
+	Coverage           CoverageAssessment
 }
 
 // AddWarning increments a warning without retaining record-specific details.
