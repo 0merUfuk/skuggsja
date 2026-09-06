@@ -6,6 +6,16 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-09-06
+
+### Fixed
+
+- Use singular units for one session or prompt in harness-chart hover details, chart accessibility labels and weekday meters.
+
+### Changed
+
+- Verify native Linux ARM64 and Windows ARM64 targets in CI, with explicit runner and toolchain architecture assertions.
+
 ## [0.1.0] - 2026-09-06
 
 ### Added
@@ -75,5 +85,6 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 - The local report server has no authentication or encryption and is not intended for remote exposure.
 - Abrupt termination can leave a private SQLite copy in the OS temporary directory.
 
-[Unreleased]: https://github.com/0merUfuk/skuggsja/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/0merUfuk/skuggsja/compare/v0.1.1...HEAD
+[0.1.1]: https://github.com/0merUfuk/skuggsja/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/0merUfuk/skuggsja/releases/tag/v0.1.0

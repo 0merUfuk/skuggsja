@@ -327,6 +327,8 @@ async function usageChart(session, report, options = {}) {
   const chartResults = [];
   const available = v => Number.isSafeInteger(v) && v >= 0;
   const number = v => available(v) ? new Intl.NumberFormat("en-US").format(v) : "Not available";
+  const labelledCount = (value, metric) => available(value) ? number(value) + " " +
+    (metric === "sessions" ? (value === 1 ? "session" : "sessions") : (value === 1 ? "prompt" : "prompts")) : "Not available";
   const center = async selector => evaluate(session, `(() => {const e=document.querySelector(${JSON.stringify(selector)});if(!e)throw new Error('Missing chart control');e.scrollIntoView({block:'center',behavior:'instant'});const b=e.getBoundingClientRect();return {x:b.x+b.width/2,y:b.y+b.height/2};})()`);
   const click = async selector => {
     const point = await center(selector);
@@ -336,13 +338,19 @@ async function usageChart(session, report, options = {}) {
   };
   if (!options.synthetic) result.usage_chart = chartResults;
   chartCheck("usage chart present", await evaluate(session, "Boolean(document.querySelector('#usage-chart'))"), true);
+  const weekdays = await evaluate(session, "[...document.querySelectorAll('#weekday-list meter')].map(e=>({value:e.value,label:e.getAttribute('aria-label')}))");
+  const weekdayNames = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
+  chartCheck("weekday meters retain exact counts and singular or plural names", weekdays, weekdayNames.map((day,index) => {
+    const value = report.rhythm?.weekdays?.[index] || 0;
+    return {value,label:day+": "+labelledCount(value,"sessions")};
+  }));
   for (const metric of ["sessions", "prompts"]) {
     await click(`.usage-metric[data-metric="${metric}"]`);
     const actual = await evaluate(session, `(() => {
       const root=document.querySelector('#usage-chart'),svg=root.querySelector('.usage-svg');
       return {layout:root.dataset.layout,metric:root.dataset.metric,pressed:[...root.querySelectorAll('.usage-metric[aria-pressed="true"]')].map(e=>e.dataset.metric),viewBox:svg?svg.getAttribute('viewBox').split(/\\s+/).map(Number):null,
         bubbles:[...root.querySelectorAll('.usage-bubble')].map(e=>{const c=e.querySelector('circle');return {harness:e.dataset.harness,count:Number(e.dataset.count),role:e.getAttribute('role'),tabindex:e.getAttribute('tabindex'),label:e.getAttribute('aria-label'),cx:Number(c.getAttribute('cx')),cy:Number(c.getAttribute('cy')),r:Number(c.getAttribute('r')),fill:getComputedStyle(c).fill};}),
-        keys:[...root.querySelectorAll('.usage-key-button')].map(e=>({harness:e.dataset.harness,name:e.querySelector('.usage-key-name').textContent,value:e.querySelector('.usage-key-value').textContent,coverage:e.querySelector('.usage-key-coverage').textContent})),bars:[...root.querySelectorAll('.usage-bar')].map(e=>({value:e.value,max:e.max})),detailLive:root.querySelector('.usage-detail').getAttribute('aria-live')};
+        keys:[...root.querySelectorAll('.usage-key-button')].map(e=>({harness:e.dataset.harness,name:e.querySelector('.usage-key-name').textContent,value:e.querySelector('.usage-key-value').textContent,coverage:e.querySelector('.usage-key-coverage').textContent,label:e.getAttribute('aria-label')})),bars:[...root.querySelectorAll('.usage-bar')].map(e=>({value:e.value,max:e.max})),detailLive:root.querySelector('.usage-detail').getAttribute('aria-live')};
     })()`);
     chartResults.push(actual);
     const positive = report.providers.filter(p => Number.isSafeInteger(p[metric]) && p[metric] > 0);
@@ -353,6 +361,7 @@ async function usageChart(session, report, options = {}) {
       const key = actual.keys.find(k => k.harness === provider.id) || actual.keys.find(k => k.name === provider.name);
       chartCheck(`${metric} ${provider.id} key exact value`, key?.value, number(provider[metric]));
       chartCheck(`${metric} ${provider.id} key keeps coverage`, key?.coverage.includes(provider.coverage?.status || "Coverage assessment unavailable"), true);
+      chartCheck(`${metric} ${provider.id} key names the exact unit`, key?.label, provider.name+": "+labelledCount(provider[metric],metric)+". "+(provider.coverage?.status||"Coverage assessment unavailable"));
     }
     chartCheck(`${metric} detail is accessible`, actual.detailLive, "polite");
     chartCheck(`${metric} chart selects a supported presentation`,["packed","bars"].includes(actual.layout),true);
@@ -366,6 +375,10 @@ async function usageChart(session, report, options = {}) {
       chartCheck(`${metric} circles do not overlap`, actual.bubbles.every((a,i)=>actual.bubbles.slice(i+1).every(b=>Math.hypot(a.cx-b.cx,a.cy-b.cy)>=a.r+b.r-0.001)), true);
       chartCheck(`${metric} harness colors are distinct`, new Set(actual.bubbles.map(b=>b.fill)).size, positive.length);
       chartCheck(`${metric} bubbles expose button role and keyboard focus`, actual.bubbles.every(b=>b.role==="button"&&b.tabindex==="0"), true);
+      chartCheck(`${metric} bubbles name the exact singular or plural unit`, actual.bubbles.map(b=>b.label), actual.bubbles.map(b=>{
+        const provider=positive.find(p=>p.id===b.harness);
+        return provider.name+": "+labelledCount(provider[metric],metric)+". "+(provider.coverage?.status||"Coverage assessment unavailable");
+      }));
     } else {
       const values=report.providers.filter(p=>available(p[metric])).map(p=>p[metric]).sort((a,b)=>b-a);
       chartCheck(`${metric} bars retain all measured counts including zero`,actual.bars.map(b=>b.value),values);
@@ -379,6 +392,7 @@ async function usageChart(session, report, options = {}) {
       await cdp.send("Input.dispatchMouseEvent", {type:"mouseMoved",...point}, session);
       const detail=await evaluate(session, "document.querySelector('.usage-detail').textContent");
       chartCheck(`${metric} ${provider.id} hover has real detail`, detail.includes(provider.name)&&detail.includes(number(provider[metric])), true);
+      chartCheck(`${metric} ${provider.id} selected detail names the exact unit`,detail,provider.name+" · "+labelledCount(provider[metric],metric)+" · "+(provider.coverage?.status||"Coverage assessment unavailable")+".");
     }
   }
   const promptLayout=chartResults.at(-1).layout;
@@ -450,9 +464,9 @@ async function fulfillSynthetic(session, requestId, response) {
     body:Buffer.from(JSON.stringify(response.body || {})).toString("base64")}, session);
 }
 
-// Separate page, explicitly synthetic API responses. The primary page and every
-// product screenshot retain the real report. All requests still participate in
-// the same product zero-outbound ledger.
+// Separate page, explicitly synthetic API responses. The primary page and all
+// Rewind screenshots retain the real report; labelled synthetic screenshots
+// capture edge cases separately. All requests use the same outbound ledger.
 async function syntheticPresentationChecks() {
   const page=await newPage("product"),session=page.sessionId;
   result.synthetic_scenarios=[];
@@ -475,6 +489,8 @@ async function syntheticPresentationChecks() {
   for(const scenario of [
     {name:"one entity",counts:[7]},
     {name:"two entities",counts:[7,3]},
+    {name:"one recorded session",counts:[1],capture:true},
+    {name:"three single-session harnesses",counts:[1,1,1],packed:true,capture:true},
     {name:"three-entity tiny minority",counts:[1000000,3,1]},
     {name:"40-entity long tail",counts:[120,...Array(39).fill(1)]},
     {name:"sessions without positive prompts",counts:[7,3,2,1],zeroPrompts:true}
@@ -484,13 +500,17 @@ async function syntheticPresentationChecks() {
     await mobileViewport();
     const counts=scenario.counts;
     const providers=counts.map((count,index)=>({id:["claude","codex","cursor","hermes"][index]||"synthetic-"+index,name:"Synthetic harness "+index,sessions:count,prompts:scenario.zeroPrompts?0:count,coverage:{status:"completeness unknown"}}));
-    const body={schema_version:3,totals:{sessions:counts.reduce((a,b)=>a+b,0)},providers,models:[],warnings:[]};
+    const weekdayCounts=counts.reduce((days,count,index)=>{days[index%7]+=count;return days;},Array(7).fill(0));
+    const body={schema_version:3,totals:{sessions:counts.reduce((a,b)=>a+b,0)},providers,models:[],warnings:[],rhythm:{weekdays:weekdayCounts}};
     syntheticResponses.set(session,{body});
     await cdp.send("Page.navigate", {url:args.url}, session);
     await until(()=>evaluate(session,`document.querySelectorAll('#usage-chart .usage-key-button').length===${counts.length}`),"synthetic chart controls");
     await verifyMobileViewport(scenario.name);
     const actual=await evaluate(session,"(()=>{const r=document.querySelector('#usage-chart');return {circles:r.querySelectorAll('.usage-bubble').length,values:[...r.querySelectorAll('.usage-bar')].map(e=>e.value),names:[...r.querySelectorAll('.usage-key-name')].map(e=>e.textContent),controls:r.querySelectorAll('.usage-metric').length};})()");
-    if(!scenario.zeroPrompts) {
+    if(scenario.packed) {
+      check(`synthetic ${scenario.name} packs every positive count`,actual.circles,counts.length);
+      check(`synthetic ${scenario.name} does not also render bars`,actual.values,[]);
+    } else if(!scenario.zeroPrompts) {
       check(`synthetic ${scenario.name} fallback has no invented circles`,actual.circles,0);
       check(`synthetic ${scenario.name} fallback retains exact bars`,actual.values,[...counts].sort((a,b)=>b-a));
     }
@@ -498,6 +518,16 @@ async function syntheticPresentationChecks() {
     check(`synthetic ${counts.length}-entity fallback retains two unit controls`,actual.controls,2);
     const chart=await usageChart(session,body,{synthetic:true,prefix:`synthetic ${scenario.name}: `});
     result.synthetic_scenarios.push({name:scenario.name,counts,zero_prompts:Boolean(scenario.zeroPrompts),chart,pass:true});
+    if(scenario.capture) {
+      await mobileViewport();
+      await verifyMobileViewport(scenario.name+" label screenshots");
+      for(const metric of ["sessions","prompts"]) {
+        await pointer(`.usage-metric[data-metric="${metric}"]`);
+        await evaluate(session,"document.querySelector('.usage-detail').scrollIntoView({block:'end',behavior:'instant'})");
+        await settled(session);
+        await screenshot(session,`synthetic-${scenario.name.replaceAll(' ','-')}-${metric}-390-dpr2.png`);
+      }
+    }
   }
   await mobileViewport();
   syntheticResponses.set(session,{hold:true});

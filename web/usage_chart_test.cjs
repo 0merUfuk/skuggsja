@@ -147,6 +147,30 @@ test("circle hover, tap and keyboard expose the same exact record and coverage",
   assert.equal(ui.byClass("usage-detail")[0].attributes["aria-live"], "polite");
 });
 
+test("chart names and selected details use singular units for one in both circle and bar layouts", () => {
+  for (const scenario of [
+    { counts: [1, 0, 2, null], layout: "bars", sessions: ["1 session", "0 sessions", "2 sessions", "Not available"], prompts: ["1 prompt", "0 prompts", "2 prompts", "Not available"] },
+    { counts: [1, 1, 1], layout: "packed", sessions: ["1 session", "1 session", "1 session"], prompts: ["1 prompt", "1 prompt", "1 prompt"] }
+  ]) {
+    const providers = harnesses(scenario.counts);
+    const ui = setup(providers);
+    for (const [index, metric] of ["sessions", "prompts"].entries()) {
+      ui.metrics()[index].listeners.click();
+      assert.equal(ui.container.attributes["data-layout"], scenario.layout);
+      for (const node of [...ui.byClass("usage-key-button"), ...ui.byClass("usage-bubble")]) {
+        const providerIndex = providers.findIndex((provider) => provider.id === node.attributes["data-harness"]);
+        const name = providers[providerIndex].name;
+        const value = scenario[metric][providerIndex];
+        assert.equal(node.attributes["aria-label"], `${name}: ${value}. completeness unknown`);
+        for (const event of ["pointerenter", "click", "focus"]) {
+          node.listeners[event]();
+          assert.equal(ui.byClass("usage-detail")[0].textContent, `${name} · ${value} · completeness unknown.`);
+        }
+      }
+    }
+  }
+});
+
 test("labels use inert text, retain privacy redaction and never control CSS or markup", () => {
   const providers = harnesses([9, 7, 6]);
   providers[0].name = "<img src=x onerror=alert(1)> /Users/private/project\nname";

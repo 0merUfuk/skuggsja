@@ -61,6 +61,41 @@ Fresh local ordinary and race suites passed **199 tests/subtests each**, with ze
 
 The public-history audit compared **20 mapped commits and 1,487 tree entries** against privately retained originals, with production bytes and file modes preserved. Only the explicitly reviewed privacy/documentation/attribution/fixture-label transformations were allowed. The restored public source tree exactly matched the committed final source tree. Full-history and public-tree secret scans reported zero findings; independent content inspection also checked identifying paths and private context.
 
+### Published v0.1.0 checkpoint
+
+[v0.1.0](https://github.com/0merUfuk/skuggsja/releases/tag/v0.1.0) was published on 2026-09-06 from commit `4bd47168e7e5faacbada3266991a58ac95db9dd0`. [Release run 34051730255](https://github.com/0merUfuk/skuggsja/actions/runs/34051730255) passed **6/6 jobs**, including its five reused CI gates and artifact publication. The separately recorded pre-tag CI run above passed **5/5 jobs**. This section records that release's completed distribution evidence; it does not certify later changes.
+
+| Published-artifact check | Result |
+| --- | --- |
+| Downloaded release inventory | Six platform archives, `checksums.txt` and `skuggsja.rb`; no missing or extra release assets |
+| GitHub provenance verification | **8/8 assets PASS**, tied to the release workflow, exact `refs/tags/v0.1.0`, source commit and GitHub-hosted runner identity |
+| Downloaded archive verification against the tagged source | **6/6 PASS** for checksums, regular-file contents, packaged documentation, embedded assets and Go target/build/source metadata |
+| Extracted macOS arm64 release executable | **29/29 isolated installed-CLI checks PASS**, using synthetic sources |
+
+[Homebrew run 34052028078](https://github.com/0merUfuk/homebrew-thematrix/actions/runs/34052028078) passed its attestation gate and **20/20 updater tests**, then committed only `Formula/skuggsja.rb`. All three hosted lifecycle jobs passed:
+
+| Native Homebrew platform | Recorded v0.1.0 lifecycle |
+| --- | --- |
+| Linux amd64, `ubuntu-24.04` | Install, formula test, **29/29** isolated installed-CLI checks, already-current upgrade, reinstall, a second formula test, uninstall and removal assertions |
+| macOS amd64, `macos-15-intel` | The same lifecycle and **29/29** installed-CLI checks |
+| macOS arm64, `macos-15` | The same lifecycle and **29/29** installed-CLI checks |
+
+The owner's macOS arm64 installation also passed **11/11 command stages**, including its **29/29** synthetic installed-CLI checks. The installed executable matched the downloaded release binary, and the installed formula matched the attested formula asset. Bash, Zsh and Fish completions were present. Uninstall was exercised, then v0.1.0 was installed again and left available at this checkpoint; the existing default report was unchanged. Upgrade verification was an already-current no-op. No older-to-newer release upgrade was fabricated.
+
+A public documentation audit checked all 11 Markdown files: **38/38** local links/anchors, **5/5** external targets, **25/25** configuration variables, **5/5** explicit CLI flags and **9/9** referenced verification scripts passed. All **16/16** committed documentation/metadata blobs matched public `main`. One stale Windows DACL sentence in `ARCHITECTURE.md` was identified for correction without broadening real-harness coverage.
+
+Read-only GitHub API checks confirmed five required CI contexts on `main`, strict up-to-date checks, one approving review with stale reviews dismissed, required conversation resolution, and disabled force pushes and branch deletion. **Administrator enforcement is disabled (`enforce_admins=false`): the owner retains administrator bypass, so these branch rules are not universal enforcement.** The active [stable-tag ruleset](https://github.com/0merUfuk/skuggsja/rules/22397946) blocks updates and deletion for `refs/tags/v*`, with no bypass actors; creation of new version tags remains allowed.
+
+At this checkpoint, Linux/arm64 and Windows/arm64 archives were built and verified structurally, but their native CLI validation and Linux/arm64 Homebrew lifecycle had no completed result. Subsequent ARM and UI work must record its own results. None of the distribution checks reread personal histories, change the original equality scope, or establish Linux/Windows real-harness coverage.
+
+### Native ARM64 verification
+
+[CI run 34053233092](https://github.com/0merUfuk/skuggsja/actions/runs/34053233092), at `55dd2b8973909f39824fe044a39ebcb1974eb7f6`, passed **7/7 jobs**. Native tests now cover macOS arm64, Linux amd64/arm64 and Windows amd64/arm64. Each of the five native jobs verified the runner architecture, Node architecture, Go host and Go target before passing all 12 Go packages, module verification, vet, **34/34** frontend/formula checks, build and **29/29** isolated installed-CLI checks. Race suites passed on macOS and both Linux architectures; Windows race tests are intentionally excluded. The six-platform package gate passed its **8/8** regression checks, **6/6** archives and **29/29** extracted Linux executable checks. Calibrated runtime network denial remains a macOS check.
+
+All seven CI contexts are now required on `main`, with strict checks bound to the GitHub Actions application. An independent API read confirmed this configuration; the documented administrator bypass remains. This native checkpoint predates the final singular-label correction. It establishes synthetic Windows DACL and CLI behavior on both architectures, not real Windows or Linux harness-store coverage.
+
+[Homebrew run 34053315403](https://github.com/0merUfuk/homebrew-thematrix/actions/runs/34053315403) passed **5/5 jobs** for the unchanged, attested v0.1.0 formula. Linux arm64, Linux amd64, macOS arm64 and macOS amd64 each passed **29/29** installed-CLI checks, two formula tests, install, current-version upgrade, reinstall, uninstall and removal assertions. The updater passed **20/20** checks and made no commit for the unchanged formula. This closes native Homebrew coverage for all four formula targets; its current-version upgrade remains a no-op.
+
 ## Read-only access and release equality are separate claims
 
 Skuggsja opens original sources read-only, gives SQLite private copies, and guards output and cleanup destinations against source roots, source files and protected SQLite parents. The production binary is not an OS sandbox and does not remove the caller's filesystem permissions. Its source-access guarantee comes from its reader/writer architecture and regression checks.
@@ -138,6 +173,26 @@ The following paths are relative to `setup-audit-20260906/ui/` in the **private 
 | Exact file/screenshot digests, request counts and cleanup | `ui-final-manifest.json`; `UI-UX-AUDIT.md` |
 
 The local `interface-guidelines` skill informed native semantics, touch targets, focus visibility and responsive checks. Independent local review found no actionable issue in the disclosure implementation and verifier. This correction used the previously retained aggregate only: it did not reread original histories, rerun live parser verification or change the release equality record.
+
+### Singular usage labels — v0.1.1 candidate
+
+The chart reused plural metric identifiers in accessible names and selected details, producing “1 sessions” and “1 prompts”; weekday meters also hardcoded “sessions.” Two new regression tests reproduced the defects against unchanged production code: **30 PASS, 2 FAIL**. A shared chart count-label formatter now supplies the correct noun to circle/key accessible names and selected details. Weekday meters use the existing plural helper. Zero, unavailable and plural values keep their meaning; counts, geometry, parsers and source handling are unchanged.
+
+| Candidate check | Result |
+| --- | --- |
+| Frontend regression suites | **32/32 PASS**, including singular/zero/plural/unavailable labels, circle and bar layouts, metric changes and pointer/focus selection |
+| Frontend plus Homebrew-generator suites | **36/36 PASS** |
+| Fresh ordinary Go and race suites | **199 PASS each**, no failures; the existing opt-in real-data skip remains |
+| Vet, native build and isolated installed CLI | PASS; **29/29** installed-command checks for the candidate version |
+| Chrome Headless 152.0.7977.82 / CDP | **1,582/1,582 PASS**; 49 retained-report screenshots and four explicitly synthetic one-count chart screenshots |
+| Product browser requests | **63**, all loopback; the separately labelled external negative control was blocked |
+| Browser faults | Zero application exceptions, uninstrumented targets or observer failures |
+| Embedded assets and CSP | All three served assets match the worktree byte-for-byte; existing asset-origin and CSP checks remain unchanged and pass |
+| Independent isolated code review | Zero findings across the five changed presentation/test/verifier/CI files |
+
+The full **1280, 1440, 1728, 1920, 320 and 390 CSS px** matrix at **DPR 2** retained the disclosure, real-value, overflow, chart geometry, keyboard/touch, loading/error/empty/retry and reduced-motion checks. Exact accessible-unit assertions cover every chart key, circle, selected detail and weekday meter. Separate synthetic cases exercise a one-session bar and three one-session circles in both Sessions and Prompts modes; their four mobile captures were visually inspected alongside actual retained-report views. All owned verification processes closed and the isolated Chrome profile was removed.
+
+Evidence paths are relative to `setup-audit-20260906/ui-plural-patch/` in the **private evidence archive**, not the repository: `frontend-before.log`, `frontend-after.log`, `browser/browser-result.json`, `browser/rewind-{width}-dpr2.png`, `browser/rewind-{width}-disclosure-{index}-{expanded,end}.png`, `browser/synthetic-{one-recorded-session,three-single-session-harnesses}-{sessions,prompts}-390-dpr2.png`, `served-assets.json`, `summary.json` and `manifest.json`. Personal usage screenshots and report/source fingerprints remain private. This presentation correction used the retained aggregate only; no original history, live parser audit or release equality window was rerun.
 
 ### Taste principles applied
 

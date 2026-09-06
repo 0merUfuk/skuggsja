@@ -58,7 +58,7 @@ The macOS verification harness creates disposable synthetic histories for all fo
 ### Artifact and web-server hardening
 
 - The aggregate is encoded to a same-directory temporary file, set to mode `0600` where supported, synced, and renamed over the previous artifact.
-- The default product directory is set to mode `0700` on Unix-like systems. Windows applies and validates a protected, inheritable DACL limited to the current user and LocalSystem before artifact creation; synthetic Windows/x64 CI verifies the directory protection and inherited artifact access.
+- The default product directory is set to mode `0700` on Unix-like systems. Windows applies and validates a protected, inheritable DACL limited to the current user and LocalSystem before artifact creation; synthetic Windows amd64/arm64 CI verifies the directory protection and inherited artifact access.
 - Generation fails before reads when a source root overlaps the artifact directory, or a source file equals the artifact, lies below its directory, or aliases it; `clean` performs the corresponding configured-source check before deletion. A standalone source file may live in an ancestor directory. Cleaned paths, resolved symlinks, conservative macOS/Windows case folding, existing ancestor identity, and hard-link identity are checked. Write and clean operations also reject output-directory symlink components. Declared paths remain protected after discovery errors.
 - `clean` also refuses to remove an unexpected artifact filename.
 - The server never binds a wildcard or LAN address; an occupied requested port falls back to another loopback port.
@@ -91,7 +91,7 @@ Skuggsja is intended for one user inspecting their own histories on a machine th
 | Remote access to report | Bind `127.0.0.1` only and reject non-loopback hostnames | Any sufficiently privileged local process can connect with an allowed Host header; there is no app authentication |
 | Partial/malformed history causing false precision | Warnings, record bounds, SQLite-schema and Codex-mode refusal, per-provider coverage status, and provider-scoped semantics | Upstream private formats can change; Claude/Codex filename-matched valid JSON with no recognized records may currently look supported but empty |
 | Artifact disclosure | Private Unix modes or a protected Windows DACL, plus a privacy-reduced schema | No encryption at rest; real Windows harness stores remain unverified; custom copies inherit downstream handling |
-| Temporary SQLite disclosure | Private Unix modes or a validated protected Windows DACL, plus normal-path cleanup | Crash or `SIGKILL` may leave a raw copy in the OS temp directory; synthetic Windows/x64 tests pass, while real Windows harness stores remain unverified |
+| Temporary SQLite disclosure | Private Unix modes or a validated protected Windows DACL, plus normal-path cleanup | Crash or `SIGKILL` may leave a raw copy in the OS temp directory; synthetic Windows amd64/arm64 tests pass, while real Windows harness stores remain unverified |
 | Dependency or build-chain compromise | Small dependency surface, reproducible module versions, reviewable Go build | Dependency acquisition is networked and remains a supply-chain trust decision |
 
 ## Out of scope and non-goals

@@ -51,7 +51,7 @@ The formula also installs Bash, Zsh and Fish completions. It has no Go, Python o
 
 ### Manual archives
 
-Download the matching v0.1.0 archive and `checksums.txt` from the [v0.1.0 release](https://github.com/0merUfuk/skuggsja/releases/tag/v0.1.0). Archives contain the executable, README and MIT license. Choose `amd64` for Intel/AMD 64-bit systems or `arm64` for Apple Silicon and other ARM64 systems. macOS and Linux use `.tar.gz`; Windows uses `.zip`. A checksummed build for an architecture is not evidence that real harness data was tested there.
+Download the matching v0.1.1 archive and `checksums.txt` from the [v0.1.1 release](https://github.com/0merUfuk/skuggsja/releases/tag/v0.1.1). Archives contain the executable, README and MIT license. Choose `amd64` for Intel/AMD 64-bit systems or `arm64` for Apple Silicon and other ARM64 systems. macOS and Linux use `.tar.gz`; Windows uses `.zip`. A checksummed build for an architecture is not evidence that real harness data was tested there.
 
 For Linux x86-64, verify the downloaded archive before extracting it. The checksum command must report `OK`:
 
@@ -62,7 +62,7 @@ sha256sum --check --ignore-missing checksums.txt
 Then install the executable in your user bin directory:
 
 ```sh
-tar -xzf skuggsja_0.1.0_linux_amd64.tar.gz skuggsja
+tar -xzf skuggsja_0.1.1_linux_amd64.tar.gz skuggsja
 install -Dm755 skuggsja "$HOME/.local/bin/skuggsja"
 "$HOME/.local/bin/skuggsja" version
 ```
@@ -72,14 +72,14 @@ Keep `~/.local/bin` on `PATH` to invoke `skuggsja` from any directory. For ARM64
 For Windows x86-64, compare the SHA-256 output with the archive's entry in `checksums.txt` before extraction:
 
 ```powershell
-Get-FileHash .\skuggsja_0.1.0_windows_amd64.zip -Algorithm SHA256
-Select-String -Path .\checksums.txt -Pattern 'skuggsja_0\.1\.0_windows_amd64\.zip$'
+Get-FileHash .\skuggsja_0.1.1_windows_amd64.zip -Algorithm SHA256
+Select-String -Path .\checksums.txt -Pattern 'skuggsja_0\.1\.1_windows_amd64\.zip$'
 ```
 
 Once the hashes match, ignoring letter case:
 
 ```powershell
-Expand-Archive .\skuggsja_0.1.0_windows_amd64.zip -DestinationPath .\skuggsja
+Expand-Archive .\skuggsja_0.1.1_windows_amd64.zip -DestinationPath .\skuggsja
 .\skuggsja\skuggsja.exe version
 ```
 
@@ -203,7 +203,7 @@ The global displayed span runs from the earliest trustworthy top-level session s
 - Raw prompt text is used transiently to calculate counts and is absent from the normalized model and persisted report.
 - Source paths, session IDs, prompt IDs, call IDs, and tool IDs may exist temporarily for discovery or deduplication but are excluded from the JSON artifact.
 - The persisted artifact contains aggregate timestamps, counts, model labels, project basenames, provider warnings, and source-audit digests. It is privacy-reduced, not anonymous.
-- The default artifact is written through a synced same-directory temporary file and rename-over-existing. Unix-like systems receive a mode-`0700` artifact directory and mode-`0600` artifact. Windows applies and validates a protected directory DACL limited to the current user and LocalSystem; this behavior is covered by synthetic Windows/x64 CI tests.
+- The default artifact is written through a synced same-directory temporary file and rename-over-existing. Unix-like systems receive a mode-`0700` artifact directory and mode-`0600` artifact. Windows applies and validates a protected directory DACL limited to the current user and LocalSystem; this behavior is covered by synthetic Windows amd64/arm64 CI tests.
 - Optional before/after SHA-256 observation checks parsed and audit-only contents, configured/root presence, and directory membership. Concurrent activity, unavailable observation, and disabled observation never become source-integrity failures or warnings. The observation does not compare metadata such as access times, identify the other writer, or detect changes reverted between captures.
 
 The JSON report records `privacy.source_access: "read-only"` independently of `privacy.source_observation` (`observed`, `disabled`, or `unavailable`). The retained `privacy.source_audit.verified` field describes snapshot equality only; the terminal and UI do not use it as a source-access verdict.

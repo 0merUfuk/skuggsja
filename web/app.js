@@ -78,6 +78,11 @@
     return typeof value === "number" && Number.isSafeInteger(value) && value >= 0 ? value : null;
   }
 
+  function countLabel(value, metric) {
+    if (value === null) return "Not available";
+    return formatter.format(value) + " " + (value === 1 ? metric.slice(0, -1) : metric);
+  }
+
   function element(tag, className, label) {
     const node = document.createElement(tag);
     node.className = className;
@@ -125,8 +130,7 @@
       targets.forEach(function (target) {
         target.node.setAttribute("data-active", String(target.key === selected));
       });
-      detail.textContent = entry.name + " · " + (entry[metric] === null ? "Not available" :
-        formatter.format(entry[metric]) + " " + metric) + " · " + entry.coverage + ".";
+      detail.textContent = entry.name + " · " + countLabel(entry[metric], metric) + " · " + entry.coverage + ".";
     }
 
     function bind(node, entry, keyboard) {
@@ -168,8 +172,7 @@
         const button = element("button", "usage-key-button");
         button.type = "button";
         button.setAttribute("data-harness", entry.harness);
-        button.setAttribute("aria-label", entry.name + ": " +
-          (entry[metric] === null ? "Not available" : formatter.format(entry[metric]) + " " + metric) + ". " + entry.coverage);
+        button.setAttribute("aria-label", entry.name + ": " + countLabel(entry[metric], metric) + ". " + entry.coverage);
         const label = element("span", "usage-key-name", entry.name);
         const value = element("span", "usage-key-value", entry[metric] === null ? "Not available" : formatter.format(entry[metric]));
         button.append(label, value);
@@ -202,7 +205,7 @@
           const group = svg("g", {
             class: "usage-bubble", "data-harness": entry.harness, "data-count": entry[metric],
             role: "button", tabindex: "0",
-            "aria-label": entry.name + ": " + value + " " + metric + ". " + entry.coverage
+            "aria-label": entry.name + ": " + countLabel(entry[metric], metric) + ". " + entry.coverage
           });
           group.append(svg("circle", { cx: circle.x, cy: circle.y, r: circle.r }));
           group.append(svg("text", {
@@ -617,7 +620,7 @@
       meter.min = 0;
       meter.max = maximum;
       meter.value = count;
-      meter.setAttribute("aria-label", weekdayNames[index] + ": " + formatNumber(count) + " sessions");
+      meter.setAttribute("aria-label", weekdayNames[index] + ": " + formatNumber(count) + " " + plural(count, "session", "sessions"));
       value.textContent = formatNumber(count);
       item.append(label, meter, value);
       list.appendChild(item);

@@ -6,7 +6,7 @@ Release from a reviewed commit using a canonical stable tag, `vMAJOR.MINOR.PATCH
 
 Review the final commit and [CHANGELOG.md](CHANGELOG.md). Keep the release scope consistent with [VERIFICATION.md](VERIFICATION.md): browser QA, source-access guarantees, runtime networking and release equality are separate records. Existing real-data equality evidence does not need to be regenerated for presentation or packaging changes that leave its scope intact.
 
-The repository's default-branch rules should require reviewed changes and the current CI checks, and prevent branch deletion and force pushes. Inspect the actual repository rules before relying on them; workflow files do not configure branch protection. This document does not claim that those remote rules are enabled.
+The default branch requires up-to-date CI checks, one approving review, dismissal of stale reviews and resolved conversations; force pushes and branch deletion are disabled. The owner intentionally retains administrator bypass (`enforce_admins=false`). This is a documented exception, not universal enforcement or approval to bypass a failed check. The active stable-tag ruleset forbids updates and deletion for `v*` tags with no bypass actors. Inspect the actual repository rules before relying on them, and keep required check names aligned with the CI matrix; workflow files do not configure branch protection. [VERIFICATION.md](VERIFICATION.md) records the observed settings.
 
 Run the applicable local checks from [CONTRIBUTING.md](CONTRIBUTING.md), including:
 
@@ -42,13 +42,17 @@ node scripts/generate-homebrew.cjs "$RELEASE_TAG" dist/checksums.txt dist/skuggs
 
 The publish job uses this repository's automatic `GITHUB_TOKEN` with `contents: write`, plus `id-token: write` and `attestations: write` for provenance. No personal access token or cross-repository tap secret is required. After a failure, inspect the failed stage and any existing release before retrying; the workflow does not silently replace an existing release.
 
+After publication, download all eight release assets and verify each asset's provenance against the expected repository, release workflow and exact tag, rejecting self-hosted signer runs. Run the package verifier against those downloaded archives from a clean checkout of the tagged source. The archived README, license, embedded assets and source revision must match that tag; a newer working tree is not the verification reference. Record the native extracted executable's isolated installation result separately from six-target cross-compilation and package checks. A correction to a published executable requires a new version and tag; do not replace an existing stable artifact or move its tag.
+
 ## Homebrew synchronization
 
 The tap workflow is `.github/workflows/update-skuggsja.yml` in `0merUfuk/homebrew-thematrix`. It runs daily at **07:23 UTC** and supports manual dispatch without inputs. It reads Skuggsja's latest stable public release; an HTTP 404 response when no stable release exists is a no-op.
 
 Before copying `Formula/skuggsja.rb`, it verifies the downloaded formula's GitHub attestation against `0merUfuk/skuggsja`, the release workflow, the exact tag reference, and GitHub-hosted runners. It rejects drafts, prereleases, malformed tags, missing or duplicate formula assets, rollbacks and changed formula contents for an already-installed version. Only a verified changed formula is committed and pushed to the tap's `main` branch.
 
-The tap job uses its own automatic `GITHUB_TOKEN` with `contents: write`; it does not use a PAT, a token from Skuggsja, or a cross-repository dispatch secret. The tap's branch rules must permit this narrowly scoped bot update. If the workflow is blocked by permissions or branch rules, resolve that configuration rather than bypassing attestation.
+The updater job uses its own automatic `GITHUB_TOKEN` with `contents: write`; it does not use a PAT, a token from Skuggsja, or a cross-repository dispatch secret. The tap's branch rules must permit this narrowly scoped bot update. If the workflow is blocked by permissions or branch rules, resolve that configuration rather than bypassing attestation.
+
+After a stable formula is verified, separate jobs with read-only permissions exercise the public Homebrew package on the workflow's declared native OS/architecture matrix. They assert the runner architecture and installed version, run the formula test and isolated synthetic CLI smoke, exercise an already-current upgrade and actual reinstall, then uninstall and assert removal. A successful current-version upgrade is a no-op check; it does not establish an older-to-newer migration. When no stable release exists, the lifecycle jobs are skipped and cannot be counted as passing installation evidence.
 
 After publishing a stable release, an authorized maintainer can request synchronization immediately:
 

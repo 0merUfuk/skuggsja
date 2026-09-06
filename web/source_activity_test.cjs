@@ -198,6 +198,20 @@ test("short ranked-list disclosures do not repeat the collapse control", async (
   assert.equal(more.children[0].textContent, "Show fewer");
 });
 
+test("weekday meters name exact zero, singular and plural session counts", async () => {
+  const elements = await render({
+    totals: { sessions: 3 },
+    rhythm: { weekdays: [0, 1, 2, 0, 0, 0, 0] }
+  });
+  const meters = elements.get("weekday-list").children.map((row) => row.children[1]);
+  assert.deepEqual(meters.map((meter) => meter.attributes["aria-label"]), [
+    "Monday: 0 sessions", "Tuesday: 1 session", "Wednesday: 2 sessions",
+    "Thursday: 0 sessions", "Friday: 0 sessions", "Saturday: 0 sessions", "Sunday: 0 sessions"
+  ]);
+  assert.deepEqual(meters.map((meter) => meter.value), [0, 1, 2, 0, 0, 0, 0]);
+  assert.equal(meters.every((meter) => meter.max === 2), true);
+});
+
 for (const scenario of [
   { name: "quiet", observation: "observed", audit: { files: 8, verified: true }, want: /No concurrent source changes were observed/ },
   { name: "incomplete equality is neutral", observation: "observed", audit: { files: 8, verified: false }, want: /No concurrent source changes were observed/ },
