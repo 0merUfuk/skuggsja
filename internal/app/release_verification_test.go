@@ -23,7 +23,7 @@ import (
 func TestReleaseRetriesRetainChangedWindowsAndStopAtFirstEquality(t *testing.T) {
 	root := t.TempDir()
 	evidence := t.TempDir()
-	if err := os.Chmod(evidence, 0o700); err != nil {
+	if err := secureReleaseEvidenceFixture(evidence); err != nil {
 		t.Fatal(err)
 	}
 	t.Setenv("SKUGGSJA_RELEASE_EVIDENCE_DIR", evidence)
@@ -141,7 +141,7 @@ func TestReleaseRetriesHonorCancellationAndOperationalErrors(t *testing.T) {
 func TestReleaseSnapshotRetainsExactPrivateInventoryAndAbsences(t *testing.T) {
 	source := t.TempDir()
 	evidence := t.TempDir()
-	if err := os.Chmod(evidence, 0o700); err != nil {
+	if err := secureReleaseEvidenceFixture(evidence); err != nil {
 		t.Fatal(err)
 	}
 	t.Setenv("SKUGGSJA_RELEASE_EVIDENCE_DIR", evidence)
@@ -158,9 +158,8 @@ func TestReleaseSnapshotRetainsExactPrivateInventoryAndAbsences(t *testing.T) {
 	}
 	writeReleaseSnapshot(t, "excluded-codex-before.json", inputs, snapshot, time.Now().UTC(), inputs)
 	path := filepath.Join(evidence, "excluded-codex-before.json")
-	info, err := os.Stat(path)
-	if err != nil || info.Mode().Perm() != 0o600 {
-		t.Fatalf("private snapshot permissions: info=%v error=%v", info, err)
+	if err := releaseEvidencePrivacy(path, false); err != nil {
+		t.Fatalf("private snapshot access controls: %v", err)
 	}
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -220,7 +219,7 @@ func TestReleaseSelectedReportPreservesExactBytesAndEqualityLabel(t *testing.T) 
 	for _, verified := range []bool{true, false} {
 		t.Run(fmt.Sprintf("verified=%t", verified), func(t *testing.T) {
 			evidence := t.TempDir()
-			if err := os.Chmod(evidence, 0o700); err != nil {
+			if err := secureReleaseEvidenceFixture(evidence); err != nil {
 				t.Fatal(err)
 			}
 			t.Setenv("SKUGGSJA_RELEASE_EVIDENCE_DIR", evidence)
@@ -265,7 +264,7 @@ func (reader *releaseCountingReader) Read(context.Context, provider.Discovery) m
 func TestReleaseFallbackMeasuresExactlyClaudeCursorAndIngestsEveryOriginalReader(t *testing.T) {
 	root := t.TempDir()
 	evidence := t.TempDir()
-	if err := os.Chmod(evidence, 0o700); err != nil {
+	if err := secureReleaseEvidenceFixture(evidence); err != nil {
 		t.Fatal(err)
 	}
 	t.Setenv("SKUGGSJA_RELEASE_EVIDENCE_DIR", evidence)
@@ -398,7 +397,7 @@ func TestReleaseFallbackReportNamesCannotImplyCompleteScopeEquality(t *testing.T
 	for _, verified := range []bool{true, false} {
 		t.Run(fmt.Sprintf("verified=%t", verified), func(t *testing.T) {
 			evidence := t.TempDir()
-			if err := os.Chmod(evidence, 0o700); err != nil {
+			if err := secureReleaseEvidenceFixture(evidence); err != nil {
 				t.Fatal(err)
 			}
 			t.Setenv("SKUGGSJA_RELEASE_EVIDENCE_DIR", evidence)

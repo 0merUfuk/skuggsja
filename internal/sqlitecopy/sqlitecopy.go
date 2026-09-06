@@ -320,7 +320,13 @@ func openConnection(path string, queryOnly bool) (*sql.DB, error) {
 		query.Set("mode", "ro")
 		query.Set("_query_only", "1")
 	}
-	dsnURL := &url.URL{Scheme: "file", Path: path, RawQuery: query.Encode()}
+	// A Windows drive must be part of the URI path, not its authority.
+	// ToSlash preserves literal backslashes in Unix filenames.
+	uriPath := filepath.ToSlash(path)
+	if volume := filepath.VolumeName(path); len(volume) == 2 && volume[1] == ':' {
+		uriPath = "/" + uriPath
+	}
+	dsnURL := &url.URL{Scheme: "file", Path: uriPath, RawQuery: query.Encode()}
 	db, err := sql.Open("sqlite", dsnURL.String())
 	if err != nil {
 		return nil, fmt.Errorf("open private sqlite copy: %w", err)

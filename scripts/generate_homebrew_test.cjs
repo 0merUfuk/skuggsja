@@ -19,6 +19,10 @@ function scenario(t, tag = "v0.1.0", transform = (lines) => lines) {
 test("formula binds each platform to its own checksum without runtime build dependencies", (t) => {
   const { result, formula } = scenario(t);
   assert.equal(result.status, 0, result.stderr);
+  assert.deepEqual([...formula.matchAll(/^# Skuggsja release version: (.+)$/gm)].map((match) => match[1]), ["0.1.0"]);
+  assert.doesNotMatch(formula, /^\s*version\b/m);
+  const urls = [...formula.matchAll(/^\s*url "([^"]+)"$/gm)].map((match) => match[1]);
+  assert.deepEqual(urls, names.map((name) => `https://github.com/0merUfuk/skuggsja/releases/download/v0.1.0/skuggsja_0.1.0_${name}.tar.gz`));
   names.forEach((name, index) => assert(formula.includes(`skuggsja_0.1.0_${name}.tar.gz"\n      sha256 "${String(index + 1).repeat(64)}"`)));
   assert(formula.includes('bin.install "skuggsja"'));
   assert(formula.includes('generate_completions_from_executable'));

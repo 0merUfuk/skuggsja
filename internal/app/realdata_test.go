@@ -325,8 +325,8 @@ func releaseEvidencePath(t *testing.T, name string, all releaseInputs) string {
 		t.Fatal("release evidence must be separate from every source")
 	}
 	info, err := os.Lstat(dir)
-	if err != nil || !info.IsDir() || info.Mode()&os.ModeSymlink != 0 || info.Mode().Perm()&0o077 != 0 {
-		t.Fatal("release evidence requires an existing private directory with no group/other permissions")
+	if err != nil || !info.IsDir() || info.Mode()&os.ModeSymlink != 0 || releaseEvidencePrivacy(dir, true) != nil {
+		t.Fatal("release evidence requires an existing private directory with verified platform access controls")
 	}
 	return path
 }

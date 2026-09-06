@@ -23,10 +23,10 @@ function platform(os) {
 const formula = `# frozen_string_literal: true
 
 # Generated from the release checksums; do not edit download values manually.
+# Skuggsja release version: ${version}
 class Skuggsja < Formula
   desc "Local history retrospective for AI coding agents"
   homepage "https://github.com/0merUfuk/skuggsja"
-  version "${version}"
   license "MIT"
 
   on_macos do

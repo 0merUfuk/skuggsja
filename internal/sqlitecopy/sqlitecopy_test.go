@@ -21,6 +21,16 @@ func TestOpenReadsLiveWALWithoutChangingSource(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer writer.Close()
+	if runtime.GOOS == "windows" {
+		// A normal Windows WAL connection byte-locks the SHM file, which a
+		// complete audit must refuse to hash. This disposable fixture uses
+		// SQLite's documented WAL-without-shared-memory mode instead. The
+		// separate Windows test retains the normal locked-SHM failure case.
+		// https://www.sqlite.org/wal.html#use_of_wal_without_shared_memory
+		if _, err := writer.Exec("PRAGMA locking_mode=EXCLUSIVE"); err != nil {
+			t.Fatal(err)
+		}
+	}
 	if _, err := writer.Exec("PRAGMA journal_mode=WAL; PRAGMA wal_autocheckpoint=0; CREATE TABLE sessions (id TEXT PRIMARY KEY); INSERT INTO sessions VALUES ('synthetic-session');"); err != nil {
 		t.Fatal(err)
 	}
@@ -149,5 +159,47 @@ func TestPrivateTempDirectoryPermissions(t *testing.T) {
 	}
 	if permissions := info.Mode().Perm(); permissions != 0o700 {
 		t.Fatalf("private temp directory permissions = %o, want 700", permissions)
+	}
+}
+
+func TestOpenHandlesEscapedPrivateCopyFilename(t *testing.T) {
+	t.Parallel()
+	source := filepath.Join(t.TempDir(), "history #100% & notes.db")
+	writer, err := sql.Open("sqlite", source)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := writer.Exec("CREATE TABLE sessions (id TEXT); INSERT INTO sessions VALUES ('literal filename')"); err != nil {
+		_ = writer.Close()
+		t.Fatal(err)
+	}
+	if err := writer.Close(); err != nil {
+		t.Fatal(err)
+	}
+	before, err := audit.Capture(context.Background(), []string{source})
+	if err != nil {
+		t.Fatal(err)
+	}
+	copyDB, err := Open(context.Background(), source)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer copyDB.Close()
+	var id string
+	if err := copyDB.DB.QueryRow("SELECT id FROM sessions").Scan(&id); err != nil || id != "literal filename" {
+		t.Fatalf("escaped private-copy query: id=%q error=%v", id, err)
+	}
+	if _, err := copyDB.DB.Exec("INSERT INTO sessions VALUES ('must-not-write')"); err == nil {
+		t.Fatal("escaped private copy accepted a write")
+	}
+	if err := copyDB.Close(); err != nil {
+		t.Fatal(err)
+	}
+	after, err := audit.Capture(context.Background(), []string{source})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if comparison := audit.Compare(before, after); !comparison.Verified {
+		t.Fatalf("escaped filename source changed: %+v", comparison)
 	}
 }
