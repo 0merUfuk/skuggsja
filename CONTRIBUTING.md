@@ -7,20 +7,27 @@ Thank you for helping improve Skuggsja. The project treats privacy claims as par
 - Go 1.27.1 or newer compatible toolchain
 - Git
 - A POSIX-like shell for the commands below; equivalent Go commands work on Windows
-- Node.js 22+ and Chrome Headless for browser verification; these are development tools, not product dependencies
+- Node.js 22.23.1, matching CI, for frontend regression tests, installation checks and browser verification
+- Python 3 for release archive validation
+- GoReleaser 2.18.1 for package builds, matching CI
+- Chrome for Testing Headless Shell for browser verification
+
+Node, Python, GoReleaser and Chrome are development tools, not product dependencies. The Go suite skips its frontend regression check if Node is unavailable; install Node before claiming the full frontend suite passed. Python and GoReleaser are needed only for packaging work; Chrome is needed for browser QA.
 
 Dependency and toolchain installation may use the network. The product's zero-outbound statement applies to the built program at runtime, not to development tooling.
 
 ## Set up and test
 
+From the repository root:
+
 ```sh
-git clone <your-fork-url>
-cd skuggsja
 go mod download
 go test ./...
 go vet ./...
-go build -trimpath -o ./skuggsja ./cmd/skuggsja
+CGO_ENABLED=0 go build -trimpath -o ./bin/skuggsja ./cmd/skuggsja
 ```
+
+Build artifacts belong in the ignored `bin/` directory. `./bin/skuggsja version` and `./bin/skuggsja --help` inspect the CLI without discovering or reading histories; running it without a subcommand generates a report from your local sources. On Windows, use `go build -trimpath -o ./bin/skuggsja.exe ./cmd/skuggsja`.
 
 Before submitting a change, format touched Go files and rerun the checks:
 
@@ -37,6 +44,35 @@ go test -race ./...
 ```
 
 Do not run integration experiments against histories you do not own or have permission to inspect.
+
+### Installation and package checks
+
+Exercise the built executable through an isolated install prefix, with every source redirected to disposable synthetic data:
+
+```sh
+node scripts/verify-install.cjs bin/skuggsja dev
+node --test scripts/generate_homebrew_test.cjs
+python3 scripts/verify_packages_test.py
+```
+
+On Windows, pass `bin/skuggsja.exe`. The optional second argument is the expected version; replace `dev` with the exact expected version for a release or CI build. This checks the CLI, first use, JSON persistence, synthetic counts, localhost routes and CSP, cleanup, and reinstall/removal. It changes `PATH` only in its child processes and preserves the user's home and harness settings. Its synthetic source-hash checks are separate from the real-data release equality record. Node's Windows termination behavior does not establish graceful Go signal handling there.
+
+Build and inspect all six platform archives without publishing:
+
+```sh
+goreleaser check
+goreleaser release --snapshot --clean --skip=publish
+python3 scripts/verify_packages_test.py
+python3 scripts/verify-packages.py dist
+```
+
+`--clean` replaces the generated `dist/` directory. Package validation requires exactly six checksummed archives, verifies regular-file members, current embedded assets, Go target/build metadata and checkout revision, then runs the native archive's installation smoke test. It does not read original histories. GoReleaser and dependency acquisition may use the network; this is a non-publishing build, not an offline-build claim.
+
+### CI gates
+
+[CI](.github/workflows/ci.yml) runs Go tests, vet, frontend/formula tests, builds, and installed-binary checks on macOS, Linux and Windows. Race checks run on macOS and Linux; the macOS job also runs the calibrated runtime network-isolation test. Separate jobs check Go formatting, known vulnerabilities and workflow syntax, then build and validate six snapshot packages. The release workflow reuses these jobs before producing publishable artifacts.
+
+Browser QA uses the retained-report procedure below; CI installation HTTP checks do not replace rendered-browser verification. See [RELEASING.md](RELEASING.md) for publication and tap synchronization.
 
 ## Repository conventions
 
@@ -197,7 +233,7 @@ Run `go test ./...` after any asset edit because the UI and CSP invariants are t
 
 ### Browser verification
 
-Use Node.js 22+ and an installed Chrome for Testing Headless Shell executable. Keep the executable, retained aggregate, screenshots, and browser evidence outside the repository. The procedure exercises the real embedded UI through Chrome DevTools Protocol (CDP); the DOM stubs in the JavaScript unit tests do not replace browser rendering.
+Use Node.js 22.23.1 and an installed Chrome for Testing Headless Shell executable. Keep the executable, retained aggregate, screenshots, and browser evidence outside the repository. The procedure exercises the real embedded UI through Chrome DevTools Protocol (CDP); the DOM stubs in the JavaScript unit tests do not replace browser rendering.
 
 Build the verification-only server and serve the current-schema aggregate retained by the release run:
 

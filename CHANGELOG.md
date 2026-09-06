@@ -8,6 +8,9 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ### Added
 
+- Prepared six-platform archive builds, a checksum-derived Homebrew formula for macOS/Linux, and workflows for build provenance and tap synchronization. Publication remains pending.
+- Reusable CI gates for macOS/Linux/Windows tests and installed-binary checks, package validation, workflow linting and vulnerability checks.
+- Isolated installation smoke tests covering first use, synthetic counts, localhost assets/API/CSP, cleanup and reinstall/removal without reading real histories.
 - Interactive harness circle chart sized by recorded sessions or prompts, with exact bar fallbacks and keyboard/touch detail. Model activity remains provider-scoped because model-level sessions/prompts are unavailable.
 - Local-first Rewind generation for Claude Code, Codex, Hermes Agent, and Cursor histories.
 - Per-provider root/child session, prompt, project, tool-call, and model-event summaries where exposed, plus available source-recorded token ledgers and aggregate rhythm and longest-session metrics.
@@ -23,7 +26,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 - Synthetic parser, aggregation, audit, SQLite-copy, server, and embedded-asset tests.
 - Claude nested child-session discovery, supplemental history/state/project-index reconciliation, copied-history diagnostics, streaming-response merging, and recorded thinking-token support.
 - Codex supplemental history/index/state/catalog evidence and exact boundary-validated pagination stitching.
-- Schema-v2 provider coverage assessments that distinguish recovered local records from account-lifetime usage.
+- Per-provider coverage assessments that distinguish recovered local records from account-lifetime usage.
 - An always-visible read-only source-access guarantee in CLI, JSON and UI, with neutral concurrent-source activity kept separate from release-only equality verification.
 - An opt-in release verifier that performs up to eight direct generation windows with fresh per-attempt manifests and aggregates, stops at the first complete equality result, and can explicitly retain a private hash/inventory snapshot of its self-hosted Codex store while excluding only that store from release equality.
 - Verification-only serving of retained aggregates and direct-CDP Chrome Headless checks for rendered values, responsive screenshots, and observed requests without rereading source histories.
@@ -40,6 +43,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ### Fixed
 
+- Ranked-list disclosures now show their open/closed state, offer a collapse control at the end of long lists, and return keyboard focus to the summary. Single counts use singular units in visible text and accessible labels.
 - Cancellation before report persistence preserves the previous complete artifact and cleans the private workspace; later readers are not started after cancellation.
 - Keyboard retries restore focus to the visible result or retry control, and chapter navigation stays hidden in loading, error and empty states.
 

@@ -34,18 +34,6 @@ archives:
       - LICENSE
       - README.md
 
-homebrew_casks:
-  - name: skuggsja
-    ids: [skuggsja]
-    repository:
-      owner: 0merUfuk
-      name: homebrew-thematrix
-      token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
-    directory: Casks
-    homepage: https://github.com/0merUfuk/skuggsja
-    description: Local-first Rewind for AI coding agents
-    license: MIT
-
 release:
   github:
     owner: 0merUfuk
@@ -56,4 +44,4 @@ checksum:
   name_template: checksums.txt
 
 changelog:
-  use: github-native
+  use: git

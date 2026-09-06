@@ -4,4 +4,4 @@
 /.DS_Store
 /rewind.json
 *.prof
-
+__pycache__/

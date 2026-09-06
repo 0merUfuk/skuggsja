@@ -2,68 +2,97 @@ name: CI
 
 on:
   push:
+    branches: ["**"]
   pull_request:
+  workflow_call:
 
 permissions:
   contents: read
 
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   test:
+    name: Test (${{ matrix.os }})
     strategy:
       fail-fast: false
       matrix:
         os: [macos-latest, ubuntu-latest, windows-latest]
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
     steps:
-      - name: Checkout
-        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
-
-      - name: Set up Go
-        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: go.mod
           cache: true
-
-      - name: Test
-        run: go test ./... -count=1
-
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22.23.1
       - name: Verify modules
         run: go mod verify
-
+      - name: Test
+        run: go test -count=1 ./...
       - name: Vet
         run: go vet ./...
-
-      - name: Check embedded JavaScript syntax
-        run: node --check web/app.js
-
+      - name: Frontend regression tests
+        run: node --test web/source_activity_test.cjs web/usage_chart_test.cjs scripts/generate_homebrew_test.cjs
       - name: Race test
         if: runner.os != 'Windows'
-        run: go test ./... -race -count=1
-
+        run: go test -race -count=1 ./...
+      - name: Build installed executable
+        shell: bash
+        run: CGO_ENABLED=0 go build -trimpath -ldflags='-s -w -X main.version=ci' -o bin/skuggsja${{ runner.os == 'Windows' && '.exe' || '' }} ./cmd/skuggsja
+      - name: Isolated installation and first use
+        run: node scripts/verify-install.cjs bin/skuggsja${{ runner.os == 'Windows' && '.exe' || '' }} ci
       - name: Verify generation and localhost UI with outbound networking denied
         if: runner.os == 'macOS'
         run: ./scripts/verify-runtime-offline.sh
 
-  cross-build:
+  quality:
+    name: Workflow and source checks
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
-      - name: Checkout
-        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
-
-      - name: Set up Go
-        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: go.mod
-          cache: true
-
-      - name: Build all release targets
+      - name: Check Go formatting
         shell: bash
         run: |
           set -euo pipefail
-          for target in darwin/amd64 darwin/arm64 linux/amd64 linux/arm64 windows/amd64 windows/arm64; do
-            os="${target%/*}"
-            arch="${target#*/}"
-            suffix=""
-            if [[ "$os" == windows ]]; then suffix=".exe"; fi
-            CGO_ENABLED=0 GOOS="$os" GOARCH="$arch" go build -trimpath -o "skuggsja_${os}_${arch}${suffix}" ./cmd/skuggsja
-          done
+          files=$(gofmt -l .)
+          if [[ -n "$files" ]]; then printf '%s\n' "$files"; exit 1; fi
+      - name: Check known vulnerabilities
+        run: go run golang.org/x/vuln/cmd/govulncheck@v1.7.0 ./...
+      - name: Validate workflows
+        run: go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.12 -color
+
+  package:
+    name: Six-platform package validation
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22.23.1
+      - name: Validate release configuration
+        uses: goreleaser/goreleaser-action@f06c13b6b1a9625abc9e6e439d9c05a8f2190e94 # v7.2.3
+        with:
+          version: v2.18.1
+          args: check
+      - name: Build local snapshot packages
+        run: goreleaser release --snapshot --clean --skip=publish
+      - name: Package verifier regression tests
+        run: python3 scripts/verify_packages_test.py
+      - name: Verify archives and installed native package
+        run: python3 scripts/verify-packages.py dist

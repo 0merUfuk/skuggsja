@@ -35,20 +35,58 @@ skuggsja
 
 Skuggsja ships as one Go executable with its UI embedded. A release binary does not require Go, Python, Node.js, a virtual environment, or a separate frontend server. The source-build commands above require Go only to compile it.
 
-The prepared macOS distribution uses a Homebrew cask in the existing `0merUfuk/thematrix` tap. **It is not published yet; these commands describe the intended release experience and will not work until the owner publishes the release and cask:**
+**The first release, v0.1.0, is not published yet.** The Homebrew and archive instructions below become available after publication. Use the checkout commands above in the meantime.
+
+The prepared Homebrew formula installs prebuilt binaries on macOS and Linux, for both Intel/AMD (`amd64`) and ARM (`arm64`):
 
 ```sh
-brew install --cask 0merUfuk/thematrix/skuggsja
+brew install 0merUfuk/thematrix/skuggsja
 skuggsja version
 skuggsja
 
-brew upgrade --cask skuggsja
-brew uninstall --cask skuggsja
+brew upgrade skuggsja
+brew uninstall skuggsja
 ```
 
 Once installed, `skuggsja` works from any directory and discovers its supported local histories automatically. It does not need project registration or a setup command. Installation and updates use Homebrew's network access; the executable's runtime remains local.
 
-The release configuration also prepares checksummed archives for macOS, Linux and Windows on `amd64` and `arm64`. Cross-compilation is not runtime verification of every platform. Homebrew installation, upgrades and removal remain unverified until an actual cask is published. Ordinary removal should leave the generated report in place; `skuggsja clean` is the separate command for removing that regenerable artifact.
+The formula also installs Bash, Zsh and Fish completions. It has no Go, Python or Node runtime dependency. Homebrew installation, upgrades and removal remain unverified until the published formula is exercised. Ordinary removal leaves the generated report in place; `skuggsja clean` is the separate command for removing that regenerable artifact.
+
+### Manual archives
+
+After publication, download the matching archive and `checksums.txt` from [GitHub Releases](https://github.com/0merUfuk/skuggsja/releases). Archives contain the executable, README and MIT license. Choose `amd64` for Intel/AMD 64-bit systems or `arm64` for Apple Silicon and other ARM64 systems. macOS and Linux use `.tar.gz`; Windows uses `.zip`. A checksummed build for an architecture is not evidence that real harness data was tested there.
+
+For Linux x86-64, verify the downloaded archive before extracting it. The checksum command must report `OK`:
+
+```sh
+sha256sum --check --ignore-missing checksums.txt
+```
+
+Then install the executable in your user bin directory:
+
+```sh
+tar -xzf skuggsja_0.1.0_linux_amd64.tar.gz skuggsja
+install -Dm755 skuggsja "$HOME/.local/bin/skuggsja"
+"$HOME/.local/bin/skuggsja" version
+```
+
+Keep `~/.local/bin` on `PATH` to invoke `skuggsja` from any directory. For ARM64, select the `linux_arm64` archive instead.
+
+For Windows x86-64, compare the SHA-256 output with the archive's entry in `checksums.txt` before extraction:
+
+```powershell
+Get-FileHash .\skuggsja_0.1.0_windows_amd64.zip -Algorithm SHA256
+Select-String -Path .\checksums.txt -Pattern 'skuggsja_0\.1\.0_windows_amd64\.zip$'
+```
+
+Once the hashes match, ignoring letter case:
+
+```powershell
+Expand-Archive .\skuggsja_0.1.0_windows_amd64.zip -DestinationPath .\skuggsja
+.\skuggsja\skuggsja.exe version
+```
+
+For Windows on ARM, select the `windows_arm64` archive. Move the executable to your preferred tools directory and add that directory to your user `PATH` for regular use. Manual updates replace that executable; manual removal deletes it. Generated reports are managed separately by `skuggsja clean`.
 
 ## What it reads
 
@@ -190,10 +228,10 @@ Read [PRIVACY.md](PRIVACY.md) before using real histories and [SECURITY.md](SECU
 ```sh
 go test ./...
 go vet ./...
-go build -trimpath -o ./skuggsja ./cmd/skuggsja
+CGO_ENABLED=0 go build -trimpath -o ./bin/skuggsja ./cmd/skuggsja
 ```
 
-Tests use synthetic fixtures and temporary databases. Never add real agent histories to the repository. See [CONTRIBUTING.md](CONTRIBUTING.md) for provider and privacy requirements.
+Tests use synthetic fixtures and temporary databases. CI uses Node.js 22.23.1 for frontend and packaging tests; Go skips its frontend check when Node is unavailable. The build writes to the ignored `bin/` directory. Never add real agent histories to the repository. See [CONTRIBUTING.md](CONTRIBUTING.md) for provider and privacy requirements.
 
 Browser verification uses a retained aggregate, the production loopback handler, and a separate Chrome Headless session controlled through CDP. The verification-only scripts capture responsive screenshots, rendered values, and request evidence without rereading source histories. See [the browser verification procedure](CONTRIBUTING.md#browser-verification) and [VERIFICATION.md](VERIFICATION.md) for recorded results.
 
@@ -204,6 +242,7 @@ Browser verification uses a retained aggregate, the production loopback handler,
 - [Security policy and threat model](SECURITY.md)
 - [Contributing](CONTRIBUTING.md)
 - [Changelog](CHANGELOG.md)
+- [Release procedure](RELEASING.md)
 
 ## License
 
