@@ -1,3 +1,234 @@
+// BEGIN SKUGGSJA USAGE CHART
+(function () {
+  "use strict";
+
+  const names = { claude: "Claude", codex: "Codex", cursor: "Cursor", hermes: "Hermes" };
+  const formatter = new Intl.NumberFormat(undefined, { maximumFractionDigits: 0 });
+
+  // A deterministic, tangent-circle layout. Radius is sqrt(count): ink area,
+  // never radius or diameter, represents the recorded count. Gaps add no data.
+  function pack(values) {
+    if (!values.length) return { circles: [], x: 0, y: 0, width: 1, height: 1 };
+    const gap = Math.sqrt(Math.max.apply(null, values)) * 0.06;
+    const circles = [];
+    const bounds = function (items) {
+      const left = Math.min.apply(null, items.map(function (c) { return c.x - c.r; }));
+      const top = Math.min.apply(null, items.map(function (c) { return c.y - c.r; }));
+      return {
+        x: left, y: top,
+        width: Math.max.apply(null, items.map(function (c) { return c.x + c.r; })) - left,
+        height: Math.max.apply(null, items.map(function (c) { return c.y + c.r; })) - top
+      };
+    };
+    values.forEach(function (value, index) {
+      const radius = Math.sqrt(value);
+      if (index === 0) {
+        circles.push({ x: 0, y: 0, r: radius });
+        return;
+      }
+      const previous = bounds(circles);
+      const candidates = [{ x: previous.x + previous.width + radius + gap, y: 0, r: radius }];
+      circles.forEach(function (a, i) {
+        circles.slice(i + 1).forEach(function (b) {
+          const dx = b.x - a.x, dy = b.y - a.y;
+          const distance = Math.hypot(dx, dy);
+          const ar = a.r + radius + gap, br = b.r + radius + gap;
+          if (!distance || distance > ar + br || distance < Math.abs(ar - br)) return;
+          const along = (ar * ar - br * br + distance * distance) / (2 * distance);
+          const across = Math.sqrt(Math.max(0, ar * ar - along * along));
+          [-1, 1].forEach(function (side) {
+            candidates.push({
+              x: a.x + along * dx / distance + side * across * dy / distance,
+              y: a.y + along * dy / distance - side * across * dx / distance,
+              r: radius
+            });
+          });
+        });
+      });
+      let best = candidates[0], score = Infinity;
+      candidates.forEach(function (candidate) {
+        const overlaps = circles.some(function (other) {
+          return Math.hypot(candidate.x - other.x, candidate.y - other.y) < radius + other.r + gap - 1e-8;
+        });
+        if (overlaps) return;
+        const box = bounds(circles.concat(candidate));
+        const cost = box.width * box.width + box.height * box.height;
+        if (cost < score) { best = candidate; score = cost; }
+      });
+      circles.push(best);
+    });
+    const box = bounds(circles), padding = gap * 2;
+    return {
+      circles: circles, x: box.x - padding, y: box.y - padding,
+      width: box.width + padding * 2, height: box.height + padding * 2
+    };
+  }
+
+  function text(value, fallback, limit) {
+    const clean = value === undefined || value === null ? "" : String(value)
+      .replace(/[\u0000-\u001f\u007f]+/g, " ")
+      .replace(/\/(?:Users|home)\/[^\s,;]+/g, "[local path]")
+      .replace(/[A-Za-z]:\\[^\s,;]+/g, "[local path]")
+      .replace(/\s+/g, " ").trim();
+    if (!clean) return fallback;
+    return clean.length > limit ? clean.slice(0, limit - 1).trimEnd() + "…" : clean;
+  }
+
+  function count(value) {
+    return typeof value === "number" && Number.isSafeInteger(value) && value >= 0 ? value : null;
+  }
+
+  function element(tag, className, label) {
+    const node = document.createElement(tag);
+    node.className = className;
+    if (label !== undefined) node.textContent = label;
+    return node;
+  }
+
+  function render(container, providers) {
+    if (!container) return;
+    const entries = (Array.isArray(providers) ? providers : []).filter(function (provider) {
+      return provider && typeof provider === "object" && !Array.isArray(provider);
+    }).map(function (provider, index) {
+      const harness = Object.prototype.hasOwnProperty.call(names, provider.id) ? provider.id : "unknown";
+      return {
+        key: index, harness: harness,
+        name: text(provider.name, names[harness] || "Harness", 80),
+        sessions: count(provider.sessions), prompts: count(provider.prompts),
+        coverage: text(provider.coverage && provider.coverage.status, "Coverage assessment unavailable", 80)
+      };
+    });
+    let metric = "sessions", selected = null, targets = [];
+    const controls = element("div", "usage-controls");
+    controls.setAttribute("role", "group");
+    controls.setAttribute("aria-label", "Size harnesses by");
+    const buttons = ["sessions", "prompts"].map(function (value) {
+      const button = element("button", "usage-metric", value === "sessions" ? "Sessions" : "Prompts");
+      button.type = "button";
+      button.setAttribute("data-metric", value);
+      button.addEventListener("click", function () { metric = value; update(); });
+      controls.append(button);
+      return button;
+    });
+    const visual = element("div", "usage-visual");
+    const plot = element("div", "usage-plot");
+    const key = element("ul", "usage-key");
+    const detail = element("p", "usage-detail");
+    detail.setAttribute("aria-live", "polite");
+    detail.setAttribute("aria-atomic", "true");
+    const note = element("p", "usage-note");
+    visual.append(plot, key);
+    container.replaceChildren(controls, visual, detail, note);
+
+    function select(entry) {
+      selected = entry.key;
+      targets.forEach(function (target) {
+        target.node.setAttribute("data-active", String(target.key === selected));
+      });
+      detail.textContent = entry.name + " · " + (entry[metric] === null ? "Not available" :
+        formatter.format(entry[metric]) + " " + metric) + " · " + entry.coverage + ".";
+    }
+
+    function bind(node, entry, keyboard) {
+      targets.push({ key: entry.key, node: node });
+      node.addEventListener("pointerenter", function () { select(entry); });
+      node.addEventListener("click", function () { select(entry); });
+      node.addEventListener("focus", function () { select(entry); });
+      if (keyboard) node.addEventListener("keydown", function (event) {
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          select(entry);
+        }
+      });
+    }
+
+    function update() {
+      buttons.forEach(function (button, index) {
+        button.setAttribute("aria-pressed", String((index === 0 ? "sessions" : "prompts") === metric));
+      });
+      const ordered = entries.slice().sort(function (a, b) {
+        return (b[metric] === null ? -1 : b[metric]) - (a[metric] === null ? -1 : a[metric]) || a.key - b.key;
+      });
+      const positive = ordered.filter(function (entry) { return entry[metric] > 0; });
+      const layout = positive.length <= 24 ? pack(positive.map(function (entry) { return entry[metric]; })) : null;
+      // Use bars for sparse or dense distributions. Never enlarge a tiny circle
+      // to make it tappable: that would silently invent magnitude.
+      const packed = positive.length >= 3 && layout && layout.circles.every(function (circle) {
+        return circle.r * 2 / Math.max(layout.width, layout.height) * 240 >= 44;
+      });
+      container.setAttribute("data-metric", metric);
+      container.setAttribute("data-layout", packed ? "packed" : "bars");
+      plot.replaceChildren();
+      key.replaceChildren();
+      targets = [];
+      plot.hidden = !packed;
+      const maximum = positive.length ? positive[0][metric] : 1;
+      ordered.forEach(function (entry) {
+        const row = element("li", "usage-key-row");
+        const button = element("button", "usage-key-button");
+        button.type = "button";
+        button.setAttribute("data-harness", entry.harness);
+        button.setAttribute("aria-label", entry.name + ": " +
+          (entry[metric] === null ? "Not available" : formatter.format(entry[metric]) + " " + metric) + ". " + entry.coverage);
+        const label = element("span", "usage-key-name", entry.name);
+        const value = element("span", "usage-key-value", entry[metric] === null ? "Not available" : formatter.format(entry[metric]));
+        button.append(label, value);
+        if (!packed && entry[metric] !== null) {
+          const meter = element("meter", "usage-bar");
+          meter.min = 0; meter.max = maximum; meter.value = entry[metric];
+          meter.setAttribute("aria-hidden", "true");
+          button.append(meter);
+        }
+        button.append(element("span", "usage-key-coverage", entry.coverage));
+        bind(button, entry, false);
+        row.append(button);
+        key.append(row);
+      });
+      if (packed) {
+        const ns = document.getElementById("svg-namespace-probe").namespaceURI;
+        const svg = function (tag, attributes, label) {
+          const node = document.createElementNS(ns, tag);
+          Object.keys(attributes).forEach(function (name) { node.setAttribute(name, String(attributes[name])); });
+          if (label !== undefined) node.textContent = label;
+          return node;
+        };
+        const canvas = svg("svg", {
+          viewBox: [layout.x, layout.y, layout.width, layout.height].join(" "),
+          class: "usage-svg", role: "group", "aria-label": "Harnesses sized by " + metric
+        });
+        layout.circles.forEach(function (circle, index) {
+          const entry = positive[index];
+          const value = formatter.format(entry[metric]);
+          const group = svg("g", {
+            class: "usage-bubble", "data-harness": entry.harness, "data-count": entry[metric],
+            role: "button", tabindex: "0",
+            "aria-label": entry.name + ": " + value + " " + metric + ". " + entry.coverage
+          });
+          group.append(svg("circle", { cx: circle.x, cy: circle.y, r: circle.r }));
+          group.append(svg("text", {
+            x: circle.x, y: circle.y, "text-anchor": "middle", "dominant-baseline": "central",
+            class: "usage-bubble-value", "font-size": Math.min(layout.width * 0.07, circle.r * 1.7 / value.length),
+            "aria-hidden": "true"
+          }, value));
+          bind(group, entry, true);
+          canvas.append(group);
+        });
+        plot.append(canvas);
+      }
+      const basis = metric === "sessions" ? "Root sessions only; child sessions are separate." : "Recorded owner prompts.";
+      note.textContent = (packed ? "Circle area represents " + metric + ". Colour identifies the harness. " :
+        positive.length ? "Bars preserve exact counts for a sparse or uneven distribution. " : "No positive " + metric + " are available. ") +
+        basis + " Recovered local history, not lifetime usage.";
+      if (ordered.length) select(ordered.find(function (entry) { return entry.key === selected; }) || ordered[0]);
+      else detail.textContent = "No harness records are available.";
+    }
+    update();
+  }
+
+  window.SkuggsjaUsageChart = { render: render, pack: pack };
+}());
+// END SKUGGSJA USAGE CHART
+
 (function () {
   "use strict";
 
@@ -16,7 +247,6 @@
 
   let activeController = null;
   let requestSerial = 0;
-  let revealObserver = null;
 
   const loadingState = document.getElementById("loading-state");
   const errorState = document.getElementById("error-state");
@@ -99,13 +329,13 @@
     renderActivity(data);
     renderRhythm(data);
     renderPromptStyle(data);
+    window.SkuggsjaUsageChart.render(document.getElementById("usage-chart"), data.providers);
     renderModels(data.models, data.providers);
     renderProviders(data.providers);
     renderProjects(data.projects, data.longest_session);
     renderPrivacy(data);
     renderMethodology(data.methodology, data.warnings);
     showState("rewind");
-    prepareReveals();
   }
 
   function renderHero(data) {
@@ -118,31 +348,19 @@
     const activeDays = numeric(totals.active_days, 0);
     const childSessions = numeric(totals.child_sessions, 0);
     const coverageLabel = cleanText(coverage.label, coverageRange(coverage), 80);
-    const leadingProvider = providers
-      .filter(isRecord)
-      .slice()
-      .sort(function (a, b) { return numeric(b.sessions, 0) - numeric(a.sessions, 0); })[0];
-
-    setText("hero-edition", "Personal archive · " + coverageLabel);
+    setText("hero-edition", coverageLabel);
     setText("hero-session-count", formatNumber(sessions));
-    setText("hero-session-label", sessions === 1 ? "session held in this mirror" : "sessions held in this mirror");
+    setText("hero-session-label", "Top-level sessions · children counted separately");
     setText("proof-prompts", formatNumber(prompts));
     setText("proof-projects", formatNumber(projects));
     setText("proof-days", formatNumber(activeDays));
 
-    const clauses = [];
-    clauses.push(
-      "Across " + formatNumber(activeDays) + " active " + plural(activeDays, "day", "days") +
-      ", the surviving histories hold " + formatNumber(sessions) + " " + plural(sessions, "session", "sessions") + "."
+    setText(
+      "hero-narrative",
+      "Your AI coding activity, as recorded on this machine. " +
+      formatNumber(childSessions) + " child " + plural(childSessions, "session is", "sessions are") +
+      " counted separately from the top-level total."
     );
-    if (leadingProvider && numeric(leadingProvider.sessions, 0) > 0) {
-      clauses.push(cleanText(leadingProvider.name, cleanText(leadingProvider.id, "One harness", 80), 80) + " carried the largest recovered share.");
-    }
-    if (childSessions > 0) {
-      clauses.push(formatNumber(childSessions) + " child " + plural(childSessions, "session was", "sessions were") + " recorded alongside that total and remain separately labeled.");
-    }
-    clauses.push("This is a portrait of what remained on this machine, not a claim about anything outside the recorded span.");
-    setText("hero-narrative", clauses.join(" "));
 
     const range = coverageRange(coverage);
     const zone = cleanText(coverage.timezone, "local time", 80);
@@ -257,7 +475,7 @@
     svg.appendChild(svgElement(
       "desc",
       { id: "heatmap-description" },
-      formatNumber(total) + " recorded sessions across the displayed calendar range. Darker cobalt marks indicate busier days."
+      formatNumber(total) + " recorded sessions across the displayed calendar range. Darker marks indicate busier days."
     ));
 
     [
@@ -447,11 +665,17 @@
       container.appendChild(emptyLedger("No model-attributed events were recorded."));
       return;
     }
-    Array.from(groups.keys()).sort().forEach(function (harness) {
-      const section = element("section", "model-provider-index");
+    Array.from(groups.keys()).sort().forEach(function (harness, index) {
+      const section = element("details", "model-provider-index");
+      section.open = index === 0;
       section.setAttribute("data-harness", harness);
       section.setAttribute("aria-label", (providers.get(harness) || harness) + " model events");
-      section.appendChild(element("h4", "", providers.get(harness) || harness));
+      const heading = element("summary", "model-provider-heading");
+      heading.append(
+        element("h4", "", providers.get(harness) || harness),
+        element("span", "model-count", formatNumber(groups.get(harness).length) + " " + plural(groups.get(harness).length, "model", "models"))
+      );
+      section.appendChild(heading);
       const list = element("div", "");
       const models = groups.get(harness).sort(function (a, b) {
         return b.value - a.value || a.name.localeCompare(b.name);
@@ -845,35 +1069,6 @@
     rewind.hidden = state !== "rewind";
     chapterNav.hidden = state !== "rewind";
     footer.hidden = state !== "rewind" && state !== "empty";
-    if (state === "loading" && revealObserver) {
-      revealObserver.disconnect();
-    }
-  }
-
-  function prepareReveals() {
-    if (revealObserver) {
-      revealObserver.disconnect();
-    }
-    const chapters = Array.from(document.querySelectorAll("#rewind .chapter"));
-    const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    if (reducedMotion || !("IntersectionObserver" in window)) {
-      chapters.forEach(function (chapter) { chapter.classList.add("is-visible"); });
-      return;
-    }
-
-    chapters.forEach(function (chapter) {
-      chapter.classList.add("will-reveal");
-      chapter.classList.remove("is-visible");
-    });
-    revealObserver = new IntersectionObserver(function (entries, observer) {
-      entries.forEach(function (entry) {
-        if (entry.isIntersecting) {
-          entry.target.classList.add("is-visible");
-          observer.unobserve(entry.target);
-        }
-      });
-    }, { rootMargin: "0px 0px -8% 0px", threshold: 0.08 });
-    chapters.forEach(function (chapter) { revealObserver.observe(chapter); });
   }
 
   function warningRow(warning) {

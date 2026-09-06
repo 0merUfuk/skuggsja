@@ -16,6 +16,7 @@ for (let i = 2; i < process.argv.length; i += 2) {
   args[process.argv[i].slice(2)] = process.argv[i + 1];
 }
 for (const name of ["chrome", "url", "report", "evidence-dir"]) assert(args[name], `missing --${name}`);
+if (args.revision) assert.equal(args.revision, "true", "--revision accepts true");
 function loopback(raw) {
   try {
     const url = new URL(raw);
@@ -33,7 +34,7 @@ const expected = JSON.parse(reportBytes);
 const hash = (bytes) => crypto.createHash("sha256").update(bytes).digest("hex");
 const save = (name, data) => fs.writeFileSync(path.join(evidence, name), data, { mode: 0o600 });
 const result = { started_at: new Date().toISOString(), report_sha256: hash(reportBytes),
-  chrome_sha256: hash(fs.readFileSync(args.chrome)), assertions: [], requests: [],
+  chrome_sha256: hash(fs.readFileSync(args.chrome)), verifier_sha256: hash(fs.readFileSync(__filename)), assertions: [], requests: [],
   intercepted: [], exceptions: [], unhandled_targets: [], screenshots: [], pass: false };
 let chrome;
 let cdp;
@@ -42,6 +43,8 @@ const activeSessions = new Map();
 const attachments = new Map();
 const knownTargets = new Set();
 const failures = [];
+const syntheticResponses = new Map();
+const heldSyntheticRequests = new Map();
 
 class CDP {
   constructor(ws) {
@@ -126,6 +129,317 @@ async function settled(session) {
   await delay(500);
 }
 
+// Verification only: inspect actual computed geometry at CSS-pixel widths and
+// DPR 2. The retained aggregate stays unchanged; the temporary hidden probe only
+// resolves custom-property lengths and is removed before taking screenshots.
+async function responsiveMatrix(session) {
+  result.responsive_matrix = [];
+  for (const width of (args.revision ? [1280, 1440, 1728, 1920, 320, 390] : [1280, 1440, 1728, 1920])) {
+    await cdp.send("Emulation.setDeviceMetricsOverride", { width, height: width < 600 ? 844 : 1000, deviceScaleFactor: 2, mobile: width < 600 }, session);
+    await evaluate(session, "scrollTo({top:0,left:0,behavior:'instant'})");
+    await settled(session);
+    const measurement = await evaluate(session, `(() => {
+      const round = n => Math.round(n * 1000) / 1000;
+      const rect = r => ({x:round(r.x),y:round(r.y),width:round(r.width),height:round(r.height),right:round(r.right),bottom:round(r.bottom)});
+      const label = e => e.tagName.toLowerCase() + (e.id ? '#' + e.id : '') + [...e.classList].map(c => '.' + c).join('');
+      const visible = e => {
+        if (!e.getClientRects().length || getComputedStyle(e).visibility === 'hidden' || e.closest('.visually-hidden,[hidden]')) return false;
+        // Chromium can expose layout rectangles for descendants of a closed
+        // details element. Only its summary is actually presented to the user.
+        for(let p=e.parentElement;p;p=p.parentElement) {
+          if(p.tagName==='DETAILS'&&!p.open&&!p.querySelector(':scope > summary')?.contains(e)) return false;
+        }
+        return true;
+      };
+      const rootStyle = getComputedStyle(document.documentElement);
+      const tokens = Object.fromEntries([...rootStyle].filter(k => k.startsWith('--')).map(k => [k,rootStyle.getPropertyValue(k).trim()]));
+      const probe = document.createElement('span');
+      Object.assign(probe.style,{position:'absolute',visibility:'hidden',padding:'0',border:'0',height:'0',display:'block'});
+      document.body.append(probe);
+      const resolvedTokens = {};
+      for (const [key,value] of Object.entries(tokens)) {
+        if (!/^(--text|--space|--page-gutter|--content-max|--measure|--font-size)/.test(key)) continue;
+        probe.style.width = 'var(' + key + ')';
+        resolvedTokens[key] = {declared:value,pixels:getComputedStyle(probe).width};
+      }
+      probe.remove();
+      const selectors = ['html','body','main','.masthead','.hero','.hero h1','.hero-total__number','.hero__narrative','.chapter','.chapter-heading h2','.chapter-number','.proof-strip > div','.proof-strip dd','.provider-entry','.provider-entry summary','.provider-body','.provider-facts','.provider-facts dd','.provider-session-count','.folio-facts','.folio-fact__primary','.prompt-lead strong','.longest-session','.index-heading h3','.model-index','.model-bubbles','.usage-bubbles','.coverage-notice'];
+      const samples = Object.fromEntries(selectors.map(selector => {
+        const e = [...document.querySelectorAll(selector)].find(visible);
+        if (!e) return [selector,null];
+        const s = getComputedStyle(e);
+        return [selector,{element:label(e),rect:rect(e.getBoundingClientRect()),fontFamily:s.fontFamily,fontSize:s.fontSize,lineHeight:s.lineHeight,fontWeight:s.fontWeight,maxWidth:s.maxWidth,width:s.width,padding:s.padding,margin:s.margin,gap:s.gap,minHeight:s.minHeight,letterSpacing:s.letterSpacing}];
+      }));
+      const typeScale = [...new Map([...document.querySelectorAll('body *')].filter(e=>e instanceof HTMLElement && visible(e)).map(e=>{const s=getComputedStyle(e);return [s.fontSize+' / '+s.lineHeight,{fontSize:s.fontSize,lineHeight:s.lineHeight,example:label(e)}]})).values()].sort((a,b)=>parseFloat(a.fontSize)-parseFloat(b.fontSize));
+      const overflows = [];
+      for (const e of document.querySelectorAll('body *')) {
+        if (!(e instanceof HTMLElement) || !visible(e) || !e.parentElement || e.classList.contains('skip-link')) continue;
+        const p = e.parentElement, s=getComputedStyle(e), ps=getComputedStyle(p), b=e.getBoundingClientRect(), pb=p.getBoundingClientRect();
+        if (!b.width || !b.height || ps.display==='contents') continue;
+        const content = {left:pb.left+parseFloat(ps.borderLeftWidth)+parseFloat(ps.paddingLeft),right:pb.right-parseFloat(ps.borderRightWidth)-parseFloat(ps.paddingRight),top:pb.top+parseFloat(ps.borderTopWidth)+parseFloat(ps.paddingTop),bottom:pb.bottom-parseFloat(ps.borderBottomWidth)-parseFloat(ps.paddingBottom)};
+        const outsideX = b.left < content.left-1 || b.right > content.right+1;
+        const outsideY = b.top < content.top-1 || b.bottom > content.bottom+1;
+        if (!outsideX && !outsideY) continue;
+        let scrollContainer = null;
+        for(let a=p;a && a!==document.body;a=a.parentElement){const as=getComputedStyle(a);if(/auto|scroll/.test(as.overflowX)){scrollContainer=label(a);break;}}
+        overflows.push({element:label(e),parent:label(p),rect:rect(b),parentContent:Object.fromEntries(Object.entries(content).map(([k,v])=>[k,round(v)])),horizontal:outsideX,vertical:outsideY,display:s.display,position:s.position,transform:s.transform,scrollContainer,inlineFormatting:s.display==='inline'||ps.display==='inline'});
+      }
+      const blockOverflows = overflows.filter(o=>!o.scrollContainer&&!o.inlineFormatting&&o.position!=='fixed');
+      const keyValues = [...document.querySelectorAll('#hero-session-count,#proof-prompts,#proof-projects,#proof-days,#longest-session-duration,.provider-session-count,.provider-facts dd')].filter(visible).map(e=>({element:label(e),text:e.textContent,width:e.clientWidth,scrollWidth:e.scrollWidth,height:e.clientHeight,scrollHeight:e.scrollHeight}));
+      return {width:innerWidth,height:innerHeight,dpr:devicePixelRatio,rootFontSize:rootStyle.fontSize,bodyFontSize:getComputedStyle(document.body).fontSize,bodyLineHeight:getComputedStyle(document.body).lineHeight,page:{clientWidth:document.documentElement.clientWidth,scrollWidth:document.documentElement.scrollWidth,height:document.documentElement.scrollHeight},tokens:resolvedTokens,samples,typeScale,parentContentOverflows:overflows,uncontainedBlockOverflows:blockOverflows,uncontainedHorizontalOverflows:blockOverflows.filter(o=>o.horizontal),keyValues};
+    })()`);
+    result.responsive_matrix.push(measurement);
+    if (args.revision) {
+      measurement.chartText = [];
+      for (const metric of ["sessions", "prompts"]) {
+        const point=await evaluate(session, `(()=>{const e=document.querySelector('.usage-metric[data-metric="${metric}"]');e.scrollIntoView({block:'center',behavior:'instant'});const r=e.getBoundingClientRect();return {x:r.x+r.width/2,y:r.y+r.height/2};})()`);
+        await cdp.send("Input.dispatchMouseEvent", {type:"mousePressed",...point,button:"left",clickCount:1}, session);
+        await cdp.send("Input.dispatchMouseEvent", {type:"mouseReleased",...point,button:"left",clickCount:1}, session);
+        const labels=await evaluate(session, `(()=>[...document.querySelectorAll('.usage-bubble')].map(g=>{const c=g.querySelector('circle'),t=g.querySelector('text'),b=t.getBBox(),m=t.getScreenCTM(),x=Number(c.getAttribute('cx')),y=Number(c.getAttribute('cy')),r=Number(c.getAttribute('r'));return {harness:g.dataset.harness,text:t.textContent,cssFontSize:parseFloat(getComputedStyle(t).fontSize)*Math.hypot(m.a,m.b),insideCircle:[[b.x,b.y],[b.x+b.width,b.y],[b.x,b.y+b.height],[b.x+b.width,b.y+b.height]].every(([a,b])=>Math.hypot(a-x,b-y)<=r+0.001)};}))()`);
+        const layout=await evaluate(session, "document.querySelector('#usage-chart').dataset.layout");
+        measurement.chartText.push({metric,layout,labels});
+      }
+      await evaluate(session, "document.querySelector('.usage-metric[data-metric=\"sessions\"]').click();scrollTo({top:0,left:0,behavior:'instant'})");
+      await settled(session);
+    }
+    check(`${width}px DPR 2 applied`, measurement.dpr, 2);
+    check(`${width}px root font size`, measurement.rootFontSize, "16px");
+    check(`${width}px no page overflow`, measurement.page.scrollWidth <= measurement.page.clientWidth, true);
+    await screenshot(session, `rewind-${width}-dpr2.png`);
+    const full = await cdp.send("Page.getLayoutMetrics", {}, session);
+    await screenshot(session, `rewind-${width}-dpr2-full.png`, { x: 0, y: 0, width, height: Math.ceil(full.cssContentSize.height), scale: 1 });
+  }
+  save("layout-measurements.json", JSON.stringify(result.responsive_matrix, null, 2) + "\n");
+  if (args.revision) {
+    for (const layout of result.responsive_matrix) {
+      check(`${layout.width}px no uncontained block overflow`, layout.uncontainedBlockOverflows, []);
+      check(`${layout.width}px key values are fully visible`, layout.keyValues.filter(v => v.scrollWidth > v.width + 1 || v.scrollHeight > v.height + 1), []);
+      for(const {metric,layout:chartLayout,labels} of layout.chartText) {
+        if(chartLayout==='packed') {
+          check(`${layout.width}px ${metric} circle labels are at least 12 CSS px`, labels.length>0&&labels.every(t=>t.cssFontSize>=12), true);
+          check(`${layout.width}px ${metric} circle labels fit their circles`, labels.every(t=>t.insideCircle), true);
+        } else {
+          check(`${layout.width}px ${metric} sparse layout is bars`,chartLayout,'bars');
+          check(`${layout.width}px ${metric} bars have no fabricated circle labels`,labels.length,0);
+        }
+      }
+    }
+  }
+}
+
+async function usageChart(session, report, options = {}) {
+  const chartCheck = (name, actual, wanted) => check((options.prefix || "") + name, actual, wanted);
+  const chartResults = [];
+  const available = v => Number.isSafeInteger(v) && v >= 0;
+  const number = v => available(v) ? new Intl.NumberFormat("en-US").format(v) : "Not available";
+  const center = async selector => evaluate(session, `(() => {const e=document.querySelector(${JSON.stringify(selector)});if(!e)throw new Error('Missing chart control');e.scrollIntoView({block:'center',behavior:'instant'});const b=e.getBoundingClientRect();return {x:b.x+b.width/2,y:b.y+b.height/2};})()`);
+  const click = async selector => {
+    const point = await center(selector);
+    await cdp.send("Input.dispatchMouseEvent", {type:"mousePressed",...point,button:"left",clickCount:1}, session);
+    await cdp.send("Input.dispatchMouseEvent", {type:"mouseReleased",...point,button:"left",clickCount:1}, session);
+    await settled(session);
+  };
+  if (!options.synthetic) result.usage_chart = chartResults;
+  chartCheck("usage chart present", await evaluate(session, "Boolean(document.querySelector('#usage-chart'))"), true);
+  for (const metric of ["sessions", "prompts"]) {
+    await click(`.usage-metric[data-metric="${metric}"]`);
+    const actual = await evaluate(session, `(() => {
+      const root=document.querySelector('#usage-chart'),svg=root.querySelector('.usage-svg');
+      return {layout:root.dataset.layout,metric:root.dataset.metric,pressed:[...root.querySelectorAll('.usage-metric[aria-pressed="true"]')].map(e=>e.dataset.metric),viewBox:svg?svg.getAttribute('viewBox').split(/\\s+/).map(Number):null,
+        bubbles:[...root.querySelectorAll('.usage-bubble')].map(e=>{const c=e.querySelector('circle');return {harness:e.dataset.harness,count:Number(e.dataset.count),role:e.getAttribute('role'),tabindex:e.getAttribute('tabindex'),label:e.getAttribute('aria-label'),cx:Number(c.getAttribute('cx')),cy:Number(c.getAttribute('cy')),r:Number(c.getAttribute('r')),fill:getComputedStyle(c).fill};}),
+        keys:[...root.querySelectorAll('.usage-key-button')].map(e=>({harness:e.dataset.harness,name:e.querySelector('.usage-key-name').textContent,value:e.querySelector('.usage-key-value').textContent,coverage:e.querySelector('.usage-key-coverage').textContent})),bars:[...root.querySelectorAll('.usage-bar')].map(e=>({value:e.value,max:e.max})),detailLive:root.querySelector('.usage-detail').getAttribute('aria-live')};
+    })()`);
+    chartResults.push(actual);
+    const positive = report.providers.filter(p => Number.isSafeInteger(p[metric]) && p[metric] > 0);
+    chartCheck(`${metric} selection is exclusive`, actual.pressed, [metric]);
+    chartCheck(`${metric} chart metric`, actual.metric, metric);
+    chartCheck(`${metric} chart retains every provider`, actual.keys.length, report.providers.length);
+    for (const provider of report.providers) {
+      const key = actual.keys.find(k => k.harness === provider.id) || actual.keys.find(k => k.name === provider.name);
+      chartCheck(`${metric} ${provider.id} key exact value`, key?.value, number(provider[metric]));
+      chartCheck(`${metric} ${provider.id} key keeps coverage`, key?.coverage.includes(provider.coverage?.status || "Coverage assessment unavailable"), true);
+    }
+    chartCheck(`${metric} detail is accessible`, actual.detailLive, "polite");
+    chartCheck(`${metric} chart selects a supported presentation`,["packed","bars"].includes(actual.layout),true);
+    if (actual.layout === "packed") {
+      chartCheck(`${metric} packed layout has enough positive entities`, positive.length>=3&&positive.length<=24,true);
+      chartCheck(`${metric} bubbles have exact provider counts`, actual.bubbles.map(b=>({harness:b.harness,count:b.count})).sort((a,b)=>a.harness.localeCompare(b.harness)), positive.map(p=>({harness:p.id,count:p[metric]})).sort((a,b)=>a.harness.localeCompare(b.harness)));
+      const scales=actual.bubbles.map(b=>b.r*b.r/b.count);
+      chartCheck(`${metric} bubble area is proportional to recorded count`, scales.every(s=>Math.abs(s/scales[0]-1)<0.00001), true);
+      const [x,y,w,h]=actual.viewBox;
+      chartCheck(`${metric} every circle stays inside the viewBox`, actual.bubbles.every(b=>b.cx-b.r>=x-0.001&&b.cy-b.r>=y-0.001&&b.cx+b.r<=x+w+0.001&&b.cy+b.r<=y+h+0.001), true);
+      chartCheck(`${metric} circles do not overlap`, actual.bubbles.every((a,i)=>actual.bubbles.slice(i+1).every(b=>Math.hypot(a.cx-b.cx,a.cy-b.cy)>=a.r+b.r-0.001)), true);
+      chartCheck(`${metric} harness colors are distinct`, new Set(actual.bubbles.map(b=>b.fill)).size, positive.length);
+      chartCheck(`${metric} bubbles expose button role and keyboard focus`, actual.bubbles.every(b=>b.role==="button"&&b.tabindex==="0"), true);
+    } else {
+      const values=report.providers.filter(p=>available(p[metric])).map(p=>p[metric]).sort((a,b)=>b-a);
+      chartCheck(`${metric} bars retain all measured counts including zero`,actual.bars.map(b=>b.value),values);
+      chartCheck(`${metric} bars keep the actual maximum`,actual.bars.every(b=>b.max===Math.max(1,...values)),true);
+      chartCheck(`${metric} bars do not invent circle geometry`,actual.bubbles.length,0);
+    }
+    for (const provider of (actual.layout==='packed'?positive:report.providers)) {
+      const index=actual.keys.findIndex(k=>k.name===provider.name);
+      const selector=actual.layout==='packed'?`.usage-bubble[data-harness="${provider.id}"]`:`.usage-key-row:nth-child(${index+1}) .usage-key-button`;
+      const point=await center(selector);
+      await cdp.send("Input.dispatchMouseEvent", {type:"mouseMoved",...point}, session);
+      const detail=await evaluate(session, "document.querySelector('.usage-detail').textContent");
+      chartCheck(`${metric} ${provider.id} hover has real detail`, detail.includes(provider.name)&&detail.includes(number(provider[metric])), true);
+    }
+  }
+  const promptLayout=chartResults.at(-1).layout;
+  const promptTargets=promptLayout==='packed'?report.providers.filter(p=>p.prompts>0):report.providers;
+  const first=promptTargets[0],last=promptTargets.at(-1);
+  if(first) {
+  const targetSelector=provider=>promptLayout==='packed'?`.usage-bubble[data-harness="${provider.id}"]`:`.usage-key-row:nth-child(${chartResults.at(-1).keys.findIndex(k=>k.name===provider.name)+1}) .usage-key-button`;
+  const focusSelector=targetSelector(first);
+  await evaluate(session, `document.querySelector(${JSON.stringify(focusSelector)}).focus()`);
+  for (const key of ["Enter"," "]) {
+    await cdp.send("Input.dispatchMouseEvent", {type:"mouseMoved",x:0,y:0}, session);
+    const other=await center(targetSelector(last));
+    await cdp.send("Input.dispatchMouseEvent", {type:"mouseMoved",...other}, session);
+    chartCheck(`${key===" "?"Space":key} precondition uses another harness detail`, (await evaluate(session, "document.querySelector('.usage-detail').textContent")).includes(last.name), true);
+    // Include the character phase: native HTML buttons activate on the complete
+    // keyboard sequence, whereas the SVG button handles keydown directly.
+    await cdp.send("Input.dispatchKeyEvent", {type:"keyDown",key,text:key==="Enter"?"\r":" ",unmodifiedText:key==="Enter"?"\r":" ",code:key==="Enter"?"Enter":"Space",windowsVirtualKeyCode:key==="Enter"?13:32}, session);
+    await cdp.send("Input.dispatchKeyEvent", {type:"keyUp",key,code:key==="Enter"?"Enter":"Space",windowsVirtualKeyCode:key==="Enter"?13:32}, session);
+    const detail=await evaluate(session, "document.querySelector('.usage-detail').textContent");
+    result.chart_keyboard ||= [];
+    result.chart_keyboard.push({scenario:options.prefix||"retained real report",key,detail,expected:first.name,focus:await evaluate(session,"({tag:document.activeElement.tagName,harness:document.activeElement.dataset.harness,text:document.activeElement.textContent})")});
+    chartCheck(`${key===" "?"Space":key} opens exact focused bubble detail`, detail.includes(first.name)&&detail.includes(number(first.prompts)), true);
+  }
+  await cdp.send("Emulation.setDeviceMetricsOverride", {width:390,height:844,deviceScaleFactor:2,mobile:true}, session);
+  await cdp.send("Emulation.setTouchEmulationEnabled", {enabled:true,maxTouchPoints:1}, session);
+  const point=await center(`.usage-key-row:nth-child(${chartResults.at(-1).keys.findIndex(k=>k.name===last.name)+1}) .usage-key-button`);
+  await cdp.send("Input.dispatchTouchEvent", {type:"touchStart",touchPoints:[{...point,radiusX:1,radiusY:1,force:1}]}, session);
+  await cdp.send("Input.dispatchTouchEvent", {type:"touchEnd",touchPoints:[]}, session);
+  const tapDetail=await evaluate(session, "document.querySelector('.usage-detail').textContent");
+  chartCheck("mobile tap reveals exact provider detail", tapDetail.includes(last.name)&&tapDetail.includes(number(last.prompts)), true);
+  await cdp.send("Emulation.setTouchEmulationEnabled", {enabled:false}, session);
+  await cdp.send("Emulation.setDeviceMetricsOverride", {width:1440,height:1000,deviceScaleFactor:1,mobile:false}, session);
+  } else {
+    chartCheck("empty harness chart has no interactive keys",await evaluate(session,"document.querySelectorAll('.usage-key-button').length"),0);
+  }
+  await click('.usage-metric[data-metric="sessions"]');
+  const groups=await evaluate(session, "[...document.querySelectorAll('.model-provider-index')].map(e=>({harness:e.dataset.harness,open:e.open}))");
+  chartCheck("models retain one disclosure for each recorded harness", groups.map(g=>g.harness), [...new Set(report.models.map(m=>m.harness))].sort());
+  chartCheck("initial model disclosure hierarchy", groups.map(g=>g.open), groups.map((_,i)=>i===0));
+  for(const group of groups) {
+    const selector=`.model-provider-index[data-harness="${group.harness}"]`;
+    if(!group.open) await click(`${selector} > summary`);
+    chartCheck(`${group.harness} model disclosure opens`, await evaluate(session, `document.querySelector(${JSON.stringify(selector)}).open`), true);
+    const moreSelector=`${selector} .more-index > summary`;
+    const hasMore=await evaluate(session, `Boolean(document.querySelector(${JSON.stringify(moreSelector)}))`);
+    if(hasMore) await click(moreSelector);
+    const rows=await evaluate(session, `(()=>{const e=document.querySelector(${JSON.stringify(selector)});return [...e.querySelectorAll('.rank-row')].map(r=>({position:r.querySelector('.rank-row__position').textContent,value:r.querySelector('meter').value,max:r.querySelector('meter').max,text:r.querySelector('.rank-row__value').textContent,painted:r.checkVisibility()}));})()`);
+    const values=report.models.filter(m=>m.harness===group.harness).map(m=>m.turns).sort((a,b)=>b-a);
+    chartCheck(`${group.harness} model bars retain exact native values`, rows.map(r=>r.value), values);
+    chartCheck(`${group.harness} model rank restarts at one`, rows[0]?.position, "01");
+    chartCheck(`${group.harness} model bars keep harness-local scale`, rows.every(r=>r.max===Math.max(1,...values)), true);
+    chartCheck(`${group.harness} expanded model values are visible and labelled`, rows.every(r=>r.painted&&r.text===number(r.value)+" native events"), true);
+    if(hasMore) await click(moreSelector);
+    if(!group.open) await click(`${selector} > summary`);
+  }
+  await evaluate(session, "document.querySelector('#usage-chart').closest('section').scrollIntoView({block:'start',behavior:'instant'})");
+  if (!options.synthetic) await screenshot(session, "rewind-usage-chart.png");
+  await click('.usage-metric[data-metric="prompts"]');
+  await evaluate(session, "document.querySelector('#usage-chart').closest('section').scrollIntoView({block:'start',behavior:'instant'})");
+  if (!options.synthetic) await screenshot(session, "rewind-usage-chart-prompts.png");
+  await click('.usage-metric[data-metric="sessions"]');
+  await evaluate(session, "scrollTo({top:0,left:0,behavior:'instant'})");
+  return chartResults;
+}
+
+async function fulfillSynthetic(session, requestId, response) {
+  await cdp.send("Fetch.fulfillRequest", {requestId,responseCode:response.status || 200,
+    responseHeaders:[{name:"Content-Type",value:"application/json"}],
+    body:Buffer.from(JSON.stringify(response.body || {})).toString("base64")}, session);
+}
+
+// Separate page, explicitly synthetic API responses. The primary page and every
+// product screenshot retain the real report. All requests still participate in
+// the same product zero-outbound ledger.
+async function syntheticPresentationChecks() {
+  const page=await newPage("product"),session=page.sessionId;
+  result.synthetic_scenarios=[];
+  result.synthetic_viewports=[];
+  async function mobileViewport() {
+    await cdp.send("Emulation.setDeviceMetricsOverride", {width:390,height:844,deviceScaleFactor:2,mobile:true}, session);
+    await cdp.send("Emulation.setTouchEmulationEnabled", {enabled:true,maxTouchPoints:1}, session);
+  }
+  async function verifyMobileViewport(scenario) {
+    const viewport=await evaluate(session,"({width:innerWidth,height:innerHeight,dpr:devicePixelRatio,touchPoints:navigator.maxTouchPoints})");
+    result.synthetic_viewports.push({scenario,...viewport});
+    check(`synthetic ${scenario} uses the intended mobile viewport`,viewport,{width:390,height:844,dpr:2,touchPoints:1});
+  }
+  await cdp.send("Emulation.setEmulatedMedia", {features:[{name:"prefers-reduced-motion",value:"reduce"}]}, session);
+  async function pointer(selector) {
+    const point=await evaluate(session, `(()=>{const e=document.querySelector(${JSON.stringify(selector)});e.scrollIntoView({block:'center',behavior:'instant'});const r=e.getBoundingClientRect();return {x:r.x+r.width/2,y:r.y+r.height/2};})()`);
+    await cdp.send("Input.dispatchMouseEvent", {type:"mousePressed",...point,button:"left",clickCount:1}, session);
+    await cdp.send("Input.dispatchMouseEvent", {type:"mouseReleased",...point,button:"left",clickCount:1}, session);
+  }
+  for(const scenario of [
+    {name:"one entity",counts:[7]},
+    {name:"two entities",counts:[7,3]},
+    {name:"three-entity tiny minority",counts:[1000000,3,1]},
+    {name:"40-entity long tail",counts:[120,...Array(39).fill(1)]},
+    {name:"sessions without positive prompts",counts:[7,3,2,1],zeroPrompts:true}
+  ]) {
+    // usageChart restores its desktop viewport on exit. Each independent
+    // scenario must explicitly re-establish mobile metrics and touch input.
+    await mobileViewport();
+    const counts=scenario.counts;
+    const providers=counts.map((count,index)=>({id:["claude","codex","cursor","hermes"][index]||"synthetic-"+index,name:"Synthetic harness "+index,sessions:count,prompts:scenario.zeroPrompts?0:count,coverage:{status:"completeness unknown"}}));
+    const body={schema_version:3,totals:{sessions:counts.reduce((a,b)=>a+b,0)},providers,models:[],warnings:[]};
+    syntheticResponses.set(session,{body});
+    await cdp.send("Page.navigate", {url:args.url}, session);
+    await until(()=>evaluate(session,`document.querySelectorAll('#usage-chart .usage-key-button').length===${counts.length}`),"synthetic chart controls");
+    await verifyMobileViewport(scenario.name);
+    const actual=await evaluate(session,"(()=>{const r=document.querySelector('#usage-chart');return {circles:r.querySelectorAll('.usage-bubble').length,values:[...r.querySelectorAll('.usage-bar')].map(e=>e.value),names:[...r.querySelectorAll('.usage-key-name')].map(e=>e.textContent),controls:r.querySelectorAll('.usage-metric').length};})()");
+    if(!scenario.zeroPrompts) {
+      check(`synthetic ${scenario.name} fallback has no invented circles`,actual.circles,0);
+      check(`synthetic ${scenario.name} fallback retains exact bars`,actual.values,[...counts].sort((a,b)=>b-a));
+    }
+    check(`synthetic ${counts.length}-entity fallback retains every label`,actual.names.length,counts.length);
+    check(`synthetic ${counts.length}-entity fallback retains two unit controls`,actual.controls,2);
+    const chart=await usageChart(session,body,{synthetic:true,prefix:`synthetic ${scenario.name}: `});
+    result.synthetic_scenarios.push({name:scenario.name,counts,zero_prompts:Boolean(scenario.zeroPrompts),chart,pass:true});
+  }
+  await mobileViewport();
+  syntheticResponses.set(session,{hold:true});
+  await cdp.send("Page.navigate", {url:args.url}, session);
+  await until(()=>heldSyntheticRequests.get(session),"held synthetic local API request");
+  await verifyMobileViewport("loading/error/empty/retry sequence");
+  check("synthetic pending request shows loading",await evaluate(session,"!document.querySelector('#loading-state').hidden"),true);
+  check("synthetic loading hides chapter navigation",await evaluate(session,"document.querySelector('.folio-nav').hidden"),true);
+  check("synthetic loading retains read-only guarantee",await evaluate(session,"document.querySelector('.source-status').textContent.includes('skuggsja does not write to source paths')"),true);
+  await fulfillSynthetic(session,heldSyntheticRequests.get(session),{status:503});
+  heldSyntheticRequests.delete(session);
+  await until(()=>evaluate(session,"!document.querySelector('#error-state').hidden"),"synthetic failure state");
+  check("synthetic failure hides chapter navigation",await evaluate(session,"document.querySelector('.folio-nav').hidden"),true);
+  check("synthetic initial failure does not steal focus",await evaluate(session,"document.activeElement===document.body"),true);
+  syntheticResponses.set(session,{body:{schema_version:3,totals:{sessions:0},providers:[],warnings:[]}});
+  await pointer('#retry-button');
+  await until(()=>evaluate(session,"!document.querySelector('#empty-state').hidden"),"synthetic empty retry result");
+  check("synthetic empty retry focuses its heading",await evaluate(session,"document.activeElement.id"),"empty-title");
+  check("synthetic empty hides chapter navigation",await evaluate(session,"document.querySelector('.folio-nav').hidden"),true);
+  syntheticResponses.set(session,{body:expected});
+  await pointer('#empty-retry-button');
+  await until(()=>evaluate(session,"!document.querySelector('#rewind').hidden"),"real retained report after synthetic retry");
+  check("retry restores the real retained session count",await evaluate(session,"document.querySelector('#hero-session-count').textContent"),new Intl.NumberFormat('en-US').format(expected.totals.sessions));
+  check("successful retry focuses its heading",await evaluate(session,"document.activeElement.id"),"hero-title");
+  check("successful retry restores chapter navigation",await evaluate(session,"document.querySelector('.folio-nav').hidden"),false);
+  check("reduced-motion browser preference is active",await evaluate(session,"matchMedia('(prefers-reduced-motion: reduce)').matches"),true);
+  check("reduced-motion page exposes all chapters",await evaluate(session,"[...document.querySelectorAll('.chapter')].every(e=>getComputedStyle(e).opacity==='1')"),true);
+  await evaluate(session,"document.querySelector('.skip-link').focus()");
+  check("keyboard skip link is visible when focused",await evaluate(session,"(()=>{const r=document.querySelector('.skip-link').getBoundingClientRect();return r.top>=0&&r.bottom<=innerHeight;})()"),true);
+  await cdp.send("Input.dispatchKeyEvent",{type:"keyDown",key:"Enter",code:"Enter",windowsVirtualKeyCode:13},session);
+  await cdp.send("Input.dispatchKeyEvent",{type:"keyUp",key:"Enter",code:"Enter",windowsVirtualKeyCode:13},session);
+  check("keyboard skip link reaches main content",await evaluate(session,"location.hash"),"#main-content");
+  result.synthetic_scenarios.push({name:"loading/error/empty/retry/reduced-motion/keyboard",pass:true});
+  syntheticResponses.delete(session);
+  await cdp.send("Target.closeTarget",{targetId:page.targetId});
+}
+
 async function main() {
   const chromeArgs = ["--headless", "--lang=en-US", "--remote-debugging-address=127.0.0.1", "--remote-debugging-port=0",
     `--user-data-dir=${profile}`, "--no-first-run", "--no-default-browser-check", "--disable-gpu",
@@ -160,6 +474,12 @@ async function main() {
       const raw = message.params.request.url;
       const allowed = loopback(raw) || raw === "about:blank" || raw.startsWith("data:");
       result.intercepted.push({ scope: scope || "unknown", url: raw, allowed });
+      const override=syntheticResponses.get(message.sessionId);
+      if(allowed&&loopback(raw)&&new URL(raw).pathname==='/api/rewind'&&override) {
+        if(override.hold) heldSyntheticRequests.set(message.sessionId,message.params.requestId);
+        else await fulfillSynthetic(message.sessionId,message.params.requestId,override);
+        return;
+      }
       await cdp.send(allowed ? "Fetch.continueRequest" : "Fetch.failRequest",
         { requestId: message.params.requestId, ...(allowed ? {} : { errorReason: "BlockedByClient" }) }, message.sessionId);
     } else if (message.method === "Network.requestWillBeSent") {
@@ -231,6 +551,7 @@ async function main() {
   check("desktop full duration fits", await evaluate(session, "(() => {const n=document.querySelector('#longest-session-duration');return n.scrollWidth<=n.clientWidth;})()"), true);
   check("loading state completed", overview.loadingHidden, true);
   check("error state hidden", overview.errorHidden, true);
+  if (args.revision) await usageChart(session, actual);
   // Exercise actual disclosure controls with CDP pointer input.
   for (const provider of actual.providers) {
     const selector = `.provider-entry[data-harness=${JSON.stringify(provider.id)}]`;
@@ -268,6 +589,8 @@ async function main() {
   await screenshot(session, "rewind-mobile.png");
   const mobileLayout = await cdp.send("Page.getLayoutMetrics", {}, session);
   await screenshot(session, "rewind-mobile-full.png", { x: 0, y: 0, width: 390, height: Math.ceil(mobileLayout.cssContentSize.height), scale: 1 });
+  await responsiveMatrix(session);
+  if(args.revision) await syntheticPresentationChecks();
   await delay(1000);
   result.unhandled_targets = [...attachments.entries()].filter(([id]) => !knownTargets.has(id))
     .map(([targetId, info]) => ({ targetId, type: info.type, url: info.url }));

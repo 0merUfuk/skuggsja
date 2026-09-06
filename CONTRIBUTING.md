@@ -213,12 +213,17 @@ node scripts/verify-browser.cjs \
   --chrome /path/to/chrome-headless-shell \
   --url http://127.0.0.1:PORT \
   --report /path/to/new-release-evidence/rewind.json \
-  --evidence-dir /path/to/new-browser-evidence
+  --evidence-dir /path/to/new-browser-evidence \
+  --revision true
 ```
 
 The verifier creates its evidence directory and isolated browser profile, checks that the served aggregate matches the retained file, exercises provider disclosures, records desktop/mobile screenshots, and observes requests. It calibrates interception with a deliberately denied external control; on macOS it also applies the verification-only remote-network denial policy. Inspect `browser-result.json` and the screenshots before claiming a pass. This establishes browser evidence without rereading histories or changing the release input set. Stop the verification server afterward. The profile is removed on normal exit; screenshots and the aggregate remain private evidence.
 
 Verify that tool-call values appear only in provider folios, unavailable counts remain unavailable, and model rankings and meter scales restart for each harness. The mere presence of the browser tools is not a completed rendering or zero-outbound check; record actual outcomes in `VERIFICATION.md`.
+
+The UI revision checks capture 1280, 1440, 1728 and 1920 CSS-pixel viewports at DPR 2, plus 320 and 390 CSS-pixel mobile layouts. Computed type/spacing values, parent content-box bounds and real-value visibility are retained with the screenshots. The verifier checks circle area against recorded sessions/prompts, non-overlap, keyboard/touch detail and native model scales. Synthetic edge-state checks are labeled separately from the retained real report. None of these checks generates an aggregate or reads original histories.
+
+Run the frontend suites directly with `node --test web/source_activity_test.cjs web/usage_chart_test.cjs`; the Go embedded-UI test runs both as well. The exact three-asset allowlist, single same-origin fetch assertion and CSP tests remain unchanged. Use the system font stacks already defined in `styles.css`; the UI makes no font request.
 
 ## Documentation changes
 

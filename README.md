@@ -18,6 +18,10 @@ That one command generates the aggregate report, prints a terminal summary, star
 
 Source access is always read-only: **skuggsja does not write to source paths.** The terminal and UI show that guarantee on every run. Keep your agents running; source activity observed during generation is neutral information, for example: “2 files changed during the run by another process; skuggsja does not write to source paths.”
 
+In **Usage**, switch the harness mix between **Sessions** and **Prompts**. Circle area represents the selected recorded count; color identifies the harness. Hover, tap, or keyboard-focus a circle or its legend row for the exact value and coverage. One or two positive counts, or a distribution with circles too small to use, receives exact bars instead. Missing values stay unavailable.
+
+Models remain in separate expandable lists for each harness. The report has no model-level session or prompt attribution, so model bubbles would imply data it does not contain. Model bars use each harness's native events with independent scales. Open **Sources** for coverage, token availability and parser notes before interpreting usage. The Rewind is a generated snapshot; restart the command to include newer history.
+
 `go run`, `go install`, and the first build may contact Go module or toolchain servers. The zero-outbound guarantee applies to the installed/built program at runtime: Skuggsja has no telemetry, update check, remote API call, CDN, remote font, or remote browser asset. Use `--no-open` if you also do not want Skuggsja to launch your browser.
 
 To install from a checkout and then use the single command `skuggsja` (with `GOBIN`, or the Go bin directory, on `PATH`):
@@ -26,6 +30,25 @@ To install from a checkout and then use the single command `skuggsja` (with `GOB
 go install ./cmd/skuggsja
 skuggsja
 ```
+
+## Installation and updates
+
+Skuggsja ships as one Go executable with its UI embedded. A release binary does not require Go, Python, Node.js, a virtual environment, or a separate frontend server. The source-build commands above require Go only to compile it.
+
+The prepared macOS distribution uses a Homebrew cask in the existing `0merUfuk/thematrix` tap. **It is not published yet; these commands describe the intended release experience and will not work until the owner publishes the release and cask:**
+
+```sh
+brew install --cask 0merUfuk/thematrix/skuggsja
+skuggsja version
+skuggsja
+
+brew upgrade --cask skuggsja
+brew uninstall --cask skuggsja
+```
+
+Once installed, `skuggsja` works from any directory and discovers its supported local histories automatically. It does not need project registration or a setup command. Installation and updates use Homebrew's network access; the executable's runtime remains local.
+
+The release configuration also prepares checksummed archives for macOS, Linux and Windows on `amd64` and `arm64`. Cross-compilation is not runtime verification of every platform. Homebrew installation, upgrades and removal remain unverified until an actual cask is published. Ordinary removal should leave the generated report in place; `skuggsja clean` is the separate command for removing that regenerable artifact.
 
 ## What it reads
 

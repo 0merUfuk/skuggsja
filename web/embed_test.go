@@ -14,7 +14,7 @@ func TestSourceActivityPresentation(t *testing.T) {
 	if err != nil {
 		t.Skip("Node.js is needed for the production JavaScript presentation test")
 	}
-	output, err := exec.Command(node, "--test", "source_activity_test.cjs").CombinedOutput()
+	output, err := exec.Command(node, "--test", "source_activity_test.cjs", "usage_chart_test.cjs").CombinedOutput()
 	if err != nil {
 		t.Fatalf("source activity presentation: %v\n%s", err, output)
 	}

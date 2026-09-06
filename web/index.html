@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <meta name="theme-color" content="#f1ead8">
+    <meta name="theme-color" content="#f4f4ef">
     <meta name="description" content="A private, local-first rewind of your AI coding-agent history.">
     <title>skuggsja — your AI coding-agent rewind</title>
     <link rel="stylesheet" href="/styles.css">
@@ -12,21 +12,19 @@
   <body id="top">
     <a class="skip-link" href="#main-content">Skip to your rewind</a>
     <svg id="svg-namespace-probe" class="visually-hidden" aria-hidden="true" focusable="false"></svg>
-    <div class="binding binding--cobalt" aria-hidden="true"></div>
-    <div class="binding binding--vermilion" aria-hidden="true"></div>
 
     <header class="masthead" aria-label="Rewind masthead">
       <a class="wordmark" href="#top" aria-label="skuggsja, back to top">
         <span class="wordmark__name">skuggsja</span>
-        <span class="wordmark__meaning">old norse · mirror</span>
+        <span class="wordmark__meaning">local agent rewind</span>
       </a>
-      <nav class="folio-nav" aria-label="Rewind chapters" hidden>
-        <a href="#shape"><span aria-hidden="true">01</span> Shape</a>
-        <a href="#rhythm"><span aria-hidden="true">02</span> Rhythm</a>
-        <a href="#harnesses"><span aria-hidden="true">04</span> Harnesses</a>
-        <a href="#method"><span aria-hidden="true">07</span> Method</a>
+      <nav class="folio-nav" aria-label="Rewind sections" hidden>
+        <a href="#usage">Usage</a>
+        <a href="#shape">Activity</a>
+        <a href="#harnesses">Sources</a>
+        <a href="#method">Method</a>
       </nav>
-      <p class="local-mark"><span aria-hidden="true">●</span> localhost edition</p>
+      <p class="local-mark">skuggsjá / mirror</p>
     </header>
 
     <main id="main-content">
@@ -36,7 +34,7 @@
       </aside>
       <section id="loading-state" class="state-page" aria-labelledby="loading-title" aria-live="polite">
         <p class="eyebrow">Opening the local archive</p>
-        <h1 id="loading-title">Preparing your mirror<span class="loading-mark" aria-hidden="true">…</span></h1>
+        <h1 id="loading-title">Loading your rewind<span class="loading-mark" aria-hidden="true">…</span></h1>
         <p class="state-page__copy">Reading the derived report from this machine.</p>
         <div class="skeleton" aria-hidden="true">
           <div class="skeleton__line skeleton__line--short"></div>
@@ -51,8 +49,8 @@
       </section>
 
       <section id="error-state" class="state-page state-page--error" aria-labelledby="error-title" aria-live="assertive" hidden>
-        <p class="eyebrow">The archive stayed closed</p>
-        <h1 id="error-title">This mirror could not be developed.</h1>
+        <p class="eyebrow">Local report unavailable</p>
+        <h1 id="error-title">The report could not be loaded.</h1>
         <p id="error-message" class="state-page__copy">The local report endpoint did not answer.</p>
         <div class="state-actions">
           <button id="retry-button" class="press-button" type="button">Try the local report again</button>
@@ -62,7 +60,7 @@
 
       <section id="empty-state" class="state-page state-page--empty" aria-labelledby="empty-title" hidden>
         <p class="eyebrow">Field note · no sessions in view</p>
-        <h1 id="empty-title">The archive is quiet.</h1>
+        <h1 id="empty-title">No sessions recovered.</h1>
         <p id="empty-copy" class="state-page__copy">No supported sessions landed inside this recorded span.</p>
         <div class="state-actions">
           <button id="empty-retry-button" class="press-button" type="button">Check the report again</button>
@@ -73,17 +71,17 @@
       </section>
 
       <div id="rewind" hidden>
-        <section class="hero chapter" aria-labelledby="hero-title">
+        <section class="hero" aria-labelledby="hero-title">
           <div class="hero__copy">
             <p id="hero-edition" class="eyebrow">Personal archive</p>
-            <h1 id="hero-title">A mirror<br><em>of how you built.</em></h1>
+            <h1 id="hero-title">Your working record.</h1>
             <p id="hero-narrative" class="hero__narrative"></p>
             <p id="coverage-stamp" class="coverage-stamp"></p>
           </div>
           <figure class="hero-total" aria-labelledby="hero-session-count hero-session-label">
             <figcaption class="hero-total__overline">Locally recovered sessions</figcaption>
             <strong id="hero-session-count" class="hero-total__number">0</strong>
-            <p id="hero-session-label" class="hero-total__label">sessions held in this mirror</p>
+            <p id="hero-session-label" class="hero-total__label">top-level sessions · children counted separately</p>
           </figure>
           <dl class="proof-strip" aria-label="Archive proof points">
             <div>
@@ -106,7 +104,7 @@
         </section>
 
         <aside id="coverage-notice" class="coverage-notice" aria-labelledby="coverage-notice-title" hidden>
-          <p class="coverage-notice__mark" aria-hidden="true">!</p>
+
           <div>
             <h2 id="coverage-notice-title">Local history is not lifetime usage.</h2>
             <p id="coverage-notice-copy"></p>
@@ -114,19 +112,41 @@
         </aside>
 
         <aside id="sparse-note" class="field-note" aria-labelledby="sparse-title" hidden>
-          <p class="field-note__mark" aria-hidden="true">※</p>
+
           <div>
             <h2 id="sparse-title">Read this as a field note.</h2>
             <p id="sparse-copy"></p>
           </div>
         </aside>
 
+        <section id="usage" class="chapter chapter--usage" aria-labelledby="usage-title">
+          <header class="chapter-heading">
+            <div>
+              <p class="eyebrow">Usage</p>
+              <h2 id="usage-title">The tools behind the record</h2>
+            </div>
+          </header>
+          <div class="usage-layout">
+            <div class="harness-usage" aria-labelledby="harness-usage-title">
+              <h3 id="harness-usage-title">Harness mix</h3>
+              <p class="usage-context">Recovered local usage. Coverage differs by harness.</p>
+              <div id="usage-chart"></div>
+            </div>
+            <div class="model-index" aria-labelledby="model-index-title">
+              <div class="index-heading">
+                <h3 id="model-index-title">Models within each harness</h3>
+                <p>Model-level sessions and prompts are not available in this report. These bars show native events, compared only within each harness.</p>
+              </div>
+              <div id="model-list"></div>
+            </div>
+          </div>
+        </section>
+
         <section id="shape" class="chapter chapter--shape" aria-labelledby="shape-title">
           <header class="chapter-heading">
-            <p class="chapter-number" aria-hidden="true">01</p>
             <div>
-              <p class="eyebrow">The shape of the recorded span</p>
-              <h2 id="shape-title">Every mark is a day you returned.</h2>
+              <p class="eyebrow">Activity</p>
+              <h2 id="shape-title">Days at the keyboard</h2>
             </div>
           </header>
 
@@ -174,10 +194,9 @@
 
         <section id="rhythm" class="chapter chapter--rhythm" aria-labelledby="rhythm-title">
           <header class="chapter-heading chapter-heading--offset">
-            <p class="chapter-number" aria-hidden="true">02</p>
             <div>
-              <p class="eyebrow">Your working rhythm</p>
-              <h2 id="rhythm-title">The clock remembers when you found momentum.</h2>
+              <p class="eyebrow">Rhythm</p>
+              <h2 id="rhythm-title">Hours & habits</h2>
             </div>
           </header>
 
@@ -211,16 +230,15 @@
 
         <section id="voice" class="chapter chapter--voice" aria-labelledby="voice-title">
           <header class="chapter-heading">
-            <p class="chapter-number" aria-hidden="true">03</p>
             <div>
-              <p class="eyebrow">The voice in the machine</p>
-              <h2 id="voice-title">How you asked is part of how you built.</h2>
+              <p class="eyebrow">Prompt style</p>
+              <h2 id="voice-title">The shape of a prompt</h2>
             </div>
           </header>
 
           <div id="prompt-unavailable" class="unavailable-note" hidden>
             <p class="unavailable-note__mark">Not measured</p>
-            <p>Prompt-length statistics were unavailable, so this page leaves the space honest.</p>
+            <p>The available histories do not include measurable prompt-length statistics.</p>
           </div>
           <div id="prompt-available" class="prompt-layout">
             <div class="prompt-lead">
@@ -244,22 +262,15 @@
             </dl>
           </div>
 
-          <div class="model-index" aria-labelledby="model-index-title">
-            <div class="index-heading">
-              <h3 id="model-index-title">Models within each harness</h3>
-              <p>Event units differ by harness. Rankings and bars compare models only within the same harness.</p>
-            </div>
-            <div id="model-list"></div>
-          </div>
+
         </section>
 
         <section id="harnesses" class="chapter chapter--providers" aria-labelledby="harnesses-title">
           <header class="chapter-heading chapter-heading--offset">
-            <p class="chapter-number" aria-hidden="true">04</p>
             <div>
-              <p class="eyebrow">The honest ledger</p>
-              <h2 id="harnesses-title">Four histories. No false equivalence.</h2>
-              <p class="chapter-deck">Open a folio for its provenance, limits, and the measurements that source actually recorded. Tool-call units differ by harness; counts stay in each folio without a combined total or ranking.</p>
+              <p class="eyebrow">Source ledger</p>
+              <h2 id="harnesses-title">What each harness recorded</h2>
+              <p class="chapter-deck">Open a source for coverage, recorded metrics and parser notes. Tool-call units differ by harness; counts stay separate without a combined total or ranking.</p>
             </div>
           </header>
           <div class="ledger-labels" aria-hidden="true">
@@ -272,10 +283,9 @@
 
         <section id="projects" class="chapter chapter--projects" aria-labelledby="projects-title">
           <header class="chapter-heading">
-            <p class="chapter-number" aria-hidden="true">05</p>
             <div>
-              <p class="eyebrow">Where the work gathered</p>
-              <h2 id="projects-title">A project index, not a path disclosure.</h2>
+              <p class="eyebrow">Projects</p>
+              <h2 id="projects-title">Where the sessions gathered</h2>
             </div>
           </header>
 
@@ -291,10 +301,9 @@
 
         <section id="privacy" class="chapter chapter--privacy" aria-labelledby="privacy-title">
           <header class="chapter-heading chapter-heading--inverse">
-            <p class="chapter-number" aria-hidden="true">06</p>
             <div>
-              <p class="eyebrow">The negative space matters</p>
-              <h2 id="privacy-title">What this mirror refused to keep.</h2>
+              <p class="eyebrow">Privacy</p>
+              <h2 id="privacy-title">The report boundary</h2>
             </div>
           </header>
 
@@ -327,11 +336,10 @@
 
         <section id="method" class="chapter chapter--method" aria-labelledby="method-title">
           <header class="chapter-heading">
-            <p class="chapter-number" aria-hidden="true">07</p>
             <div>
-              <p class="eyebrow">Read the footnotes</p>
-              <h2 id="method-title">Method before mythology.</h2>
-              <p class="chapter-deck">This portrait is bounded by what survived locally and by what each harness records.</p>
+              <p class="eyebrow">Method</p>
+              <h2 id="method-title">Definitions & caveats</h2>
+              <p class="chapter-deck">Counts reflect surviving local records and the fields each harness exposes.</p>
             </div>
           </header>
 
@@ -349,8 +357,7 @@
       </div>
     </main>
 
-    <footer id="page-footer" class="page-footer" hidden>
-      <p><span>skuggsja</span> · a local mirror of the sessions that remained on this machine</p>
+    <aside id="page-footer" class="page-footer" aria-label="Report metadata" hidden>
       <dl>
         <div>
           <dt>Generated</dt>
@@ -361,7 +368,7 @@
           <dd id="schema-version">—</dd>
         </div>
       </dl>
-    </footer>
+    </aside>
 
     <noscript>
       <section class="noscript-note">

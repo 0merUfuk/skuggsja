@@ -8,6 +8,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ### Added
 
+- Interactive harness circle chart sized by recorded sessions or prompts, with exact bar fallbacks and keyboard/touch detail. Model activity remains provider-scoped because model-level sessions/prompts are unavailable.
 - Local-first Rewind generation for Claude Code, Codex, Hermes Agent, and Cursor histories.
 - Per-provider root/child session, prompt, project, tool-call, and model-event summaries where exposed, plus available source-recorded token ledgers and aggregate rhythm and longest-session metrics.
 - Mode-aware Codex rollout parsing for plain JSONL and zstd-compressed histories.
@@ -29,6 +30,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ### Changed
 
+- Compact editorial UI with a bounded system-font type scale, 1280px content limit, semantic harness colors, expandable model lists and dense source records. Removed viewport-sized display typography, rotated decoration and scroll reveals.
 - Require Go 1.27.1 or newer for current standard-library security fixes.
 - Report schema 3 removes the global `totals.tool_calls` field. Native tool-call counts and availability remain on each provider; unavailable counts remain labeled unavailable.
 - Model-event lists are grouped by harness, with ranking positions and meter scales local to each group. The overview no longer names a cross-provider leading model.
