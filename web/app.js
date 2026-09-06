@@ -898,14 +898,28 @@
       const more = document.createElement("details");
       const summary = document.createElement("summary");
       const rest = document.createElement("ol");
+      const collapse = document.createElement("button");
+      const showMore = "Show " + formatNumber(items.length - PRIMARY_LIST_LIMIT) + " more";
       more.className = "more-index";
-      summary.textContent = "Show " + formatNumber(items.length - PRIMARY_LIST_LIMIT) + " more";
+      summary.textContent = showMore;
       rest.className = "rank-list";
       rest.start = PRIMARY_LIST_LIMIT + 1;
       items.slice(PRIMARY_LIST_LIMIT).forEach(function (item, index) {
         rest.appendChild(rankRow(item, index + PRIMARY_LIST_LIMIT + 1, maximum));
       });
+      collapse.type = "button";
+      collapse.className = "more-index__collapse";
+      collapse.textContent = "Show fewer";
+      more.addEventListener("toggle", function () {
+        summary.textContent = more.open ? "Show fewer" : showMore;
+      });
+      collapse.addEventListener("click", function () {
+        more.open = false;
+        summary.focus({ preventScroll: true });
+        summary.scrollIntoView({ block: "nearest", behavior: "instant" });
+      });
       more.append(summary, rest);
+      if (items.length > PRIMARY_LIST_LIMIT * 2) more.appendChild(collapse);
       container.appendChild(more);
     }
   }
@@ -914,17 +928,18 @@
     const row = document.createElement("li");
     const name = element("span", "rank-row__name");
     const meter = document.createElement("meter");
+    const unit = item.value === 1 ? item.unit.replace(/s$/, "") : item.unit;
     row.className = "rank-row";
     name.append(element("strong", "", item.name), element("small", "", item.meta));
     meter.min = 0;
     meter.max = maximum;
     meter.value = item.value;
-    meter.setAttribute("aria-label", item.name + ": " + formatNumber(item.value) + " " + item.unit);
+    meter.setAttribute("aria-label", item.name + ": " + formatNumber(item.value) + " " + unit);
     row.append(
       element("span", "rank-row__position", String(position).padStart(2, "0")),
       name,
       meter,
-      element("span", "rank-row__value", formatNumber(item.value) + " " + item.unit)
+      element("span", "rank-row__value", formatNumber(item.value) + " " + unit)
     );
     return row;
   }

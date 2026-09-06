@@ -31,6 +31,7 @@ async function render(data, subsequentFetch) {
     setAttribute(name, value) { this.attributes[name] = value; }
     addEventListener(name, handler) { this.listeners.set(name, handler); }
     focus() { document.activeElement = this; }
+    scrollIntoView(options) { this.scrollOptions = options; }
   }
   const elements = new Map();
   function element(id) {
@@ -151,7 +152,50 @@ test("model rankings and meter scales restart within each harness", async () => 
   assert.deepEqual(rows.map((groupRows) => groupRows[0].children[0].textContent), ["01", "01"]);
   assert.deepEqual(rows.map((groupRows) => groupRows.map((row) => row.children[2].max)), [[3, 3], [12]]);
   assert.deepEqual(rows.map((groupRows) => groupRows.map((row) => row.children[2].value)), [[3, 1], [12]]);
+  assert.equal(rows[0][1].children[3].textContent, "1 native event");
+  assert.equal(rows[0][1].children[2].attributes["aria-label"], "response-model-small: 1 native event");
   assert.doesNotMatch(elements.get("hero-narrative").textContent, /appears most often|api-model|response-model/);
+});
+
+test("long ranked lists show their disclosure state and return focus when collapsed from the end", async () => {
+  const elements = await render({
+    totals: { sessions: 21 },
+    projects: Array.from({ length: 21 }, (_, index) => ({ name: "Project " + index, sessions: 21 - index }))
+  });
+  const [primary, more] = elements.get("project-list").children;
+  const [summary, rest, collapse] = more.children;
+  assert.equal(primary.children.length, 10);
+  assert.equal(rest.children.length, 11);
+  assert.equal(rest.start, 11);
+  assert.equal(summary.textContent, "Show 11 more");
+  assert.equal(collapse.type, "button");
+  assert.equal(collapse.textContent, "Show fewer");
+
+  more.open = true;
+  more.listeners.get("toggle")();
+  assert.equal(summary.textContent, "Show fewer");
+  collapse.listeners.get("click")();
+  assert.equal(more.open, false);
+  assert.equal(elements.activeElement(), summary);
+  assert.equal(summary.scrollOptions.block, "nearest");
+  assert.equal(summary.scrollOptions.behavior, "instant");
+  more.listeners.get("toggle")();
+  assert.equal(summary.textContent, "Show 11 more");
+  assert.equal(rest.children[0].children[0].textContent, "11");
+  assert.equal(rest.children[0].children[2].value, 11);
+});
+
+test("short ranked-list disclosures do not repeat the collapse control", async () => {
+  const elements = await render({
+    totals: { sessions: 11 },
+    projects: Array.from({ length: 11 }, (_, index) => ({ name: "Project " + index, sessions: 11 - index }))
+  });
+  const more = elements.get("project-list").children[1];
+  assert.equal(more.children.length, 2);
+  assert.equal(more.children[1].children[0].children[3].textContent, "1 session");
+  more.open = true;
+  more.listeners.get("toggle")();
+  assert.equal(more.children[0].textContent, "Show fewer");
 });
 
 for (const scenario of [

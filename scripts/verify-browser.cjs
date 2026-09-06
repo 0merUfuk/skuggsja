@@ -129,6 +129,101 @@ async function settled(session) {
   await delay(500);
 }
 
+// Exercise disclosure state, hit targets and return navigation through browser
+// input. Reading hidden rows from the DOM does not establish a usable Show more.
+async function disclosureChecks(session) {
+  result.disclosure_checks = [];
+  for (const width of [1280, 1440, 1728, 1920, 320, 390]) {
+    const mobile = width < 600;
+    await cdp.send("Emulation.setDeviceMetricsOverride", { width, height: mobile ? 844 : 1000, deviceScaleFactor: 2, mobile }, session);
+    await cdp.send("Emulation.setTouchEmulationEnabled", { enabled: mobile, maxTouchPoints: 1 }, session);
+    await cdp.send("Page.navigate", { url: args.url }, session);
+    await until(() => evaluate(session, "Boolean(document.querySelector('#rewind')&&!document.querySelector('#rewind').hidden)"), "fresh disclosure Rewind");
+    await settled(session);
+    async function press(selector, trailingEdge = false) {
+      const point = await evaluate(session, `(() => {const e=document.querySelector(${JSON.stringify(selector)});e.scrollIntoView({block:'center',behavior:'instant'});const b=e.getBoundingClientRect();return{x:${trailingEdge ? "b.right-12" : "b.x+b.width/2"},y:b.y+b.height/2};})()`);
+      if (mobile) {
+        await cdp.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: [point] }, session);
+        await cdp.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] }, session);
+      } else {
+        await cdp.send("Input.dispatchMouseEvent", { type: "mousePressed", ...point, button: "left", clickCount: 1 }, session);
+        await cdp.send("Input.dispatchMouseEvent", { type: "mouseReleased", ...point, button: "left", clickCount: 1 }, session);
+      }
+      await settled(session);
+    }
+    async function keyboard(selector, key, code, virtualKeyCode) {
+      await evaluate(session, `document.querySelector(${JSON.stringify(selector)}).focus()`);
+      await cdp.send("Input.dispatchKeyEvent", { type: "keyDown", key, code, text: key === "Enter" ? "\r" : " ", unmodifiedText: key === "Enter" ? "\r" : " ", windowsVirtualKeyCode: virtualKeyCode }, session);
+      await cdp.send("Input.dispatchKeyEvent", { type: "keyUp", key, code, windowsVirtualKeyCode: virtualKeyCode }, session);
+      await settled(session);
+    }
+    const groupCount = await evaluate(session, "document.querySelectorAll('.model-provider-index').length");
+    for (let i = 0; i < groupCount; i++) {
+      const selector = `.model-provider-index:nth-child(${i + 1})`;
+      if (!await evaluate(session, `document.querySelector(${JSON.stringify(selector)}).open`)) await press(selector + " > summary");
+    }
+    const indices = await evaluate(session, "[...document.querySelectorAll('.more-index')].map((e,i)=>{e.dataset.qaDisclosure=String(i);return i;})");
+    for (const index of indices) {
+      const selector = `.more-index[data-qa-disclosure="${index}"]`;
+      const summary = selector + " > summary";
+      const read = `(() => {const d=document.querySelector(${JSON.stringify(selector)}),s=d.querySelector('summary'),list=d.querySelector('ol'),b=d.getBoundingClientRect(),sb=s.getBoundingClientRect(),lb=list.getBoundingClientRect();return {open:d.open,label:s.textContent,summaryWidth:sb.width,summaryHeight:sb.height,width:b.width,height:b.height,listHeight:lb.height,rows:list.children.length,hasBottomControl:Boolean(d.querySelector('.more-index__collapse')),documentHeight:document.documentElement.scrollHeight,scrollY,summaryTop:sb.top,summaryBottom:sb.bottom,focused:document.activeElement===s,rowsPainted:[...list.children].every(e=>e.checkVisibility()),listContained:lb.left>=b.left-1&&lb.right<=b.right+1&&lb.bottom<=b.bottom+1,rowsSeparate:[...list.children].every((e,i,a)=>!i||e.getBoundingClientRect().top>=a[i-1].getBoundingClientRect().bottom-1)};})()`;
+      await evaluate(session, `document.querySelector(${JSON.stringify(summary)}).scrollIntoView({block:'center',behavior:'instant'})`);
+      await settled(session);
+      const before = await evaluate(session, read);
+      check(`${width} disclosure ${index} starts closed`, before.open, false);
+      check(`${width} disclosure ${index} names exact hidden count`, before.label, `Show ${new Intl.NumberFormat("en-US").format(before.rows)} more`);
+      check(`${width} disclosure ${index} full-width 44px target`, before.summaryWidth >= before.width - 2 && before.summaryHeight >= 44, true);
+      await press(summary, true);
+      const expanded = await evaluate(session, read);
+      check(`${width} disclosure ${index} trailing-edge ${mobile ? "tap" : "click"} opens`, expanded.open, true);
+      check(`${width} disclosure ${index} offers collapse`, expanded.label, "Show fewer");
+      check(`${width} disclosure ${index} repeats collapse only for a long tail`, expanded.hasBottomControl, before.rows > 10);
+      check(`${width} disclosure ${index} actually grows for its rows`, expanded.height >= before.height + expanded.listHeight + (expanded.hasBottomControl ? 44 : 0), true);
+      check(`${width} disclosure ${index} rows painted and contained`, expanded.rowsPainted && expanded.listContained && expanded.rowsSeparate, true);
+      check(`${width} disclosure ${index} opening keeps summary stationary`, Math.abs(expanded.summaryTop - before.summaryTop) <= 1, true);
+      await screenshot(session, `rewind-${width}-disclosure-${index}-expanded.png`);
+      if (expanded.hasBottomControl) {
+        await evaluate(session, `document.querySelector(${JSON.stringify(selector + " > .more-index__collapse")}).scrollIntoView({block:'center',behavior:'instant'})`);
+        await screenshot(session, `rewind-${width}-disclosure-${index}-end.png`);
+      }
+      await press(expanded.hasBottomControl ? selector + " > .more-index__collapse" : summary, true);
+      const collapsed = await evaluate(session, read);
+      check(`${width} disclosure ${index} ${expanded.hasBottomControl ? "bottom control" : "summary"} closes`, collapsed.open, false);
+      check(`${width} disclosure ${index} collapsed label restored`, collapsed.label, before.label);
+      check(`${width} disclosure ${index} closed height restored`, collapsed.height, before.height);
+      check(`${width} disclosure ${index} document height restored`, collapsed.documentHeight, before.documentHeight);
+      check(`${width} disclosure ${index} focus returns to visible summary`, collapsed.focused && collapsed.summaryTop >= -1 && collapsed.summaryBottom <= (mobile ? 844 : 1000) + 1, true);
+      await keyboard(summary, "Enter", "Enter", 13);
+      check(`${width} disclosure ${index} Enter expands`, await evaluate(session, read).then(r => r.open && r.label === "Show fewer"), true);
+      await keyboard(summary, " ", "Space", 32);
+      check(`${width} disclosure ${index} Space collapses`, await evaluate(session, read).then(r => !r.open && r.label === before.label), true);
+      check(`${width} disclosure ${index} keyboard focus is visible`, await evaluate(session, `(() => {const e=document.querySelector(${JSON.stringify(summary)}),s=getComputedStyle(e);return e.matches(':focus-visible')&&s.outlineStyle!=='none'&&parseFloat(s.outlineWidth)>=2;})()`), true);
+      result.disclosure_checks.push({ width, index, input: mobile ? "touch and keyboard" : "mouse and keyboard", before, expanded, collapsed });
+    }
+    const projects = await evaluate(session, "[...document.querySelectorAll('#project-list .rank-row')].map(e=>({value:e.querySelector('meter').value,label:e.querySelector('.rank-row__value').textContent}))");
+    check(`${width} project rows retain exact session counts`, projects.map(p=>p.value), expected.projects.map(p=>p.sessions).sort((a,b)=>b-a));
+    check(`${width} project rows label singular and plural sessions`, projects.every(p=>p.label===new Intl.NumberFormat('en-US').format(p.value)+(p.value===1?' session':' sessions')), true);
+    const otherDetails = await evaluate(session, "[...document.querySelectorAll('details:not(.more-index)')].map((e,i)=>{e.dataset.qaDetails=String(i);return {index:i,open:e.open};})");
+    for (const detail of otherDetails) {
+      const selector = `details[data-qa-details="${detail.index}"]`;
+      await press(selector + " > summary", true);
+      check(`${width} native disclosure ${detail.index} toggles`, await evaluate(session, `document.querySelector(${JSON.stringify(selector)}).open`), !detail.open);
+      await keyboard(selector + " > summary", "Enter", "Enter", 13);
+      check(`${width} native disclosure ${detail.index} keyboard restores`, await evaluate(session, `document.querySelector(${JSON.stringify(selector)}).open`), detail.open);
+    }
+    const links = await evaluate(session, "[...document.querySelectorAll('.folio-nav a')].map(e=>e.getAttribute('href'))");
+    for (const href of links) {
+      await press(`.folio-nav a[href="${href}"]`);
+      const destination = await evaluate(session, `({hash:location.hash,top:document.querySelector(${JSON.stringify(href)}).getBoundingClientRect().top})`);
+      check(`${width} navigation ${href} updates hash`, destination.hash, href);
+      check(`${width} navigation ${href} exposes heading`, destination.top >= -1 && destination.top < (mobile ? 844 : 1000) - 40, true);
+    }
+    await press(".wordmark");
+    check(`${width} wordmark returns to page top`, await evaluate(session, "scrollY"), 0);
+    check(`${width} disclosure interactions create no horizontal overflow`, await evaluate(session, "document.documentElement.scrollWidth<=innerWidth"), true);
+  }
+}
+
 // Verification only: inspect actual computed geometry at CSS-pixel widths and
 // DPR 2. The retained aggregate stays unchanged; the temporary hidden probe only
 // resolves custom-property lengths and is removed before taking screenshots.
@@ -335,7 +430,7 @@ async function usageChart(session, report, options = {}) {
     chartCheck(`${group.harness} model bars retain exact native values`, rows.map(r=>r.value), values);
     chartCheck(`${group.harness} model rank restarts at one`, rows[0]?.position, "01");
     chartCheck(`${group.harness} model bars keep harness-local scale`, rows.every(r=>r.max===Math.max(1,...values)), true);
-    chartCheck(`${group.harness} expanded model values are visible and labelled`, rows.every(r=>r.painted&&r.text===number(r.value)+" native events"), true);
+    chartCheck(`${group.harness} expanded model values are visible and labelled`, rows.every(r=>r.painted&&r.text===number(r.value)+(r.value===1?" native event":" native events")), true);
     if(hasMore) await click(moreSelector);
     if(!group.open) await click(`${selector} > summary`);
   }
@@ -590,6 +685,7 @@ async function main() {
   const mobileLayout = await cdp.send("Page.getLayoutMetrics", {}, session);
   await screenshot(session, "rewind-mobile-full.png", { x: 0, y: 0, width: 390, height: Math.ceil(mobileLayout.cssContentSize.height), scale: 1 });
   await responsiveMatrix(session);
+  if(args.revision) await disclosureChecks(session);
   if(args.revision) await syntheticPresentationChecks();
   await delay(1000);
   result.unhandled_targets = [...attachments.entries()].filter(([id]) => !knownTargets.has(id))

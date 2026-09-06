@@ -202,7 +202,15 @@ meter::-webkit-meter-bar { border: 0; border-radius: 0; background: var(--paper-
 meter::-webkit-meter-optimum-value { background: var(--series); }
 meter::-moz-meter-bar { background: var(--series); }
 .more-index { border-top: 1px solid var(--rule); }
-.more-index summary { display: flex; align-items: center; min-height: 2.75rem; width: fit-content; color: var(--ink); font-size: var(--text-sm); }
+.more-index > summary, .more-index__collapse {
+  display: flex; align-items: center; gap: var(--space-sm); width: 100%; min-height: 2.75rem;
+  padding: var(--space-sm) var(--space-smd); border: 0; background: transparent;
+  color: var(--ink); font-size: var(--text-sm); text-align: left; list-style: none;
+}
+.more-index > summary::before { content: "+"; font-family: var(--font-data); }
+.more-index[open] > summary::before, .more-index__collapse::before { content: "−"; font-family: var(--font-data); }
+.more-index > summary:hover, .more-index__collapse:hover { background: var(--paper-deep); }
+.more-index__collapse { border-top: 1px solid var(--rule); }
 .activity-layout { display: grid; grid-template-columns: minmax(0, 3fr) minmax(12rem, 1fr); align-items: start; gap: var(--space-xl); }
 .activity-plate { padding-top: var(--space-md); border-top: 1px solid var(--rule); min-width: 0; }
 .plate-heading { display: flex; align-items: start; justify-content: space-between; gap: var(--space-md); }
