@@ -51,6 +51,9 @@ type discoveryInputs struct {
 
 // Generate discovers, snapshots, reads, aggregates, re-snapshots, and persists.
 func Generate(ctx context.Context, options GenerateOptions) (generation Generation, returnErr error) {
+	if err := ctx.Err(); err != nil {
+		return Generation{}, err
+	}
 	started := time.Now()
 	now := options.Now
 	if now == nil {
@@ -66,6 +69,9 @@ func Generate(ctx context.Context, options GenerateOptions) (generation Generati
 	}
 
 	inputs := discoverInputs(ctx, options.Readers)
+	if err := ctx.Err(); err != nil {
+		return Generation{}, err
+	}
 	if err := EnsureOutputSeparate(outputPath, inputs.sourceRoots, inputs.sourceFiles); err != nil {
 		return Generation{}, err
 	}
@@ -82,10 +88,16 @@ func Generate(ctx context.Context, options GenerateOptions) (generation Generati
 		stable := false
 		for attempt := 0; attempt < 3; attempt++ {
 			before, auditErr = audit.CaptureConfigured(ctx, inputs.auditRoots, inputs.auditFiles, inputs.auditConfigured)
+			if err := ctx.Err(); err != nil {
+				return Generation{}, err
+			}
 			if auditErr != nil {
 				break
 			}
 			refreshed := discoverInputs(ctx, options.Readers)
+			if err := ctx.Err(); err != nil {
+				return Generation{}, err
+			}
 			if sameDiscoveryInputs(inputs, refreshed) {
 				inputs = refreshed
 				stable = true
@@ -106,6 +118,9 @@ func Generate(ctx context.Context, options GenerateOptions) (generation Generati
 
 	results := make([]model.ProviderResult, 0, len(inputs.items))
 	for _, item := range inputs.items {
+		if err := ctx.Err(); err != nil {
+			return Generation{}, err
+		}
 		if item.err != nil {
 			result := model.ProviderResult{
 				Harness: item.reader.Harness(), DisplayName: item.reader.DisplayName(),
@@ -116,12 +131,18 @@ func Generate(ctx context.Context, options GenerateOptions) (generation Generati
 			continue
 		}
 		results = append(results, item.reader.Read(ctx, item.discovery))
+		if err := ctx.Err(); err != nil {
+			return Generation{}, err
+		}
 	}
 
 	comparison := audit.Comparison{}
 	observationComplete := false
 	if options.AuditSources && auditErr == nil && inputs.hasAuditPaths() {
 		after, err := audit.CaptureConfigured(ctx, inputs.auditRoots, inputs.auditFiles, inputs.auditConfigured)
+		if contextErr := ctx.Err(); contextErr != nil {
+			return Generation{}, contextErr
+		}
 		if err != nil {
 			auditErr = err
 		} else {
@@ -143,6 +164,11 @@ func Generate(ctx context.Context, options GenerateOptions) (generation Generati
 	report := analytics.Build(results, analytics.Options{
 		Now: now(), Location: options.Location, SourceAudit: comparison, SourceObservation: observation,
 	})
+	// A canceled read must not replace a previous complete report with partial
+	// metrics. Once WriteReport begins, its atomic install runs to completion.
+	if err := ctx.Err(); err != nil {
+		return Generation{}, err
+	}
 	if err := WriteReport(outputPath, report); err != nil {
 		return Generation{}, fmt.Errorf("persist Rewind: %w", err)
 	}
@@ -154,6 +180,9 @@ func Generate(ctx context.Context, options GenerateOptions) (generation Generati
 func discoverInputs(ctx context.Context, readers []provider.Reader) discoveryInputs {
 	inputs := discoveryInputs{items: make([]discoveredReader, 0, len(readers))}
 	for _, reader := range readers {
+		if ctx.Err() != nil {
+			break
+		}
 		discovery, err := reader.Discover(ctx)
 		inputs.items = append(inputs.items, discoveredReader{reader: reader, discovery: discovery, err: err})
 		inputs.auditRoots = append(inputs.auditRoots, discovery.Roots...)

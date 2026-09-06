@@ -13,7 +13,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/0merUfuk/skuggsja/internal/app"
 	"github.com/0merUfuk/skuggsja/internal/audit"
+	"github.com/0merUfuk/skuggsja/internal/model"
 	"github.com/0merUfuk/skuggsja/internal/provider"
 	"github.com/0merUfuk/skuggsja/internal/provider/codex"
 )
@@ -227,7 +229,7 @@ func TestReleaseSelectedReportPreservesExactBytesAndEqualityLabel(t *testing.T) 
 			if err := os.WriteFile(original, data, 0o600); err != nil {
 				t.Fatal(err)
 			}
-			retainSelectedReleaseReport(t, original, verified, 3, releaseInputs{})
+			retainSelectedReleaseReport(t, original, verified, 3, releaseInputs{}, "complete")
 			name := "rewind-observed-changing.json"
 			absent := "rewind.json"
 			if verified {
@@ -239,6 +241,185 @@ func TestReleaseSelectedReportPreservesExactBytesAndEqualityLabel(t *testing.T) 
 			}
 			if _, err := os.Stat(filepath.Join(evidence, absent)); !errors.Is(err, os.ErrNotExist) {
 				t.Fatal("report was also retained under a contradictory equality label")
+			}
+		})
+	}
+}
+
+type releaseCountingReader struct {
+	id    model.Harness
+	file  string
+	reads int
+}
+
+func (reader *releaseCountingReader) Harness() model.Harness { return reader.id }
+func (reader *releaseCountingReader) DisplayName() string    { return string(reader.id) }
+func (reader *releaseCountingReader) Discover(context.Context) (provider.Discovery, error) {
+	return provider.Discovery{Harness: reader.id, Roots: []string{filepath.Dir(reader.file)}, Files: []string{reader.file}}, nil
+}
+func (reader *releaseCountingReader) Read(context.Context, provider.Discovery) model.ProviderResult {
+	reader.reads++
+	return model.ProviderResult{Harness: reader.id, DisplayName: string(reader.id), Status: "supported", SourceFiles: []string{reader.file}}
+}
+
+func TestReleaseFallbackMeasuresExactlyClaudeCursorAndIngestsEveryOriginalReader(t *testing.T) {
+	root := t.TempDir()
+	evidence := t.TempDir()
+	if err := os.Chmod(evidence, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("SKUGGSJA_RELEASE_EVIDENCE_DIR", evidence)
+	var readers []provider.Reader
+	for _, id := range []model.Harness{model.Claude, model.Codex, model.Hermes, model.Cursor} {
+		dir := filepath.Join(root, string(id))
+		if err := os.Mkdir(dir, 0o700); err != nil {
+			t.Fatal(err)
+		}
+		file := filepath.Join(dir, "source.jsonl")
+		if err := os.WriteFile(file, []byte("synthetic source\n"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		readers = append(readers, &releaseCountingReader{id: id, file: file})
+	}
+	scope, err := selectReleaseScope(readers, true, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(scope.equality) != 2 || scope.equality[0] != readers[0] || scope.equality[1] != readers[3] || len(scope.snapshot) != 1 || scope.snapshot[0] != readers[1] {
+		t.Fatal("fallback changed the exact Claude+Cursor equality or own-Codex snapshot scope")
+	}
+	for i, reader := range readers {
+		if scope.ingestion[i] != reader {
+			t.Fatal("fallback replaced an original ingestion reader")
+		}
+	}
+	if scope.hermesEquality() != "unmeasured" {
+		t.Fatal("fallback claimed Hermes equality")
+	}
+	fullScope, err := selectReleaseScope(readers, true, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	all, err := discoverReleaseInputs(context.Background(), readers)
+	if err != nil {
+		t.Fatal(err)
+	}
+	full, err := discoverReleaseInputs(context.Background(), fullScope.equality)
+	if err != nil {
+		t.Fatal(err)
+	}
+	fallback, err := discoverReleaseInputs(context.Background(), scope.equality)
+	if err != nil {
+		t.Fatal(err)
+	}
+	beforeFull, err := full.capture(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	beforeFallback, err := fallback.capture(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	// External activity in a disposable Hermes source makes complete equality
+	// fail while the explicitly narrower Claude+Cursor comparison can pass.
+	if err := os.WriteFile(readers[2].(*releaseCountingReader).file, []byte("changed synthetic Hermes source\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	generation, err := app.Generate(context.Background(), app.GenerateOptions{Readers: scope.ingestion, OutputPath: filepath.Join(t.TempDir(), "rewind.json"), AuditSources: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(generation.Report.Providers) != 4 {
+		t.Fatal("fallback narrowed generated provider output")
+	}
+	for _, reader := range readers {
+		if reader.(*releaseCountingReader).reads != 1 {
+			t.Fatalf("original %s reader was not ingested once", reader.Harness())
+		}
+	}
+	afterFull, err := full.capture(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	afterFallback, err := fallback.capture(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if audit.Compare(beforeFull, afterFull).Verified || !audit.Compare(beforeFallback, afterFallback).Verified {
+		t.Fatal("fallback result was conflated with the complete-scope result")
+	}
+	writeReleaseScope(t, scope, true, all)
+	data, err := os.ReadFile(filepath.Join(evidence, "release-scope.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var record struct {
+		Equality []model.Harness `json:"live_equality_harnesses"`
+		Ingested []model.Harness `json:"ingested_harnesses"`
+		Hermes   string          `json:"hermes_live_equality"`
+		Complete string          `json:"complete_scope_result"`
+	}
+	if err := json.Unmarshal(data, &record); err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Equal(record.Equality, []model.Harness{model.Claude, model.Cursor}) || len(record.Ingested) != 4 || record.Hermes != "unmeasured" || record.Complete != "not_measured_in_this_run" {
+		t.Fatal("private scope record does not preserve the fallback limitation")
+	}
+}
+
+func TestReleaseFallbackRejectsFurtherNarrowingAndUnknownReaders(t *testing.T) {
+	t.Parallel()
+	for _, test := range []struct {
+		name         string
+		ids          []model.Harness
+		excludeCodex bool
+	}{
+		{"missing explicit Codex snapshot", []model.Harness{model.Claude, model.Codex, model.Hermes, model.Cursor}, false},
+		{"missing Claude", []model.Harness{model.Codex, model.Hermes, model.Cursor}, true},
+		{"missing Cursor", []model.Harness{model.Claude, model.Codex, model.Hermes}, true},
+		{"missing Hermes ingestion", []model.Harness{model.Claude, model.Codex, model.Cursor}, true},
+		{"missing Codex ingestion", []model.Harness{model.Claude, model.Hermes, model.Cursor}, true},
+		{"duplicate Claude", []model.Harness{model.Claude, model.Codex, model.Hermes, model.Cursor, model.Claude}, true},
+		{"unknown reader", []model.Harness{model.Claude, model.Codex, model.Hermes, model.Cursor, "unknown"}, true},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			var readers []provider.Reader
+			for _, id := range test.ids {
+				readers = append(readers, &releaseCountingReader{id: id})
+			}
+			if _, err := selectReleaseScope(readers, test.excludeCodex, true); err == nil {
+				t.Fatal("accepted an unauthorized fallback scope")
+			}
+		})
+	}
+}
+
+func TestReleaseFallbackReportNamesCannotImplyCompleteScopeEquality(t *testing.T) {
+	for _, verified := range []bool{true, false} {
+		t.Run(fmt.Sprintf("verified=%t", verified), func(t *testing.T) {
+			evidence := t.TempDir()
+			if err := os.Chmod(evidence, 0o700); err != nil {
+				t.Fatal(err)
+			}
+			t.Setenv("SKUGGSJA_RELEASE_EVIDENCE_DIR", evidence)
+			scope := releaseSourceScope{name: "claude_cursor_fallback"}
+			if scope.manifestPrefix() != "claude-cursor" || scope.attemptReportName(2) != "claude-cursor-attempt-02-rewind.json" {
+				t.Fatal("fallback evidence filenames overlap complete-scope evidence")
+			}
+			original := filepath.Join(evidence, scope.attemptReportName(2))
+			if err := os.WriteFile(original, []byte("{}\n"), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			retainSelectedReleaseReport(t, original, verified, 2, releaseInputs{}, scope.name)
+			name := "rewind-claude-cursor-observed-changing.json"
+			if verified {
+				name = "rewind-claude-cursor-verified.json"
+			}
+			if _, err := os.Stat(filepath.Join(evidence, name)); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := os.Stat(filepath.Join(evidence, "rewind.json")); !errors.Is(err, os.ErrNotExist) {
+				t.Fatal("fallback report used the complete-scope verified name")
 			}
 		})
 	}

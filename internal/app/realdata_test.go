@@ -14,6 +14,7 @@ import (
 
 	"github.com/0merUfuk/skuggsja/internal/app"
 	"github.com/0merUfuk/skuggsja/internal/audit"
+	"github.com/0merUfuk/skuggsja/internal/model"
 	"github.com/0merUfuk/skuggsja/internal/platform"
 	"github.com/0merUfuk/skuggsja/internal/provider"
 	"github.com/0merUfuk/skuggsja/internal/provider/claude"
@@ -44,29 +45,23 @@ func TestRealDataFullRunLeavesSourcesUnchanged(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	liveReaders := readers
-	var excluded releaseInputs
 	excludeCodex := os.Getenv("SKUGGSJA_RELEASE_SNAPSHOT_CODEX") == "1"
-	if excludeCodex {
-		// Codex's shared history, index and SQLite files belong to the same store
-		// as this verification agent's rollout. Excluding one rollout would leave
-		// self-generated writes in the release equality window.
-		liveReaders = nil
-		var excludedReaders []provider.Reader
-		for _, reader := range readers {
-			if reader.Harness() == "codex" {
-				excludedReaders = append(excludedReaders, reader)
-			} else {
-				liveReaders = append(liveReaders, reader)
-			}
-		}
-		excluded, err = discoverReleaseInputs(ctx, excludedReaders)
-		if err != nil {
-			t.Fatal(err)
-		}
+	fallback := os.Getenv("SKUGGSJA_RELEASE_CLAUDE_CURSOR_FALLBACK") == "1"
+	scope, err := selectReleaseScope(readers, excludeCodex, fallback)
+	if err != nil {
+		t.Fatal(err)
+	}
+	liveReaders := scope.equality
+	excluded, err := discoverReleaseInputs(ctx, scope.snapshot)
+	if err != nil {
+		t.Fatal(err)
 	}
 	const maxAttempts = 8
-	t.Logf("release_scope excluded_codex_store=%t ingestion=all_original_sources other_exclusions=0 generation_limit=%d preflight=none", excludeCodex, maxAttempts)
+	t.Logf("release_scope name=%s excluded_codex_store=%t ingestion=all_original_sources generation_limit=%d preflight=none hermes_live_equality=%s", scope.name, excludeCodex, maxAttempts, scope.hermesEquality())
+	if fallback {
+		t.Log("release_scope_limitation equality_harnesses=claude,cursor hermes_live_equality=unmeasured complete_scope_result=not_measured_in_this_run; previous_complete_scope_evidence_is_not_replaced")
+	}
+	writeReleaseScope(t, scope, excludeCodex, all)
 	if excludeCodex {
 		t.Log("release_exclusion_reason=verification_is_self_hosted_in_Codex; shared_rollouts_history_indexes_and_SQLite_are_snapshotted_separately; original_Codex_store_immutability_is_not_claimed")
 		capturedAt := time.Now().UTC()
@@ -92,9 +87,9 @@ func TestRealDataFullRunLeavesSourcesUnchanged(t *testing.T) {
 		if err != nil {
 			return audit.Comparison{}, fmt.Errorf("capture release before snapshot: %w", err)
 		}
-		writeReleaseSnapshot(t, fmt.Sprintf("live-attempt-%02d-before.json", attempt), beforeInputs, before, beforeAt, all)
+		writeReleaseSnapshot(t, fmt.Sprintf("%s-attempt-%02d-before.json", scope.manifestPrefix(), attempt), beforeInputs, before, beforeAt, all)
 
-		outputPath := releaseEvidencePath(t, fmt.Sprintf("attempt-%02d-rewind.json", attempt), all)
+		outputPath := releaseEvidencePath(t, scope.attemptReportName(attempt), all)
 		if outputPath == "" {
 			outputPath = filepath.Join(t.TempDir(), "rewind.json")
 		}
@@ -105,7 +100,7 @@ func TestRealDataFullRunLeavesSourcesUnchanged(t *testing.T) {
 		t.Logf("release_generation attempt=%d started_at=%s", attempt, started.UTC().Format(time.RFC3339Nano))
 		var generationErr error
 		generation, generationErr = app.Generate(ctx, app.GenerateOptions{
-			Readers: readers, Location: time.Local,
+			Readers: scope.ingestion, Location: time.Local,
 			OutputPath: outputPath, AuditSources: true,
 		})
 		// Capture the after state even if generation failed. Every completed
@@ -119,12 +114,12 @@ func TestRealDataFullRunLeavesSourcesUnchanged(t *testing.T) {
 		if err != nil {
 			return audit.Comparison{}, errors.Join(generationErr, fmt.Errorf("capture release after snapshot: %w", err))
 		}
-		writeReleaseSnapshot(t, fmt.Sprintf("live-attempt-%02d-after.json", attempt), afterInputs, after, afterAt, all)
+		writeReleaseSnapshot(t, fmt.Sprintf("%s-attempt-%02d-after.json", scope.manifestPrefix(), attempt), afterInputs, after, afterAt, all)
 		comparison := audit.Compare(before, after)
 		internal := generation.Report.Privacy.SourceAudit
 		t.Logf(
-			"outer_source_audit attempt=%d files_before=%d files_after=%d directories_before=%d directories_after=%d complete_before=%t complete_after=%t before=%s after=%s changed_files=%d directory_changes=%d verified=%t generation_elapsed=%s outer_window_elapsed=%s excluded_codex_store=%t",
-			attempt, len(before.Files), len(after.Files), len(before.Directories), len(after.Directories), before.Complete, after.Complete,
+			"outer_source_audit scope=%s attempt=%d files_before=%d files_after=%d directories_before=%d directories_after=%d complete_before=%t complete_after=%t before=%s after=%s changed_files=%d directory_changes=%d verified=%t generation_elapsed=%s outer_window_elapsed=%s excluded_codex_store=%t",
+			scope.name, attempt, len(before.Files), len(after.Files), len(before.Directories), len(after.Directories), before.Complete, after.Complete,
 			comparison.ManifestBefore, comparison.ManifestAfter,
 			comparison.ChangedFiles, comparison.DirectoryChanges, comparison.Verified,
 			generation.Duration.Round(time.Millisecond), time.Since(started).Round(time.Millisecond), excludeCodex,
@@ -144,11 +139,11 @@ func TestRealDataFullRunLeavesSourcesUnchanged(t *testing.T) {
 		}
 		return comparison, generationErr
 	})
-	t.Logf("release_generation_result attempts=%d limit=%d verified=%t", attempts, maxAttempts, runErr == nil && comparison.Verified)
+	t.Logf("release_generation_result scope=%s attempts=%d limit=%d verified=%t", scope.name, attempts, maxAttempts, runErr == nil && comparison.Verified)
 	if runErr != nil {
 		t.Fatalf("release generation window could not be completed: %v", runErr)
 	}
-	retainSelectedReleaseReport(t, generation.OutputPath, comparison.Verified, attempts, all)
+	retainSelectedReleaseReport(t, generation.OutputPath, comparison.Verified, attempts, all, scope.name)
 	for _, summary := range generation.Report.Providers {
 		t.Logf(
 			"provider=%s status=%q verification=%q source_files=%d sessions=%d child_sessions=%d prompts=%d warnings=%d span_start=%s span_end=%s coverage_status=%q confidence=%q earliest_local=%s earliest_detail=%s history_only=%d unmaterialized=%d",
@@ -166,6 +161,88 @@ func TestRealDataFullRunLeavesSourcesUnchanged(t *testing.T) {
 	if !comparison.Verified {
 		t.Fatalf("release equality check did not find an unchanged complete generation window after %d attempts; all comparisons are retained, and this is independent of Skuggsja's source-write protection", attempts)
 	}
+}
+
+// releaseSourceScope separates equality observation from ingestion. The only
+// fallback is the explicitly requested Claude+Cursor pair; there is no generic
+// provider filter and all original reader objects remain in the ingestion set.
+type releaseSourceScope struct {
+	name                          string
+	ingestion, equality, snapshot []provider.Reader
+}
+
+func selectReleaseScope(readers []provider.Reader, excludeCodex, fallback bool) (releaseSourceScope, error) {
+	scope := releaseSourceScope{name: "complete", ingestion: append([]provider.Reader(nil), readers...)}
+	if fallback && !excludeCodex {
+		return scope, errors.New("Claude+Cursor fallback requires the explicit own-Codex snapshot exclusion")
+	}
+	if fallback {
+		scope.name = "claude_cursor_fallback"
+		counts := make(map[model.Harness]int)
+		for _, reader := range readers {
+			counts[reader.Harness()]++
+		}
+		if len(counts) != 4 || counts[model.Claude] != 1 || counts[model.Codex] != 1 || counts[model.Cursor] != 1 || counts[model.Hermes] != 1 {
+			return scope, errors.New("Claude+Cursor fallback requires exactly one original reader for each of Claude, Codex, Cursor and Hermes")
+		}
+	}
+	for _, reader := range readers {
+		if excludeCodex && reader.Harness() == model.Codex {
+			scope.snapshot = append(scope.snapshot, reader)
+			continue
+		}
+		if fallback && reader.Harness() == model.Hermes {
+			continue
+		}
+		scope.equality = append(scope.equality, reader)
+	}
+	return scope, nil
+}
+
+func (scope releaseSourceScope) hermesEquality() string {
+	if scope.name == "claude_cursor_fallback" {
+		return "unmeasured"
+	}
+	return "in_scope"
+}
+
+func (scope releaseSourceScope) manifestPrefix() string {
+	if scope.name == "claude_cursor_fallback" {
+		return "claude-cursor"
+	}
+	return "live"
+}
+
+func (scope releaseSourceScope) attemptReportName(attempt int) string {
+	if scope.name == "claude_cursor_fallback" {
+		return fmt.Sprintf("claude-cursor-attempt-%02d-rewind.json", attempt)
+	}
+	return fmt.Sprintf("attempt-%02d-rewind.json", attempt)
+}
+
+func writeReleaseScope(t *testing.T, scope releaseSourceScope, excludedCodex bool, all releaseInputs) {
+	t.Helper()
+	ids := func(readers []provider.Reader) []model.Harness {
+		values := make([]model.Harness, 0, len(readers))
+		for _, reader := range readers {
+			values = append(values, reader.Harness())
+		}
+		return values
+	}
+	payload := map[string]any{
+		"name": scope.name, "ingested_harnesses": ids(scope.ingestion),
+		"live_equality_harnesses": ids(scope.equality), "excluded_codex_store": excludedCodex,
+		"hermes_live_equality": scope.hermesEquality(), "source_write_protection_scope": "all_original_sources",
+	}
+	if scope.name == "claude_cursor_fallback" {
+		payload["complete_scope_result"] = "not_measured_in_this_run"
+		payload["limitation"] = "Only Claude and Cursor participate in this live equality comparison. Hermes is ingested but its live equality is unmeasured. Previous complete-scope evidence is not superseded."
+	}
+	data, err := json.MarshalIndent(payload, "", "  ")
+	if err != nil {
+		t.Fatal("serialize release scope")
+	}
+	writeReleaseEvidence(t, "release-scope.json", append(data, '\n'), all)
 }
 
 func realDataReaders(paths platform.Paths) []provider.Reader {
@@ -270,11 +347,17 @@ func writeReleaseEvidence(t *testing.T, name string, data []byte, all releaseInp
 	}
 }
 
-func retainSelectedReleaseReport(t *testing.T, generatedPath string, verified bool, attempt int, all releaseInputs) {
+func retainSelectedReleaseReport(t *testing.T, generatedPath string, verified bool, attempt int, all releaseInputs, scopeName string) {
 	t.Helper()
 	name := "rewind-observed-changing.json"
 	if verified {
 		name = "rewind.json"
+	}
+	if scopeName == "claude_cursor_fallback" {
+		name = "rewind-claude-cursor-observed-changing.json"
+		if verified {
+			name = "rewind-claude-cursor-verified.json"
+		}
 	}
 	if releaseEvidencePath(t, name, all) == "" {
 		return
@@ -286,7 +369,7 @@ func retainSelectedReleaseReport(t *testing.T, generatedPath string, verified bo
 		t.Fatal("read generated release report")
 	}
 	writeReleaseEvidence(t, name, data, all)
-	t.Logf("release_selected_report attempt=%d filename=%s sha256=%x release_equality=%t", attempt, name, sha256.Sum256(data), verified)
+	t.Logf("release_selected_report scope=%s attempt=%d filename=%s sha256=%x release_equality=%t", scopeName, attempt, name, sha256.Sum256(data), verified)
 }
 
 func logChangedProviders(t *testing.T, comparison audit.Comparison, before, after audit.Snapshot, paths platform.Paths) {

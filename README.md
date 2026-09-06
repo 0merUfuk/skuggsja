@@ -8,7 +8,7 @@
 
 ## Quick start
 
-From a checkout with Go 1.25.6 or newer available:
+From a checkout with Go 1.27.1 or newer available:
 
 ```sh
 go run ./cmd/skuggsja
@@ -36,7 +36,7 @@ skuggsja
 | Hermes Agent | `state.db` below `HERMES_HOME`; otherwise `~/.hermes` on Unix-like systems or the local app-data Hermes directory on Windows | Sessions, parent relationships, prompts, models, tool calls, source-recorded database token ledger | Real data on macOS |
 | Cursor | OS-specific `Cursor/User/globalStorage/state.vscdb` | Composer sessions/subagents, human prompts, models, project basename; no token estimates | Schema-verified synthetic; not real-data verified |
 
-When every supported input for a harness is absent, it is reported as `not found`; a missing detailed root accompanied by supplemental index evidence can instead be supported with warnings and marked incomplete. Parser and schema problems appear as provider-scoped warnings. See [Architecture](ARCHITECTURE.md) for the adapter contract and [Privacy](PRIVACY.md) for the data lifecycle.
+When every supported input for a harness is absent, it is reported as `not found`; a missing detailed root accompanied by supplemental index evidence can instead be supported with warnings and marked incomplete. Parser and schema problems appear as provider-scoped warnings. Path-resolution errors or permissions that prevent discovery or proof of source/output separation can stop the whole run before writing; these safety checks are not bypassed to produce a partial report. See [Architecture](ARCHITECTURE.md) for the adapter contract and [Privacy](PRIVACY.md) for the data lifecycle.
 
 ## Commands and flags
 

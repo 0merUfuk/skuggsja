@@ -23,13 +23,14 @@
   const emptyState = document.getElementById("empty-state");
   const rewind = document.getElementById("rewind");
   const footer = document.querySelector(".page-footer");
+  const chapterNav = document.querySelector(".folio-nav");
   const main = document.getElementById("main-content");
 
-  document.getElementById("retry-button").addEventListener("click", loadRewind);
-  document.getElementById("empty-retry-button").addEventListener("click", loadRewind);
+  document.getElementById("retry-button").addEventListener("click", function () { return loadRewind(true); });
+  document.getElementById("empty-retry-button").addEventListener("click", function () { return loadRewind(true); });
   loadRewind();
 
-  async function loadRewind() {
+  async function loadRewind(restoreFocus) {
     const serial = ++requestSerial;
     if (activeController) {
       activeController.abort();
@@ -71,6 +72,13 @@
     } finally {
       if (serial === requestSerial) {
         main.setAttribute("aria-busy", "false");
+        if (restoreFocus) {
+          const target = document.getElementById(!errorState.hidden ? "retry-button" : !emptyState.hidden ? "empty-title" : "hero-title");
+          if (target.tagName !== "BUTTON") {
+            target.setAttribute("tabindex", "-1");
+          }
+          target.focus();
+        }
       }
     }
   }
@@ -835,6 +843,7 @@
     errorState.hidden = state !== "error";
     emptyState.hidden = state !== "empty";
     rewind.hidden = state !== "rewind";
+    chapterNav.hidden = state !== "rewind";
     footer.hidden = state !== "rewind" && state !== "empty";
     if (state === "loading" && revealObserver) {
       revealObserver.disconnect();

@@ -1,6 +1,6 @@
 module github.com/0merUfuk/skuggsja
 
-go 1.25.6
+go 1.27.1
 
 require (
 	github.com/klauspost/compress v1.20.0

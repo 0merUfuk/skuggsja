@@ -29,10 +29,17 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ### Changed
 
+- Require Go 1.27.1 or newer for current standard-library security fixes.
 - Report schema 3 removes the global `totals.tool_calls` field. Native tool-call counts and availability remain on each provider; unavailable counts remain labeled unavailable.
 - Model-event lists are grouped by harness, with ranking positions and meter scales local to each group. The overview no longer names a cross-provider leading model.
 - Release equality verification starts directly without an idle preflight. Comparisons that detect activity remain in the evidence record rather than being overwritten by a later attempt.
 - Long-session typography and mobile provider grids retain complete real values without horizontal clipping; desktop and mobile behavior is checked in actual Chrome.
+- Release verification can explicitly measure Claude plus Cursor after a failed complete comparison, retaining separate scope evidence and labeling Hermes live equality unmeasured while ingesting all original providers.
+
+### Fixed
+
+- Cancellation before report persistence preserves the previous complete artifact and cleans the private workspace; later readers are not started after cancellation.
+- Keyboard retries restore focus to the visible result or retry control, and chapter navigation stays hidden in loading, error and empty states.
 
 ### Security
 

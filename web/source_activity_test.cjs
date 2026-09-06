@@ -30,6 +30,7 @@ async function render(data, subsequentFetch) {
     replaceChildren(...children) { this.children = children; }
     setAttribute(name, value) { this.attributes[name] = value; }
     addEventListener(name, handler) { this.listeners.set(name, handler); }
+    focus() { document.activeElement = this; }
   }
   const elements = new Map();
   function element(id) {
@@ -37,6 +38,7 @@ async function render(data, subsequentFetch) {
     return elements.get(id);
   }
   const document = {
+    activeElement: null,
     getElementById: element,
     querySelector: element,
     querySelectorAll: () => [],
@@ -57,6 +59,8 @@ async function render(data, subsequentFetch) {
   await new Promise(setImmediate);
   assert.equal(element("error-state").hidden, true, element("error-message").textContent);
   assert.equal(element(data.totals.sessions ? "rewind" : "empty-state").hidden, false);
+  assert.equal(document.activeElement, null, "initial load must not move keyboard focus");
+  elements.activeElement = () => document.activeElement;
   return elements;
 }
 
@@ -82,14 +86,31 @@ test("retry clears previous source activity before a failed response", async () 
 
   const retry = elements.get("empty-retry-button").listeners.get("click")();
   assert.equal(elements.get("loading-state").hidden, false);
+  assert.equal(elements.get(".folio-nav").hidden, true);
   assert.equal(activity.hidden, true);
   assert.equal(activity.textContent, "");
 
   rejectRetry(new Error("Synthetic local endpoint failure"));
   await retry;
   assert.equal(elements.get("error-state").hidden, false);
+  assert.equal(elements.get(".folio-nav").hidden, true);
+  assert.equal(elements.activeElement(), elements.get("retry-button"));
   assert.equal(activity.hidden, true);
   assert.equal(activity.textContent, "");
+});
+
+test("chapter navigation follows report availability and retry focuses its visible result", async () => {
+  assert.match(html, /<nav class="folio-nav"[^>]* hidden>/);
+  for (const sessions of [0, 1]) {
+    const response = { totals: { sessions }, providers: [], warnings: [] };
+    const elements = await render({ totals: { sessions: 0 } }, async () => ({ ok: true, json: async () => response }));
+    assert.equal(elements.get(".folio-nav").hidden, true);
+    await elements.get("empty-retry-button").listeners.get("click")();
+    assert.equal(elements.get(".folio-nav").hidden, sessions === 0);
+    const heading = elements.get(sessions ? "hero-title" : "empty-title");
+    assert.equal(elements.activeElement(), heading);
+    assert.equal(heading.attributes.tabindex, "-1");
+  }
 });
 
 test("tool counts stay in provider folios and ignore a legacy global total", async () => {

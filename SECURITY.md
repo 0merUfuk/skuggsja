@@ -44,6 +44,7 @@ The macOS verification harness creates disposable synthetic histories for all fo
 - Read-only source access is an architectural guarantee in every run, including when activity observation is disabled or unavailable. Source handles use read-only access; reviewed artifact/private-copy writers have separate destinations. The production binary does not drop the user's OS permissions. An architectural regression test guards the write API surface, while the release verifier separately enforces OS-level source-write denial.
 - The optional before/after observation compares source bytes, configured-path presence, root presence, and directory membership. Discovery is repeated after the first capture, with up to three capture attempts if the set changes. Concurrent activity is neutral information attributed to another process, never a source-integrity warning or runtime failure. Persistent discovery churn leaves best-effort analytics and an unavailable observation. Unchanged-source equality is a release-only check with an explicitly recorded scope.
 - Unknown schemas and ambiguous history modes are skipped or degraded with warnings rather than queried or counted speculatively.
+- Cancellation observed before report persistence preserves the prior artifact and cleans the private workspace. Once atomic persistence starts, a later cancellation may complete that already-started installation.
 
 ### Data minimization
 

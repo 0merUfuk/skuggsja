@@ -7,22 +7,30 @@ umask 077
 
 controls_only=0
 snapshot_codex=0
+claude_cursor_fallback=0
+release_scope=complete
 evidence_dir=""
 while [ "$#" -gt 0 ]; do
   case "$1" in
     --controls-only) controls_only=1; shift ;;
     --snapshot-codex-store) snapshot_codex=1; shift ;;
+    --claude-cursor-fallback) claude_cursor_fallback=1; release_scope=claude_cursor_fallback; shift ;;
     --evidence-dir)
       [ "$#" -ge 2 ] || { echo "--evidence-dir requires a new directory path" >&2; exit 2; }
       evidence_dir=$2
       shift 2
       ;;
-    *) echo "usage: $0 [--controls-only] [--snapshot-codex-store] [--evidence-dir NEW_DIRECTORY]" >&2; exit 2 ;;
+    *) echo "usage: $0 [--controls-only] [--snapshot-codex-store] [--claude-cursor-fallback] [--evidence-dir NEW_DIRECTORY]" >&2; exit 2 ;;
   esac
 done
 
 if [ "$snapshot_codex" -eq 1 ] && [ -z "$evidence_dir" ]; then
   echo "--snapshot-codex-store requires --evidence-dir to retain the exact excluded manifest" >&2
+  exit 2
+fi
+
+if [ "$claude_cursor_fallback" -eq 1 ] && { [ "$snapshot_codex" -ne 1 ] || [ -z "$evidence_dir" ]; }; then
+  echo "--claude-cursor-fallback requires --snapshot-codex-store and retained private evidence" >&2
   exit 2
 fi
 
@@ -43,7 +51,7 @@ cleanup() {
     wait "$run_pid" 2>/dev/null || true
   fi
   if [ -n "$evidence_dir" ] && [ -n "$work_root" ] && [ -d "$work_root/evidence" ]; then
-    # Retain only selected evidence; raw SQLite copies and generated data never leave TMPDIR.
+    # Retain manifests, logs and content-free reports; raw SQLite copies stay temporary.
     if ! cp -R "$work_root/evidence/." "$evidence_dir/"; then
       echo "failed to retain verification evidence" >&2
       result=1
@@ -148,6 +156,7 @@ sandbox-exec -D "WRITABLE_ROOT=$work_root" -f "$profile" /usr/bin/env \
   TMPDIR="$work_root/tmp" \
   SKUGGSJA_VERIFY_REAL_DATA=1 \
   SKUGGSJA_RELEASE_SNAPSHOT_CODEX="$snapshot_codex" \
+  SKUGGSJA_RELEASE_CLAUDE_CURSOR_FALLBACK="$claude_cursor_fallback" \
   SKUGGSJA_RELEASE_EVIDENCE_DIR="$work_root/evidence" \
   DYLD_INSERT_LIBRARIES="$work_root/bin/network-guard.dylib" \
   SKUGGSJA_NETWORK_ATTEMPT_LOG="$attempt_log" \
@@ -176,7 +185,7 @@ fi
 live_result=failed
 live_status=1
 generation_runs=$(grep -Fc 'release_generation attempt=' "$test_log" || true)
-verified_windows=$(grep -Ec 'outer_source_audit .*verified=true' "$test_log" || true)
+verified_windows=$(grep -Ec "outer_source_audit scope=$release_scope .*verified=true" "$test_log" || true)
 if [ "$test_status" -eq 0 ] && [ "$generation_runs" -ge 1 ] && [ "$generation_runs" -le 8 ] && [ "$verified_windows" -ge 1 ] && \
    grep -F -- '--- PASS: TestRealDataFullRunLeavesSourcesUnchanged' "$test_log" >/dev/null; then
   live_result=passed
@@ -186,7 +195,13 @@ fi
   echo "source_write_enforcement=calibrated source_writes=denied_by_policy writable_paths=private_workspace_and_dev_null"
   echo "source_write_attempts=not_independently_traced"
   echo "network_guard_active=$guard_active observed_external_attempts=$external_attempts network_check_exit=$network_status"
-  echo "release_live_manifest_result=$live_result live_test_exit=$test_status excluded_codex_store=$snapshot_codex other_exclusions=0 generation_runs=$generation_runs verified_windows=$verified_windows"
+  echo "release_live_manifest_result=$live_result live_equality_scope=$release_scope live_test_exit=$test_status excluded_codex_store=$snapshot_codex generation_runs=$generation_runs verified_windows=$verified_windows"
+  if [ "$claude_cursor_fallback" -eq 1 ]; then
+    echo "release_complete_scope_result=not_measured_in_this_run previous_complete_scope_evidence=not_superseded"
+    echo "release_claude_cursor_fallback_result=$live_result equality_harnesses=claude,cursor hermes_live_equality=unmeasured"
+  else
+    echo "release_complete_scope_result=$live_result release_claude_cursor_fallback_result=not_requested hermes_live_equality=in_scope other_exclusions=0"
+  fi
   echo "runtime_source_observation=informational ingestion=all_original_sources"
 } | tee "$summary"
 if [ "$live_status" -ne 0 ] || [ "$network_status" -ne 0 ]; then

@@ -4,7 +4,7 @@ Thank you for helping improve Skuggsja. The project treats privacy claims as par
 
 ## Prerequisites
 
-- Go 1.25.6 or newer compatible toolchain
+- Go 1.27.1 or newer compatible toolchain
 - Git
 - A POSIX-like shell for the commands below; equivalent Go commands work on Windows
 - Node.js 22+ and Chrome Headless for browser verification; these are development tools, not product dependencies
@@ -171,6 +171,14 @@ scripts/verify-live-source-protection.sh --snapshot-codex-store --evidence-dir N
 ```
 
 This stores exact private hash/inventory manifests, including configured absence states. Generation still reads every original source, including Codex. The excluded manifest is not a byte-for-byte archive or an atomic snapshot of an active store. Record the precise exclusion and shared-store reasoning in `VERIFICATION.md`; exclude no other harness. Without the explicit flag, the release equality scope includes Codex too. The driver calibrates source-write denial and the external-connect observer independently of equality.
+
+When the release owner explicitly accepts a Claude-plus-Cursor fallback after a failed complete comparison, use the separately labeled scope:
+
+```sh
+scripts/verify-live-source-protection.sh --snapshot-codex-store --claude-cursor-fallback --evidence-dir NEW_PRIVATE_DIRECTORY
+```
+
+This measures exactly Claude and Cursor, retains the own-Codex snapshot, and labels Hermes live equality `unmeasured`. All four original providers remain enabled for ingestion and protected by the same source-write policy. `release-scope.json`, scoped manifest names and `rewind-claude-cursor-verified.json` prevent this result from implying complete-scope equality. Failed attempts and the earlier complete-scope result remain evidence. There is no generic provider filter or further narrowing option. Do not pause, signal, suspend or kill an owning harness to obtain an equality record; an unmet comparison is an honest result.
 
 On macOS, `make verify-offline` builds synthetic histories for every Tier-1 adapter, calibrates the external-connect observer with a deliberate Go probe, and exercises generation plus every localhost UI/API route with remote networking denied. The probe, fixture builder, and DYLD guard under `scripts/` are verification-only and are excluded from release builds.
 
