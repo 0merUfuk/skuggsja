@@ -2,13 +2,15 @@
 
 All notable changes to this project will be documented in this file.
 
-The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and future releases are intended to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html). There is no tagged release yet.
+The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and releases use [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-09-06
+
 ### Added
 
-- Prepared six-platform archive builds, a checksum-derived Homebrew formula for macOS/Linux, and workflows for build provenance and tap synchronization. Publication remains pending.
+- Six-platform release archives, a checksum-derived Homebrew formula for macOS/Linux, and workflows for build provenance and tap synchronization.
 - Reusable CI gates for macOS/Linux/Windows tests and installed-binary checks, package validation, workflow linting and vulnerability checks.
 - Isolated installation smoke tests covering first use, synthetic counts, localhost assets/API/CSP, cleanup and reinstall/removal without reading real histories.
 - Interactive harness circle chart sized by recorded sessions or prompts, with exact bar fallbacks and keyboard/touch detail. Model activity remains provider-scoped because model-level sessions/prompts are unavailable.
@@ -43,6 +45,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ### Fixed
 
+- Correct Windows private SQLite-copy file URIs and verify native DACL, locked-SHM and installed-binary behavior without weakening equality checks.
+
 - Ranked-list disclosures now show their open/closed state, offer a collapse control at the end of long lists, and return keyboard focus to the summary. Single counts use singular units in visible text and accessible labels.
 - Cancellation before report persistence preserves the previous complete artifact and cleans the private workspace; later readers are not started after cancellation.
 - Keyboard retries restore focus to the visible result or retry control, and chapter navigation stays hidden in loading, error and empty states.
@@ -54,10 +58,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 - Raw prompt/response content, absolute source paths, and internal source identifiers are excluded from the persisted report.
 - SQLite libraries open only private temporary copies, never the original history database.
 - Private workspace destinations are checked against source roots, files and protected SQLite parents before creation, including when discovery fails; copy destinations are passed through context rather than a process-global environment change.
-- SQLite copies reject symlink sources and use private Unix modes or a validated protected Windows DACL; Windows runtime verification remains pending.
+- SQLite copies reject symlink sources and use private Unix modes or a validated protected Windows DACL; synthetic Windows/x64 runtime verification passes.
 - Generation and cleanup reject overlapping source roots, artifact-directory-contained source files, and path/symlink/hard-link/case aliases, including paths returned with discovery errors.
 - Source observation commits configured missing paths and attempts bounded stabilization against the captured set; persistent churn remains parseable with a neutral unavailable observation and no source-integrity warning.
-- The aggregate directory uses private Unix modes or a validated protected Windows DACL; Windows runtime verification remains pending.
+- The aggregate directory uses private Unix modes or a validated protected Windows DACL; synthetic Windows/x64 runtime verification passes.
 - Runtime assets and code perform no outbound requests after installation; build and install networking remain outside that guarantee.
 - macOS runtime isolation covers all four adapters and observes/denies external socket destinations with a calibrated verification-only guard.
 
@@ -70,3 +74,6 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 - Provider history schemas are upstream implementation details and may require adapter updates.
 - The local report server has no authentication or encryption and is not intended for remote exposure.
 - Abrupt termination can leave a private SQLite copy in the OS temporary directory.
+
+[Unreleased]: https://github.com/0merUfuk/skuggsja/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/0merUfuk/skuggsja/releases/tag/v0.1.0

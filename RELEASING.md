@@ -1,6 +1,6 @@
 # Releasing
 
-The first release is intended to be **v0.1.0**. Publication and the public Homebrew lifecycle are still pending. This document describes the prepared automation; it is not evidence that a remote workflow or installation has succeeded.
+Release from a reviewed commit using a canonical stable tag, `vMAJOR.MINOR.PATCH`. The release workflow verifies packages and attests their provenance before publication; the Homebrew tap updates from the attested formula.
 
 ## Before a release
 
@@ -44,13 +44,13 @@ The publish job uses this repository's automatic `GITHUB_TOKEN` with `contents: 
 
 ## Homebrew synchronization
 
-The prepared tap workflow is `.github/workflows/update-skuggsja.yml` in `0merUfuk/homebrew-thematrix`. It runs daily at **07:23 UTC** and supports manual dispatch without inputs. It reads Skuggsja's latest stable public release; an unavailable first release is a no-op.
+The tap workflow is `.github/workflows/update-skuggsja.yml` in `0merUfuk/homebrew-thematrix`. It runs daily at **07:23 UTC** and supports manual dispatch without inputs. It reads Skuggsja's latest stable public release; an HTTP 404 response when no stable release exists is a no-op.
 
 Before copying `Formula/skuggsja.rb`, it verifies the downloaded formula's GitHub attestation against `0merUfuk/skuggsja`, the release workflow, the exact tag reference, and GitHub-hosted runners. It rejects drafts, prereleases, malformed tags, missing or duplicate formula assets, rollbacks and changed formula contents for an already-installed version. Only a verified changed formula is committed and pushed to the tap's `main` branch.
 
 The tap job uses its own automatic `GITHUB_TOKEN` with `contents: write`; it does not use a PAT, a token from Skuggsja, or a cross-repository dispatch secret. The tap's branch rules must permit this narrowly scoped bot update. If the workflow is blocked by permissions or branch rules, resolve that configuration rather than bypassing attestation.
 
-Once the workflow and upstream release are published, an authorized maintainer can request synchronization immediately:
+After publishing a stable release, an authorized maintainer can request synchronization immediately:
 
 ```sh
 gh workflow run update-skuggsja.yml --repo 0merUfuk/homebrew-thematrix --ref main
@@ -61,7 +61,7 @@ Then inspect the tap workflow result and exercise the published installation:
 ```sh
 brew install 0merUfuk/thematrix/skuggsja
 skuggsja version
-brew test skuggsja
+brew test 0merUfuk/thematrix/skuggsja
 ```
 
-Record install/update/removal results before claiming the public Homebrew lifecycle is verified. Confirm the release links, six archive downloads, checksums and attestations before changing README's publication status.
+Record install/update/removal results before claiming the public Homebrew lifecycle is verified. Confirm the release links, six archive downloads, checksums and attestations, and keep README installation instructions aligned with the available version.

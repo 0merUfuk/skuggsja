@@ -4,17 +4,20 @@
 
 `skuggsja` (from Old Norse *skuggsjá*, “mirror”) reads the histories already stored by Claude Code, Codex, Hermes Agent, and Cursor, reduces them to privacy-safe aggregates, and opens an editorial report on loopback. It is a record of what survives on one machine, not an account-wide usage statement.
 
-> Verification scope: the code has path handling for macOS, Linux, and Windows, but real-provider-data verification is currently macOS-only. Cursor support is schema-verified with synthetic data and is not real-data verified. Treat other operating systems and new upstream schemas as unverified until tested.
+> Verification scope: the code has path handling for macOS, Linux, and Windows, but real-provider-data verification is currently macOS-only. Cursor support is schema-verified with synthetic data and is not real-data verified. Native tests and isolated installation pass on macOS, Linux and Windows; real harness stores on Linux/Windows and new upstream schemas remain unverified.
 
 ## Quick start
 
-From a checkout with Go 1.27.1 or newer available:
+On macOS or Linux with Homebrew installed:
 
 ```sh
-go run ./cmd/skuggsja
+brew install 0merUfuk/thematrix/skuggsja
+skuggsja
 ```
 
-That one command generates the aggregate report, prints a terminal summary, starts an HTTP server bound to `127.0.0.1`, and asks the operating system to open the local Rewind in the default browser. If browser launch is unavailable, open the printed loopback URL yourself. Stop the server with <kbd>Ctrl</kbd>+<kbd>C</kbd>.
+For Windows, use the [release archive](#manual-archives). To compile it yourself, see [Build from source](#build-from-source).
+
+Running `skuggsja` generates the aggregate report, prints a terminal summary, starts an HTTP server bound to `127.0.0.1`, and asks the operating system to open the local Rewind in the default browser. If browser launch is unavailable, open the printed loopback URL yourself. Stop the server with <kbd>Ctrl</kbd>+<kbd>C</kbd>.
 
 Source access is always read-only: **skuggsja does not write to source paths.** The terminal and UI show that guarantee on every run. Keep your agents running; source activity observed during generation is neutral information, for example: “2 files changed during the run by another process; skuggsja does not write to source paths.”
 
@@ -22,39 +25,33 @@ In **Usage**, switch the harness mix between **Sessions** and **Prompts**. Circl
 
 Models remain in separate expandable lists for each harness. The report has no model-level session or prompt attribution, so model bubbles would imply data it does not contain. Model bars use each harness's native events with independent scales. Open **Sources** for coverage, token availability and parser notes before interpreting usage. The Rewind is a generated snapshot; restart the command to include newer history.
 
-`go run`, `go install`, and the first build may contact Go module or toolchain servers. The zero-outbound guarantee applies to the installed/built program at runtime: Skuggsja has no telemetry, update check, remote API call, CDN, remote font, or remote browser asset. Use `--no-open` if you also do not want Skuggsja to launch your browser.
-
-To install from a checkout and then use the single command `skuggsja` (with `GOBIN`, or the Go bin directory, on `PATH`):
-
-```sh
-go install ./cmd/skuggsja
-skuggsja
-```
+The zero-outbound guarantee applies to the installed/built program at runtime: Skuggsja has no telemetry, update check, remote API call, CDN, remote font, or remote browser asset. Use `--no-open` if you also do not want Skuggsja to launch your browser.
 
 ## Installation and updates
 
-Skuggsja ships as one Go executable with its UI embedded. A release binary does not require Go, Python, Node.js, a virtual environment, or a separate frontend server. The source-build commands above require Go only to compile it.
+Skuggsja ships as one Go executable with its UI embedded. A release binary does not require Go, Python, Node.js, a virtual environment, or a separate frontend server.
 
-**The first release, v0.1.0, is not published yet.** The Homebrew and archive instructions below become available after publication. Use the checkout commands above in the meantime.
-
-The prepared Homebrew formula installs prebuilt binaries on macOS and Linux, for both Intel/AMD (`amd64`) and ARM (`arm64`):
+The Homebrew formula installs prebuilt binaries on macOS and Linux, for both Intel/AMD (`amd64`) and ARM (`arm64`). To update an existing installation:
 
 ```sh
-brew install 0merUfuk/thematrix/skuggsja
+brew update
+brew upgrade 0merUfuk/thematrix/skuggsja
 skuggsja version
-skuggsja
+```
 
-brew upgrade skuggsja
-brew uninstall skuggsja
+To remove the executable:
+
+```sh
+brew uninstall 0merUfuk/thematrix/skuggsja
 ```
 
 Once installed, `skuggsja` works from any directory and discovers its supported local histories automatically. It does not need project registration or a setup command. Installation and updates use Homebrew's network access; the executable's runtime remains local.
 
-The formula also installs Bash, Zsh and Fish completions. It has no Go, Python or Node runtime dependency. Homebrew installation, upgrades and removal remain unverified until the published formula is exercised. Ordinary removal leaves the generated report in place; `skuggsja clean` is the separate command for removing that regenerable artifact.
+The formula also installs Bash, Zsh and Fish completions. It has no Go, Python or Node runtime dependency. Ordinary removal leaves the generated report in place; `skuggsja clean` is the separate command for removing that regenerable artifact.
 
 ### Manual archives
 
-After publication, download the matching archive and `checksums.txt` from [GitHub Releases](https://github.com/0merUfuk/skuggsja/releases). Archives contain the executable, README and MIT license. Choose `amd64` for Intel/AMD 64-bit systems or `arm64` for Apple Silicon and other ARM64 systems. macOS and Linux use `.tar.gz`; Windows uses `.zip`. A checksummed build for an architecture is not evidence that real harness data was tested there.
+Download the matching v0.1.0 archive and `checksums.txt` from the [v0.1.0 release](https://github.com/0merUfuk/skuggsja/releases/tag/v0.1.0). Archives contain the executable, README and MIT license. Choose `amd64` for Intel/AMD 64-bit systems or `arm64` for Apple Silicon and other ARM64 systems. macOS and Linux use `.tar.gz`; Windows uses `.zip`. A checksummed build for an architecture is not evidence that real harness data was tested there.
 
 For Linux x86-64, verify the downloaded archive before extracting it. The checksum command must report `OK`:
 
@@ -87,6 +84,17 @@ Expand-Archive .\skuggsja_0.1.0_windows_amd64.zip -DestinationPath .\skuggsja
 ```
 
 For Windows on ARM, select the `windows_arm64` archive. Move the executable to your preferred tools directory and add that directory to your user `PATH` for regular use. Manual updates replace that executable; manual removal deletes it. Generated reports are managed separately by `skuggsja clean`.
+
+### Build from source
+
+From a checkout with Go 1.27.1 or a newer compatible toolchain:
+
+```sh
+CGO_ENABLED=0 go build -trimpath -o ./bin/skuggsja ./cmd/skuggsja
+./bin/skuggsja
+```
+
+On Windows, build with `go build -trimpath -o ./bin/skuggsja.exe ./cmd/skuggsja` and run `./bin/skuggsja.exe`. To install into `GOBIN`, or the Go bin directory, use `go install ./cmd/skuggsja` and keep that directory on `PATH`. The Go tool may download modules or a toolchain during compilation; the resulting executable keeps the same runtime network and source-access guarantees.
 
 ## What it reads
 
@@ -195,7 +203,7 @@ The global displayed span runs from the earliest trustworthy top-level session s
 - Raw prompt text is used transiently to calculate counts and is absent from the normalized model and persisted report.
 - Source paths, session IDs, prompt IDs, call IDs, and tool IDs may exist temporarily for discovery or deduplication but are excluded from the JSON artifact.
 - The persisted artifact contains aggregate timestamps, counts, model labels, project basenames, provider warnings, and source-audit digests. It is privacy-reduced, not anonymous.
-- The default artifact is written through a synced same-directory temporary file and rename-over-existing. Unix-like systems receive a mode-`0700` artifact directory and mode-`0600` artifact. Windows applies and validates a protected directory DACL limited to the current user and LocalSystem; this path cross-compiles but has not been runtime-tested on Windows.
+- The default artifact is written through a synced same-directory temporary file and rename-over-existing. Unix-like systems receive a mode-`0700` artifact directory and mode-`0600` artifact. Windows applies and validates a protected directory DACL limited to the current user and LocalSystem; this behavior is covered by synthetic Windows/x64 CI tests.
 - Optional before/after SHA-256 observation checks parsed and audit-only contents, configured/root presence, and directory membership. Concurrent activity, unavailable observation, and disabled observation never become source-integrity failures or warnings. The observation does not compare metadata such as access times, identify the other writer, or detect changes reverted between captures.
 
 The JSON report records `privacy.source_access: "read-only"` independently of `privacy.source_observation` (`observed`, `disabled`, or `unavailable`). The retained `privacy.source_audit.verified` field describes snapshot equality only; the terminal and UI do not use it as a source-access verdict.
