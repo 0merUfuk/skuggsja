@@ -20,6 +20,9 @@ import unittest
 from unittest import mock
 import zipfile
 
+# Keep the source checkout free of bytecode artifacts during release checks.
+sys.dont_write_bytecode = True
+
 SPEC = importlib.util.spec_from_file_location("package_verifier", Path(__file__).with_name("verify-packages.py"))
 VERIFIER = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(VERIFIER)
