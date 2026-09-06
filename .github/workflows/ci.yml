@@ -19,7 +19,27 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [macos-latest, ubuntu-latest, windows-latest]
+        include:
+          - os: macos-latest
+            goos: darwin
+            goarch: arm64
+            arch: arm64
+          - os: ubuntu-latest
+            goos: linux
+            goarch: amd64
+            arch: x64
+          - os: windows-latest
+            goos: windows
+            goarch: amd64
+            arch: x64
+          - os: ubuntu-24.04-arm
+            goos: linux
+            goarch: arm64
+            arch: arm64
+          - os: windows-11-arm
+            goos: windows
+            goarch: arm64
+            arch: arm64
     runs-on: ${{ matrix.os }}
     timeout-minutes: 20
     steps:
@@ -28,9 +48,33 @@ jobs:
         with:
           go-version-file: go.mod
           cache: true
+          architecture: ${{ matrix.arch }}
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: 22.23.1
+          architecture: ${{ matrix.arch }}
+      - name: Verify native runner and toolchain target
+        shell: bash
+        env:
+          EXPECTED_GOOS: ${{ matrix.goos }}
+          EXPECTED_GOARCH: ${{ matrix.goarch }}
+          EXPECTED_ARCH: ${{ matrix.arch }}
+        run: |
+          node <<'NODE'
+          const assert = require('node:assert/strict');
+          const { execFileSync } = require('node:child_process');
+          const { EXPECTED_GOOS: goos, EXPECTED_GOARCH: goarch, EXPECTED_ARCH: arch } = process.env;
+          const platforms = { darwin: 'darwin', linux: 'linux', windows: 'win32' };
+          const runners = { darwin: 'macOS', linux: 'Linux', windows: 'Windows' };
+          assert.equal(process.platform, platforms[goos], 'Node must run on the expected OS');
+          assert.equal(process.arch, arch, 'Node must run natively on the expected architecture');
+          assert.equal(process.env.RUNNER_OS, runners[goos], 'Runner OS must match the matrix');
+          assert.equal(process.env.RUNNER_ARCH, arch === 'arm64' ? 'ARM64' : 'X64', 'Runner architecture must match the matrix');
+          const go = JSON.parse(execFileSync('go', ['env', '-json', 'GOOS', 'GOARCH', 'GOHOSTOS', 'GOHOSTARCH'], { encoding: 'utf8' }));
+          for (const key of ['GOOS', 'GOHOSTOS']) assert.equal(go[key], goos, `${key} must match the native OS`);
+          for (const key of ['GOARCH', 'GOHOSTARCH']) assert.equal(go[key], goarch, `${key} must match the native architecture`);
+          console.log(`Native target verified: ${goos}/${goarch}; Node ${process.platform}/${process.arch}; runner ${process.env.RUNNER_OS}/${process.env.RUNNER_ARCH}`);
+          NODE
       - name: Verify modules
         run: go mod verify
       - name: Test
