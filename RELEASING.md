@@ -1,6 +1,6 @@
 # Releasing
 
-Release from a reviewed commit using a canonical stable tag, `vMAJOR.MINOR.PATCH`. The release workflow verifies packages and attests their provenance before publication; the Homebrew tap updates from the attested formula.
+Release from a reviewed commit using a canonical stable tag, `vMAJOR.MINOR.PATCH`. The source repository builds and attests release artifacts; the dedicated `0merUfuk/homebrew-skuggsja` tap prepares a verified formula PR. Publishing the source release and merging its tap PR are separate owner decisions.
 
 ## Before a release
 
@@ -14,22 +14,27 @@ Run the applicable local checks from [CONTRIBUTING.md](CONTRIBUTING.md), includi
 goreleaser check
 goreleaser release --snapshot --clean --skip=publish
 python3 scripts/verify-packages.py dist
+python3 scripts/release_workflow_test.py
 ```
 
 These commands create and verify local packages; they do not publish. `--clean` replaces generated `dist/` contents. GoReleaser and build dependencies can use the network. Package verification compares the archived README, license and embedded UI with the current checkout and exercises the host's native executable using isolated synthetic sources.
 
 Before creating a version tag, the owner finalizes the changelog and reviews the public files and Git history for private artifacts. A release tag selects the exact source commit to build. Use only canonical stable tags, `vMAJOR.MINOR.PATCH`; the package verifier and formula generator reject prerelease labels and malformed versions.
 
+Confirm that GitHub's repository setting for immutable releases is enabled before authorizing a new tag. An administrator can inspect it with `gh api repos/0merUfuk/skuggsja/immutable-releases`; the response must report `enabled: true`. That endpoint requires administration access, which the release workflow's token deliberately does not have. Enabling the setting affects future releases; it does not make older releases immutable retroactively. Protected tags and release-asset immutability are separate controls. [GitHub's immutability settings](https://docs.github.com/en/code-security/how-tos/secure-your-supply-chain/establish-provenance-and-integrity/prevent-release-changes)
+
 ## Release workflow
 
 Pushing a `v*` tag triggers [Release](.github/workflows/release.yml). Publication proceeds only after the reusable [CI](.github/workflows/ci.yml) jobs succeed:
 
-1. Run the three-OS test/build/install matrix, quality checks and six-platform snapshot validation.
+1. Run the native test/build/install matrix, quality checks and six-platform snapshot validation.
 2. Build versioned archives with GoReleaser using `--skip=publish`.
 3. Verify that package metadata matches the stable tag and that all six archives have correct hashes, regular-file members, embedded assets, platform/build metadata and the clean tagged source revision.
 4. Generate `skuggsja.rb` from the release checksums.
 5. Attest the six archives, `checksums.txt` and formula with GitHub build provenance.
-6. Create the GitHub release with the already-existing tag, generated notes and those verified artifacts.
+6. Create a new draft release for the already-existing tag and generated notes. An existing release, including a draft, stops this creation step.
+7. Upload all eight assets without replacement. Verify the draft's tag, state, exact asset names, completed uploads and sizes; download the assets again and compare every SHA-256 with the attested local bytes.
+8. Publish the complete draft and confirm that GitHub reports it as published and immutable.
 
 The release job runs these validation commands before attestation and publication:
 
@@ -40,32 +45,44 @@ node scripts/generate-homebrew.cjs "$RELEASE_TAG" dist/checksums.txt dist/skuggs
 
 `RELEASE_TAG` is supplied by the tag-triggered workflow. The formula generator refuses to overwrite an existing output file; rebuild into a clean generated directory when repeating it. `.goreleaser.yml` does not publish a Homebrew cask or update another repository.
 
-The publish job uses this repository's automatic `GITHUB_TOKEN` with `contents: write`, plus `id-token: write` and `attestations: write` for provenance. No personal access token or cross-repository tap secret is required. After a failure, inspect the failed stage and any existing release before retrying; the workflow does not silently replace an existing release.
+The publish job uses this repository's automatic `GITHUB_TOKEN` with `contents: write`, plus `id-token: write` and `attestations: write` for provenance. No personal access token or cross-repository tap secret is required. It publishes only from `0merUfuk/skuggsja`.
+
+The draft remains unpublished if creation, upload or byte verification fails. The workflow never uses `--clobber`, deletes a release, moves a tag or silently resumes an existing draft. Inspect any failed draft before retrying. The owner may explicitly discard an incomplete unpublished draft and rerun the same reviewed tag; published assets must never be replaced. If publication succeeded but its confirmation failed, inspect that release before attempting recovery. The post-publication immutability check detects a missing protection; it cannot substitute for the administrator's pre-release settings check. [GitHub's recommended draft/upload/publish sequence](https://docs.github.com/en/code-security/concepts/supply-chain-security/immutable-releases)
 
 After publication, download all eight release assets and verify each asset's provenance against the expected repository, release workflow and exact tag, rejecting self-hosted signer runs. Run the package verifier against those downloaded archives from a clean checkout of the tagged source. The archived README, license, embedded assets and source revision must match that tag; a newer working tree is not the verification reference. Record the native extracted executable's isolated installation result separately from six-target cross-compilation and package checks. A correction to a published executable requires a new version and tag; do not replace an existing stable artifact or move its tag.
 
 ## Homebrew synchronization
 
-The tap workflow is `.github/workflows/update-skuggsja.yml` in `0merUfuk/homebrew-thematrix`. It runs daily at **07:23 UTC** and supports manual dispatch without inputs. It reads Skuggsja's latest stable public release; an HTTP 404 response when no stable release exists is a no-op.
+The tap workflow is `.github/workflows/update-skuggsja.yml` in `0merUfuk/homebrew-skuggsja`. It checks the latest stable public release hourly at minute **23 UTC** and supports manual dispatch with a `tag` input (empty selects the latest stable release). Scheduling may be delayed; publication does not promise an immediate Homebrew update.
 
-Before copying `Formula/skuggsja.rb`, it verifies the downloaded formula's GitHub attestation against `0merUfuk/skuggsja`, the release workflow, the exact tag reference, and GitHub-hosted runners. It rejects drafts, prereleases, malformed tags, missing or duplicate formula assets, rollbacks and changed formula contents for an already-installed version. Only a verified changed formula is committed and pushed to the tap's `main` branch.
+Before preparing `Formula/skuggsja.rb`, the importer verifies the downloaded formula's GitHub attestation against `0merUfuk/skuggsja`, the release workflow, the exact tag reference, and GitHub-hosted runners. It rejects drafts, prereleases, malformed tags, missing or duplicate formula assets, rollbacks and changed formula contents for an already imported version. It reuses one candidate PR per version on `update-skuggsja-vMAJOR.MINOR.PATCH`; it does not push the formula to `main`.
 
-The updater job uses its own automatic `GITHUB_TOKEN` with `contents: write`; it does not use a PAT, a token from Skuggsja, or a cross-repository dispatch secret. The tap's branch rules must permit this narrowly scoped bot update. If the workflow is blocked by permissions or branch rules, resolve that configuration rather than bypassing attestation.
+The importer uses the tap's own automatic `GITHUB_TOKEN` with job-scoped `contents: write` and `pull-requests: write`. Enable Actions-created PRs in that repository's settings. Candidate tests use read-only permissions and receive no publishing secrets. Keep candidate formula evaluation and installed-binary execution out of the importer job: a Homebrew formula is executable Ruby. Source CI needs no PAT, tap writer or cross-repository dispatch secret.
 
-After a stable formula is verified, separate jobs with read-only permissions exercise the public Homebrew package on the workflow's declared native OS/architecture matrix. They assert the runner architecture and installed version, run the formula test and isolated synthetic CLI smoke, exercise an already-current upgrade and actual reinstall, then uninstall and assert removal. A successful current-version upgrade is a no-op check; it does not establish an older-to-newer migration. When no stable release exists, the lifecycle jobs are skipped and cannot be counted as passing installation evidence.
+GitHub puts workflows triggered by `GITHUB_TOKEN`-created or updated PRs into an approval-required state. The owner selects **Approve workflows to run**, then reviews the checked PR head and authorizes its merge after required checks pass. New commits require fresh checks and review. Approval to run CI is not approval to publish the formula, and the bot does not approve or merge its own PR. [GitHub token event behavior](https://docs.github.com/en/actions/concepts/security/github_token)
+
+Candidate CI must test the exact PR checkout on macOS arm64/amd64 and Linux arm64/amd64, after checking the formula's provenance and bytes. Installing the remote default branch would test the previous public formula. Keep the candidate tap isolated and assert its formula hash and commit before Homebrew loads it. Required checks include formula style/audit, updater rejection cases, installed architecture/version, completions, `brew test`, isolated synthetic CLI use, a real previous-version upgrade, reinstall and uninstall with user-state preservation. An already-current upgrade is only a no-op check. Missing-release skips are not passing installation evidence.
+
+The owner merges only the verified candidate head through the tap's branch rules. A failed candidate leaves the public formula unchanged. After merge, verify the public qualified installation path separately; premerge custom-remote tests do not establish that GitHub's public default branch serves the intended formula.
 
 After publishing a stable release, an authorized maintainer can request synchronization immediately:
 
 ```sh
-gh workflow run update-skuggsja.yml --repo 0merUfuk/homebrew-thematrix --ref main
+gh workflow run update-skuggsja.yml --repo 0merUfuk/homebrew-skuggsja --ref main -f tag="$RELEASE_TAG"
 ```
 
 Then inspect the tap workflow result and exercise the published installation:
 
 ```sh
-brew install 0merUfuk/thematrix/skuggsja
+brew install 0merUfuk/skuggsja/skuggsja
 skuggsja version
-brew test 0merUfuk/thematrix/skuggsja
+brew test 0merUfuk/skuggsja/skuggsja
 ```
 
 Record install/update/removal results before claiming the public Homebrew lifecycle is verified. Confirm the release links, six archive downloads, checksums and attestations, and keep README installation instructions aligned with the available version.
+
+## Tap migration evidence
+
+A tap move does not require an application release or a Homebrew revision. Bootstrap the dedicated tap with the current attested formula unchanged, prove the new path first, then retire the old tap's Skuggsja formula and updater together with its `tap_migrations.json` entry. Keep unrelated Matrix formulas and migration metadata available. Historical archive contents are preserved even when their README names the former tap.
+
+Test same-version migration before and after the destination is trusted, pinned installations, retained older kegs, and a real previous-version upgrade in disposable Homebrew CI. Inspect every installed keg's `INSTALL_RECEIPT.json` `source.tap`, the linked executable, completions, pin state and preserved user-data canaries. `brew info --json=v2` describes the resolved formula; its top-level `tap` is not proof that every installed receipt migrated. Automatic same-name migration can update receipts without replacing kegs when Homebrew can use the destination tap; the [README migration steps](README.md#existing-the-matrix-tap-installations) provide the explicit trust-before-tap and qualified-reinstall path. Homebrew refuses a pinned reinstall, so tests must preserve the pin and must not silently unpin. Do not use `brew migrate` for this unchanged-name move or force-untap The Matrix.

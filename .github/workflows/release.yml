@@ -17,6 +17,7 @@ jobs:
 
   publish:
     name: Publish verified artifacts
+    if: github.repository == '0merUfuk/skuggsja'
     needs: verify
     runs-on: ubuntu-latest
     timeout-minutes: 20
@@ -53,9 +54,55 @@ jobs:
             dist/*.zip
             dist/checksums.txt
             dist/skuggsja.rb
-      - name: Publish release
+      - name: Create new release draft
         env:
           GH_TOKEN: ${{ github.token }}
           RELEASE_TAG: ${{ github.ref_name }}
         run: |
-          gh release create "$RELEASE_TAG" --verify-tag --title "Skuggsja $RELEASE_TAG" --notes-file dist/CHANGELOG.md dist/*.tar.gz dist/*.zip dist/checksums.txt dist/skuggsja.rb
+          gh release create "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --draft --verify-tag --title "Skuggsja $RELEASE_TAG" --notes-file dist/CHANGELOG.md
+      - name: Upload and verify draft assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          gh release upload "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" dist/*.tar.gz dist/*.zip dist/checksums.txt dist/skuggsja.rb
+          gh api "repos/$GITHUB_REPOSITORY/releases/tags/$RELEASE_TAG" > "$RUNNER_TEMP/skuggsja-draft-release.json"
+          python3 - <<'PY'
+          import hashlib
+          import json
+          import os
+          from pathlib import Path
+          import subprocess
+
+          dist = Path("dist")
+          paths = [*dist.glob("*.tar.gz"), *dist.glob("*.zip"), dist / "checksums.txt", dist / "skuggsja.rb"]
+          expected = {path.name: path for path in paths}
+          if len(paths) != 8 or len(expected) != 8:
+              raise SystemExit("Expected exactly six archives, checksums.txt and skuggsja.rb")
+          temporary = Path(os.environ["RUNNER_TEMP"])
+          release = json.loads((temporary / "skuggsja-draft-release.json").read_text())
+          if release["tag_name"] != os.environ["RELEASE_TAG"] or release["draft"] is not True or release["prerelease"] is not False:
+              raise SystemExit("The candidate must remain a draft for the exact stable tag")
+          assets = release["assets"]
+          if len(assets) != len(expected) or {asset["name"] for asset in assets} != set(expected):
+              raise SystemExit("Draft asset membership differs from the verified local packages")
+          for asset in assets:
+              if asset["state"] != "uploaded" or asset["size"] != expected[asset["name"]].stat().st_size:
+                  raise SystemExit("A draft asset is incomplete or has the wrong size")
+          downloaded = temporary / "skuggsja-draft-assets"
+          downloaded.mkdir()
+          subprocess.run(["gh", "release", "download", os.environ["RELEASE_TAG"], "--repo", os.environ["GITHUB_REPOSITORY"], "--dir", str(downloaded)], check=True)
+          if {path.name for path in downloaded.iterdir()} != set(expected):
+              raise SystemExit("Downloaded draft asset membership differs")
+          for name, path in expected.items():
+              if hashlib.sha256(path.read_bytes()).digest() != hashlib.sha256((downloaded / name).read_bytes()).digest():
+                  raise SystemExit("A downloaded draft asset differs from the attested local bytes")
+          print("Draft release verification: 8/8 uploaded assets match the attested local bytes")
+          PY
+      - name: Publish complete draft and confirm immutability
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          gh release edit "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --draft=false --verify-tag
+          test "$(gh api "repos/$GITHUB_REPOSITORY/releases/tags/$RELEASE_TAG" --jq '.draft == false and .immutable == true')" = true

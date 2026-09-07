@@ -11,7 +11,8 @@
 On macOS or Linux with Homebrew installed:
 
 ```sh
-brew install 0merUfuk/thematrix/skuggsja
+brew install 0merUfuk/skuggsja/skuggsja
+skuggsja version
 skuggsja
 ```
 
@@ -31,23 +32,39 @@ The zero-outbound guarantee applies to the installed/built program at runtime: S
 
 Skuggsja ships as one Go executable with its UI embedded. A release binary does not require Go, Python, Node.js, a virtual environment, or a separate frontend server.
 
-The Homebrew formula installs prebuilt binaries on macOS and Linux, for both Intel/AMD (`amd64`) and ARM (`arm64`). To update an existing installation:
+The [dedicated Homebrew tap](https://github.com/0merUfuk/homebrew-skuggsja) installs prebuilt binaries on macOS and Linux, for both Intel/AMD (`amd64`) and ARM (`arm64`). The fully qualified installation command adds the tap and trusts only the Skuggsja formula on Homebrew versions with tap trust. To update an existing installation:
 
 ```sh
 brew update
-brew upgrade 0merUfuk/thematrix/skuggsja
+brew upgrade 0merUfuk/skuggsja/skuggsja
 skuggsja version
 ```
 
 To remove the executable:
 
 ```sh
-brew uninstall 0merUfuk/thematrix/skuggsja
+brew uninstall 0merUfuk/skuggsja/skuggsja
 ```
 
 Once installed, `skuggsja` works from any directory and discovers its supported local histories automatically. It does not need project registration or a setup command. Installation and updates use Homebrew's network access; the executable's runtime remains local.
 
 The formula also installs Bash, Zsh and Fish completions. It has no Go, Python or Node runtime dependency. Ordinary removal leaves the generated report in place; `skuggsja clean` is the separate command for removing that regenerable artifact.
+
+### Existing The Matrix tap installations
+
+Skuggsja now has its own tap. The explicit migration path is to trust the destination formula, add its tap and reinstall using its qualified name. Check `brew list --pinned` first: if Skuggsja is pinned, preserve that pin and stop before reinstalling unless you deliberately choose to unpin it.
+
+```sh
+brew trust --formula 0merUfuk/skuggsja/skuggsja
+brew tap 0merUfuk/skuggsja
+brew reinstall 0merUfuk/skuggsja/skuggsja
+skuggsja version
+cat "$(brew --prefix skuggsja)/INSTALL_RECEIPT.json"
+```
+
+The receipt's `source.tap` should be `0merufuk/skuggsja`. `brew trust` applies to Homebrew versions with tap trust; follow the instructions from your installed Homebrew version. Reinstall selects the destination tap's current version and preserves Skuggsja's generated report and source histories. Do not uninstall first or force-untap The Matrix. Keep that tap if you use its other tools.
+
+`brew update` can also migrate receipts at the same version when it processes the old tap's migration entry and can use the destination tap. That path changes receipts without replacing kegs and can preserve pins. It is not guaranteed to complete, particularly when the destination is not yet tapped or trusted, or an earlier update already processed the move. Check the installed receipt: if it already names the new tap, a reinstall is unnecessary. Otherwise use the explicit steps above; Homebrew refuses to reinstall a pinned formula.
 
 ### Manual archives
 
