@@ -114,6 +114,8 @@ jobs:
         run: go run golang.org/x/vuln/cmd/govulncheck@v1.7.0 ./...
       - name: Validate workflows
         run: go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.12 -color
+      - name: Release workflow regression tests
+        run: python3 scripts/release_workflow_test.py
 
   package:
     name: Six-platform package validation

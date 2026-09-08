@@ -242,3 +242,76 @@ Sessions and prompts are derived only from recognized source events. Child sessi
 A provider may degrade with a scoped warning after safe source resolution. Failure to establish source/output separation can stop generation before writes. Partial-history reconciliation can omit unique older prompts; missing detail is never reconstructed from recollection, filesystem times or aggregate estimates. A hard crash can leave a private temporary database copy. Linux/Windows real-store verification remains outstanding. Windows/x64 synthetic CI now verifies private DACL behavior; this is separate from real-harness validation.
 
 [FORENSIC-AUDIT.md](FORENSIC-AUDIT.md) documents generalizable discovery and deduplication findings. Raw histories, personal usage totals, absolute source paths, source/report fingerprints and private operational context remain outside the public record. Secret scanning is one check, not proof of anonymization.
+
+## Dedicated Homebrew distribution — 2026-09-08
+
+This record covers distribution and Homebrew migration only. It does not change
+parser, analytics, real-history coverage, runtime-network or release-equality
+claims elsewhere in this document.
+
+Skuggsja now has its own dedicated tap:
+[`0merUfuk/skuggsja`](https://github.com/0merUfuk/homebrew-skuggsja).
+It continues to distribute the existing attested v0.1.1 macOS/Linux binaries;
+no application version, tag, formula revision, bottle, cask, copied binary, or
+replacement of an existing release asset was introduced for the tap move.
+
+The recovery candidate
+[`c5f9f6b`](https://github.com/0merUfuk/homebrew-skuggsja/commit/c5f9f6bd5955b0cc7127b18f2fd74aa0319a5aa5)
+passed [5/5 CI jobs](https://github.com/0merUfuk/homebrew-skuggsja/actions/runs/34175126837):
+120 Python checks and 27 Ruby checks in candidate verification, followed by
+native macOS arm64/amd64 and Linux arm64/amd64 lifecycles. Each native platform
+passed 30 package-lifecycle assertions and 36 receipt-recovery assertions.
+Nested synthetic CLI results are separate checks and are not added to those
+outer counts.
+
+An earlier recovery candidate remains recorded as a failure: its two Linux jobs
+stopped before helper execution because the network-isolation wrapper changed
+the private trust configuration after dropping privileges. The
+[diagnostic run](https://github.com/0merUfuk/homebrew-skuggsja/actions/runs/34174778830)
+identified that environment boundary. The minimal correction preserved the
+original isolated trust and network-denial settings after the privilege drop; it
+did not weaken formula or command trust.
+
+[Tap PR #2](https://github.com/0merUfuk/homebrew-skuggsja/pull/2) was reviewed
+and merged through the dedicated tap's protected branch at
+[`4ce8732`](https://github.com/0merUfuk/homebrew-skuggsja/commit/4ce8732a02565c45ac1d26ee716b4d6096911ce5).
+Its [public-main CI](https://github.com/0merUfuk/homebrew-skuggsja/actions/runs/34175627876)
+also passed 5/5 jobs with the same four-native 30-package/36-recovery scope,
+using the public GitHub tap and qualified formula path. The hourly importer
+subsequently completed as a [no-op](https://github.com/0merUfuk/homebrew-skuggsja/actions/runs/34175801737)
+with `changed: false`.
+
+The former Matrix-tap cutover is complete:
+[former-tap PR #1](https://github.com/0merUfuk/homebrew-thematrix/pull/1) removed
+only Skuggsja's formula, updater workflow, updater implementation and updater
+test, while retaining:
+
+```json
+{"skuggsja":"0merUfuk/skuggsja"}
+```
+
+A post-cutover audit passed 35/35 assertions. It confirmed that the retired
+Skuggsja workflow is deleted with no active runs, and that eight unrelated
+Matrix/Rifja paths retained their Git blobs and modes.
+
+A real pre-existing Homebrew installation also completed `brew update` with a
+19/19 scoped acceptance result. Its one unpinned v0.1.1 receipt changed only
+`source.tap` from the Matrix tap to the dedicated tap; retained files, links,
+shell completions, pin state and existing generated report were preserved.
+That installation did not require uninstallation, reinstall, helper application,
+or removal of the Matrix tap. This host result covers one unpinned retained keg;
+pinned and multi-keg recovery is covered by the separate four-platform CI.
+
+The original v0.1.0 and v0.1.1 releases remain intact. A later read-only
+integrity recheck passed 49/49 assertions over their release metadata, assets,
+digests and tag identities. GitHub immutable releases are enabled for future
+releases; the two existing releases remain mutable and are not represented as
+retroactively immutable. The draft/upload/byte-verification/immutable-publish
+workflow has regression coverage, but no new live immutable publication is
+claimed here.
+
+An isolated empty-prefix first-command installation passed only with
+`HOMEBREW_NO_GITHUB_API=1`; an unqualified default-environment first-command
+result is not claimed. The migration helper is individually atomic per receipt,
+not a transaction across every retained keg. Existing provider, coverage and
+metric limitations remain in force.
