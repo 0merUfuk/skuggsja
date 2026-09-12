@@ -103,7 +103,7 @@ Normal future updates use `brew upgrade 0merUfuk/skuggsja/skuggsja`.
 
 ### Manual archives
 
-Download the matching v0.1.2 archive and `checksums.txt` from the [v0.1.2 release](https://github.com/0merUfuk/skuggsja/releases/tag/v0.1.2). Archives contain the executable, README and MIT license. Choose `amd64` for Intel/AMD 64-bit systems or `arm64` for Apple Silicon and other ARM64 systems. macOS and Linux use `.tar.gz`; Windows uses `.zip`. A checksummed build for an architecture is not evidence that real harness data was tested there.
+Download the matching v0.2.0 archive and `checksums.txt` from the [v0.2.0 release](https://github.com/0merUfuk/skuggsja/releases/tag/v0.2.0). Archives contain the executable, README and MIT license. Choose `amd64` for Intel/AMD 64-bit systems or `arm64` for Apple Silicon and other ARM64 systems. macOS and Linux use `.tar.gz`; Windows uses `.zip`. A checksummed build for an architecture is not evidence that real harness data was tested there.
 
 For Linux x86-64, verify the downloaded archive before extracting it. The checksum command must report `OK`:
 
@@ -114,7 +114,7 @@ sha256sum --check --ignore-missing checksums.txt
 Then install the executable in your user bin directory:
 
 ```sh
-tar -xzf skuggsja_0.1.2_linux_amd64.tar.gz skuggsja
+tar -xzf skuggsja_0.2.0_linux_amd64.tar.gz skuggsja
 install -Dm755 skuggsja "$HOME/.local/bin/skuggsja"
 "$HOME/.local/bin/skuggsja" version
 ```
@@ -124,14 +124,14 @@ Keep `~/.local/bin` on `PATH` to invoke `skuggsja` from any directory. For ARM64
 For Windows x86-64, compare the SHA-256 output with the archive's entry in `checksums.txt` before extraction:
 
 ```powershell
-Get-FileHash .\skuggsja_0.1.2_windows_amd64.zip -Algorithm SHA256
-Select-String -Path .\checksums.txt -Pattern 'skuggsja_0\.1\.2_windows_amd64\.zip$'
+Get-FileHash .\skuggsja_0.2.0_windows_amd64.zip -Algorithm SHA256
+Select-String -Path .\checksums.txt -Pattern 'skuggsja_0\.2\.0_windows_amd64\.zip$'
 ```
 
 Once the hashes match, ignoring letter case:
 
 ```powershell
-Expand-Archive .\skuggsja_0.1.2_windows_amd64.zip -DestinationPath .\skuggsja
+Expand-Archive .\skuggsja_0.2.0_windows_amd64.zip -DestinationPath .\skuggsja
 .\skuggsja\skuggsja.exe version
 ```
 

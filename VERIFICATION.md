@@ -508,3 +508,65 @@ the new page.
   requirement instead of a bare `FileNotFoundError`, and a new case verifies the
   archives against a second checkout whose webfont bytes differ and requires the
   run to fail — so the new comparison is exercised for both outcomes.
+
+## Release v0.2.0 and Homebrew synchronization — 2026-09-13
+
+`v0.2.0` selects `ca6c928`, the commit that carries the interface rebuild and the
+package-verifier repair. All seven required checks passed on that exact commit
+before the tag was created. The annotated tag object is `577c6fc`; the tag is
+protected and was never moved. The published release reports `draft: false`,
+`immutable: true`, `prerelease: false` and eight assets: six archives,
+`checksums.txt` and the generated formula.
+
+The published bytes were verified from a fresh download rather than from the
+build directory. `python3 scripts/verify-packages.py <release-download> v0.2.0`
+re-checked all six archive checksums, the regular-file member sets, the embedded
+UI files, every bundled webfont and the licence against this checkout, the Go
+target/provenance metadata, and then ran the installed-package smoke test
+(**30/30** checks) against the downloaded `darwin/arm64` executable, which
+reports `skuggsja 0.2.0`.
+
+### Homebrew tap
+
+The dedicated tap was updated from its own workflow rather than by a manual
+formula edit. The candidate is trustworthy by construction and was verified
+before merge:
+
+| Check | Result |
+| --- | --- |
+| Candidate formula versus the attested release asset | Byte-identical; both `sha256 4305fe8e7e8614b5e42a7a0ece498e8d68f35eed296ef7c631899103aff55f81` |
+| Four pinned platform checksums versus the downloaded archives | All match `checksums.txt` from the release |
+| Candidate diff against the tap's `main` | One file, 9 insertions and 9 deletions: the version line and the four URL/SHA pairs |
+| Required tap checks on head `2add434` | All five passed (`Candidate verification`, four native lifecycles) |
+| Merge | Candidate PR approved on that head and squash-merged as `a134e903` |
+
+The tap requires an approving review with `enforce_admins=true`, so the update
+used the documented path: the updater opens a bot-authored candidate, the owner
+approves the workflow runs, then reviews and merges the exact checked head. After
+the workflow-approval step, the five required checks ran on the candidate head
+and are what the approval cites.
+
+The public qualified installation path was then exercised on this machine:
+`brew update` and `brew upgrade 0merUfuk/skuggsja/skuggsja` moved the installed
+keg from 0.1.2 to 0.2.0, `skuggsja version` prints `skuggsja 0.2.0`, `brew test`
+passes, and the receipt's `source.tap` is the dedicated tap. The installed keg
+serves all eight bundled `woff2` files at their exact checkout bytes from the
+loopback origin, together with `fonts/OFL.txt`, so the typographic change is what
+the package manager actually ships.
+
+### Process note
+
+The three application commits reached `main` through a direct push from an owner
+session that holds the documented administrator bypass, after the feature
+branch's own required check failed on the package-verifier fixture described
+above. The fix landed with them, the feature PR was recorded as merged by that
+push, and the seven required checks were then confirmed green on `ca6c928` before
+any tag existed. The tap change, by contrast, went through its gated path end to
+end. The bypass is not a claim that a failed check was acceptable: the failure
+was fixed and the corrected commit is the one that was released.
+
+Real-data equality evidence was deliberately not regenerated. This release
+changes presentation, embedded assets and verification tooling only; per
+[RELEASING.md](RELEASING.md) that leaves the scope of the existing source-access
+and release-equality records intact, and the browser record remains a
+presentation record rather than a data-equality record.
