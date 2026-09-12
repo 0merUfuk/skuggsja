@@ -45,7 +45,15 @@ def main():
     repository = Path(__file__).resolve().parent.parent
     revision = subprocess.run(["git", "rev-parse", "HEAD"], cwd=repository,
                               capture_output=True, text=True, check=True, timeout=30).stdout.strip()
-    version = json.loads((directory / "metadata.json").read_text())["version"]
+    metadata = directory / "metadata.json"
+    if metadata.exists():
+        version = json.loads(metadata.read_text())["version"]
+    else:
+        # Published releases do not carry metadata.json. A stable tag supplies
+        # the version for the documented post-publication verification; a
+        # snapshot build must still provide its own generated metadata.
+        require(len(sys.argv) == 3, "metadata.json is required without a release tag")
+        version = sys.argv[2][1:]
     if len(sys.argv) == 3:
         require(re.fullmatch(r"v(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)", sys.argv[2]), "release tag must be stable vMAJOR.MINOR.PATCH")
         require(version == sys.argv[2][1:], "archive version differs from release tag")

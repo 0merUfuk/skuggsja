@@ -6,6 +6,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+### Fixed
+
+- Release verification resolves the unpublished draft from the release list instead of the tag endpoint, which GitHub answers with 404 for drafts. Post-publication package verification accepts the stable tag when the built `metadata.json` is not a published asset.
+
 ## [0.1.2] - 2026-09-12
 
 ### Added
