@@ -409,3 +409,93 @@ prompts of 1,387 — exactly the distinct stored prompt events counted directly
 in the live database (1,676 physical rows) — with 77 root sessions, 157
 children, and the stored active-transcript tool counter unchanged in
 semantics.
+
+## Interface art direction and bundled fonts — 2026-09-13
+
+The Rewind interface was rebuilt on `main` after `v0.1.2`. The earlier design
+was technically sound but read as assembled from a generic component library:
+repeated rounded cards, a gradient and glow vocabulary, symmetric sections and
+the same container shape for every band. The replacement treats the report as a
+printed field instrument: full-bleed bands with one inset content column, hard
+2px ink rules, hairline data rows instead of boxes, chapter folios that number
+and indent the sections, margin notes set as serif italic marginalia, exactly
+one signal colour (vermilion) over bone paper and blue-black ink, and exactly
+one sealed inverse band — the report boundary — where the page turns dark. The
+fixed margin rail marks the current chapter from 84rem upward. No gradient,
+blur, glow, shadow or rounded corner remains outside the rhythm dial, which is
+the single deliberately circular figure.
+
+Typography carries the hierarchy: Newsreader for display statements and
+figures, IBM Plex Sans for prose, IBM Plex Mono for labels, ledger rows and
+readout values. The three faces are the unmodified Google Fonts `latin` and
+`latin-ext` subsets, bundled under the SIL Open Font License 1.1
+(`web/fonts/OFL.txt`, `web/fonts/README.md`), embedded in the binary and served
+from loopback only; `web/embed_test.go` now fails if a stylesheet font is not
+embedded or if the licence is missing, and `scripts/verify-packages.py` proves
+every webfont, the licence and the three UI files are byte-identical inside each
+released executable.
+
+### Findings, classified before any change
+
+Review of the previous candidate produced four claims and two suspicions. Each
+was re-checked against a rendered page before editing; only confirmed items were
+changed.
+
+| Claim | Verdict | Evidence |
+| --- | --- | --- |
+| Method disclosure summaries strand the expand marker in an empty column | Confirmed | `+`/`−` rendered at the far left with the label flush to the trailing edge at 1440 |
+| Hero session figure clips its own content box | Confirmed | `#hero-session-count` `clientHeight` 89 against `scrollHeight` 96 at 1280 DPR 2 (`keyValues` check) |
+| Weekday rows overflow with a heavy distribution | Confirmed | A forced synthetic distribution made `documentElement.scrollWidth` 399 against a 390 layout viewport; the value and label tracks were the cause |
+| Long identifiers in warning prose need inline code styling | Not reproduced | No warning message in the retained report contains a dotted identifier; every identifier appears in the mono meta line, and `message.usage` appears only in the mono token-ledger note |
+| Rhythm clock bars read as too thin | Not reproduced | Dial captured at 1440 DPR 2; hairlines are the intended instrument treatment and remain legible |
+| Margin rail collides with the hero band | Not reproduced | Rail occupies the left margin only (x 46–142) while content starts at x 184; no overlap at 1440, 1728 or 1920 |
+
+### Local gates on the exact head
+
+| Gate | Result |
+| --- | --- |
+| `go build ./...`, `go test ./...`, `go vet ./...`, `gofmt -l .` | All packages pass; no vet or format findings |
+| `node --test web/source_activity_test.cjs web/usage_chart_test.cjs` | **32/32** pass |
+| `python3 scripts/release_workflow_test.py` | **21/21** pass |
+| `node scripts/verify-install.cjs` (installed binary, synthetic sources) | **30/30** checks, including the served bundled webfont |
+| `./scripts/verify-runtime-offline.sh` | Generation and loopback viewing with zero observed external connect attempts |
+| `node scripts/verify-browser.cjs --revision true` | **1,625/1,625** assertions, 61 screenshots, pass |
+
+The browser run served the **production handler** (`scripts/serve-report`) from
+the retained aggregate `c1a77d32…`, so the evidence covers the embedded assets
+rather than a static preview. Chrome Headless 152.0.7977.84 ran inside the
+verification Seatbelt policy with CDP interception from before navigation. Six
+viewports (1280, 1440, 1728, 1920, 320, 390 CSS px) reported zero page overflow,
+zero uncontained block overflow and zero clipped key values; session counts stay
+in exact bars and prompt counts in circles whose 12px-plus labels fit their
+marks. All 133 requests went to the loopback origin except the deliberately
+denied external control, 68 of them for the bundled webfonts, and the ledger
+recorded no application exception, no uninstrumented product child target and
+no browser-internal target. The eight synthetic states — one entity, two
+entities, one recorded session, three single-session harnesses, a three-entity
+tiny minority, a 40-entity long tail, sessions without positive prompts, and the
+loading/error/empty/retry reduced-motion sequence — each held the intended
+390x844 DPR-2 touch viewport.
+
+### Verification harness repairs
+
+Two harness defects surfaced while re-running the browser record; both were
+reproduced on the pre-redesign interface as well, so neither was a property of
+the new page.
+
+- A single `Page.captureScreenshot` that materialised the whole report at 2x
+  closed the DevTools socket mid-capture, always on the widest full-page shot the
+  run had reached. Full-page DPR-2 evidence is now captured in vertical tiles
+  (`rewind-<width>-dpr2-full-NN.png`) bounded by a device-pixel and device-height
+  budget. The tiles hold the same 1:1 device pixels; nothing is resampled and no
+  region is skipped.
+- Chrome's built-in `Google Network Speech` component extension starts a
+  background service worker in any profile because `--disable-extensions` does
+  not remove component extensions. The verifier now passes
+  `--disable-component-extensions-with-background-pages` and classifies any
+  remaining `chrome://`/`chrome-extension://`/`devtools://` child target into
+  `browser_internal_targets`, leaving every http(s), blob:, data: and about:
+  child target inside the strict product scope check.
+- The same runs required a narrower Seatbelt allowance so headless Chrome can
+  bind its own per-profile singleton unix socket; all remote socket classes
+  remain denied by the existing `deny network*` rule.
