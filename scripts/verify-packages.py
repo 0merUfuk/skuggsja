@@ -92,8 +92,10 @@ def main():
         require(set(files) == {executable, "README.md", "LICENSE"}, "unexpected archive contents")
         for document in ("README.md", "LICENSE"):
             require(files[document] == (repository / document).read_bytes(), f"stale packaged {document}")
+        fonts = repository / "web/fonts"
+        require(fonts.is_dir(), "checkout is missing the bundled web/fonts directory")
         bundled = ["web/index.html", "web/app.js", "web/styles.css",
-                   *(f"web/fonts/{path.name}" for path in sorted((repository / "web/fonts").glob("*.woff2"))),
+                   *(f"web/fonts/{path.name}" for path in sorted(fonts.glob("*.woff2"))),
                    "web/fonts/OFL.txt"]
         for asset in bundled:
             require((repository / asset).read_bytes() in files[executable], f"stale or missing embedded {asset}")

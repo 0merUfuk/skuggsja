@@ -37,14 +37,17 @@ class PackageTests(unittest.TestCase):
         cls.base = Path(cls.temporary.name)
         cls.repo = cls.base / "synthetic-repository"
         (cls.repo / "cmd/skuggsja").mkdir(parents=True)
-        (cls.repo / "web").mkdir()
         cls.assets = {
-            "index.html": "<html>synthetic package verification fixture</html>",
-            "app.js": "window.syntheticPackageFixture = true;",
-            "styles.css": ".synthetic-package-fixture { color: black; }",
+            "web/index.html": "<html>synthetic package verification fixture</html>",
+            "web/app.js": "window.syntheticPackageFixture = true;",
+            "web/styles.css": ".synthetic-package-fixture { color: black; }",
+            "web/fonts/fixture-latin-var.woff2": "synthetic webfont fixture bytes\n",
+            "web/fonts/OFL.txt": "Synthetic fixture licence placeholder, not the SIL Open Font License.\n",
         }
         for name, content in cls.assets.items():
-            (cls.repo / "web" / name).write_text(content)
+            member = cls.repo / name
+            member.parent.mkdir(parents=True, exist_ok=True)
+            member.write_text(content)
         for name in ["README.md", "LICENSE"]:
             (cls.repo / name).write_text("Synthetic " + name + " fixture.\n")
         (cls.repo / "go.mod").write_text("module github.com/0merUfuk/skuggsja\n\ngo 1.27.1\n")
@@ -71,6 +74,21 @@ class PackageTests(unittest.TestCase):
                 RUN([go, "build", "-trimpath", "-ldflags=-s -w", "-o", str(output), "./cmd/skuggsja"],
                     cwd=cls.repo, env=env, check=True, capture_output=True, text=True, timeout=120)
                 cls.binaries[(system, architecture)] = output.read_bytes()
+        # A real checkout with the same shape but different webfont bytes proves
+        # the embedded-asset comparison is not vacuous. No binary is rebuilt: the
+        # archives keep the original payload and only the checkout diverges.
+        cls.divergent = cls.base / "divergent-repository"
+        for name, content in cls.assets.items():
+            member = cls.divergent / name
+            member.parent.mkdir(parents=True, exist_ok=True)
+            member.write_text("divergent " + content if name.endswith(".woff2") else content)
+        for name in ["README.md", "LICENSE"]:
+            (cls.divergent / name).write_text("Synthetic " + name + " fixture.\n")
+        (cls.divergent / "go.mod").write_text("module github.com/0merUfuk/skuggsja\n\ngo 1.27.1\n")
+        for command in (["git", "init", "--quiet", "--template="], ["git", "add", "."],
+                        ["git", "-c", "user.name=Synthetic Fixture", "-c", "user.email=fixture@example.invalid",
+                         "-c", "commit.gpgsign=false", "commit", "--quiet", "-m", "test: divergent package fixture"]):
+            RUN(command, cwd=cls.divergent, env=cls.env, check=True, capture_output=True, text=True)
 
     def setUp(self):
         self.directory = Path(tempfile.mkdtemp(prefix="archives-", dir=self.base))
@@ -107,7 +125,7 @@ class PackageTests(unittest.TestCase):
         # validation must catch defects that checksum comparison cannot detect.
         (self.directory / "checksums.txt").write_text("\n".join(sums) + "\n")
 
-    def verify(self, *, release=False):
+    def verify(self, *, release=False, repository=None):
         def run(command, *args, **kwargs):
             if command[0] == "node":
                 self.native_calls.append(command)
@@ -115,7 +133,7 @@ class PackageTests(unittest.TestCase):
                 return subprocess.CompletedProcess(command, 0)
             return RUN(command, *args, **kwargs)
         argv = ["verify-packages.py", str(self.directory)] + (["v0.1.0"] if release else [])
-        with mock.patch.object(VERIFIER, "__file__", str(self.repo / "scripts/verify-packages.py")), \
+        with mock.patch.object(VERIFIER, "__file__", str((repository or self.repo) / "scripts/verify-packages.py")), \
              mock.patch.object(VERIFIER.sys, "argv", argv), \
              mock.patch.object(VERIFIER.subprocess, "run", side_effect=run), \
              contextlib.redirect_stdout(io.StringIO()):
@@ -164,6 +182,12 @@ class PackageTests(unittest.TestCase):
              mock.patch.object(VERIFIER.platform, "machine", return_value="AMD64"):
             self.verify()
         self.assertEqual(self.native_bytes, [self.binaries[("windows", "amd64")]])
+
+    def test_stale_webfont_bytes_fail_despite_valid_checksums(self):
+        self.archives()
+        with self.assertRaisesRegex(RuntimeError, "stale or missing embedded web/fonts/fixture-latin-var.woff2"):
+            self.verify(repository=self.divergent)
+        self.assertEqual(self.native_calls, [])
 
     def test_payload_from_another_checkout_revision_is_rejected(self):
         with self.assertRaisesRegex(RuntimeError, "vcs.revision differs"):

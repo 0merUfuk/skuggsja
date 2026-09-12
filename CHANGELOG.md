@@ -19,6 +19,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 - Disclosure summaries in Method keep the expand marker beside its label and the warning count at the trailing edge instead of stranding the marker against an empty column.
 - Browser verification captures full-page DPR-2 evidence in vertical tiles. A single 2x capture that exceeds Chromium's raster budget closed the DevTools socket mid-run, which made the last full-page width the verifier reached look like a product failure.
 - Browser verification records browser-internal child targets (for example a Chrome component extension's background service worker) separately from product scope, and launches with `--disable-component-extensions-with-background-pages` so an unrelated component cannot fail an otherwise clean run.
+- Packaging verification names every bundled webfont and the licence in each released executable, its regression fixture builds a real `web/fonts` tree, and a new case proves the comparison fails when a checkout's webfont bytes differ from the packaged payload.
 
 ## [0.1.2] - 2026-09-12
 

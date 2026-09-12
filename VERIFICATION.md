@@ -499,3 +499,12 @@ the new page.
 - The same runs required a narrower Seatbelt allowance so headless Chrome can
   bind its own per-profile singleton unix socket; all remote socket classes
   remain denied by the existing `deny network*` rule.
+- `scripts/verify-packages.py` compares each released executable against the
+  checkout's embedded assets, and that list now names every bundled webfont and
+  the licence. CI caught the consequence on the first run of this branch: the
+  verifier's own regression fixture builds a synthetic checkout, which had no
+  `web/fonts` directory, so the comparison could not run at all. The fixture now
+  writes a real `web/fonts` tree, a missing directory fails with a named
+  requirement instead of a bare `FileNotFoundError`, and a new case verifies the
+  archives against a second checkout whose webfont bytes differ and requires the
+  run to fail — so the new comparison is exercised for both outcomes.
