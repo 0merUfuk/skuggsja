@@ -11,6 +11,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"time"
 
 	"github.com/0merUfuk/skuggsja/internal/model"
@@ -97,8 +98,11 @@ func (r Reader) Read(ctx context.Context, d provider.Discovery) (result model.Pr
 		byID[sessions[i].ID] = &sessions[i]
 	}
 
-	if err := readPrompts(ctx, database.DB, byID); err != nil {
+	legacyPromptIdentity, err := readPrompts(ctx, database.DB, byID)
+	if err != nil {
 		result.AddWarning("prompt_metrics_unavailable", "Hermes prompt-length metrics could not be read; session totals remain available.")
+	} else if legacyPromptIdentity {
+		result.AddWarning("prompt_identity_unavailable", "This Hermes schema has no message activity flags; compaction copies of one prompt may be counted separately.")
 	}
 	_, err = readModelUsage(ctx, database.DB, byID)
 	if err != nil {
@@ -179,7 +183,17 @@ func readSessions(ctx context.Context, db *sql.DB) ([]model.Session, map[string]
 // and content are byte-exact copies, so the stored event — not the row id — is
 // the identity. Rows that are live at the same time are never merged: a group
 // holding several active rows is counted once per active row.
-func readPrompts(ctx context.Context, db *sql.DB, sessions map[string]*model.Session) error {
+func readPrompts(ctx context.Context, db *sql.DB, sessions map[string]*model.Session) (bool, error) {
+	hasActive, err := hasMessageColumn(ctx, db, "active")
+	if err != nil {
+		return false, err
+	}
+	if !hasActive {
+		// Without activity flags there is no stored signal that separates a
+		// compaction copy from a second prompt, so physical rows stay the
+		// identity and the provider reports the limitation.
+		return true, readPromptsByRow(ctx, db, sessions)
+	}
 	rows, err := db.QueryContext(ctx, `
 		SELECT session_id, timestamp, content,
 		       SUM(CASE WHEN active = 1 THEN 1 ELSE 0 END)
@@ -190,7 +204,7 @@ func readPrompts(ctx context.Context, db *sql.DB, sessions map[string]*model.Ses
 		ORDER BY MIN(id)
 	`)
 	if err != nil {
-		return err
+		return false, err
 	}
 	defer rows.Close()
 	for rows.Next() {
@@ -198,7 +212,7 @@ func readPrompts(ctx context.Context, db *sql.DB, sessions map[string]*model.Ses
 		var timestamp float64
 		var liveRows int64
 		if err := rows.Scan(&sessionID, &timestamp, &content, &liveRows); err != nil {
-			return err
+			return false, err
 		}
 		session := sessions[sessionID]
 		if session == nil {
@@ -221,7 +235,66 @@ func readPrompts(ctx context.Context, db *sql.DB, sessions map[string]*model.Ses
 			})
 		}
 	}
+	return false, rows.Err()
+}
+
+// readPromptsByRow is the pre-activity-flag fallback: each physical row is
+// counted as one prompt, which is the best identity an older schema exposes.
+func readPromptsByRow(ctx context.Context, db *sql.DB, sessions map[string]*model.Session) error {
+	rows, err := db.QueryContext(ctx, `
+		SELECT id, session_id, timestamp, content
+		FROM messages
+		WHERE role = 'user' AND COALESCE(_compressed_summary, 0) = 0
+		  AND content IS NOT NULL AND content != ''
+		ORDER BY id
+	`)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var messageID int64
+		var sessionID, content string
+		var timestamp float64
+		if err := rows.Scan(&messageID, &sessionID, &timestamp, &content); err != nil {
+			return err
+		}
+		session := sessions[sessionID]
+		if session == nil {
+			continue
+		}
+		words, characters := provider.TextMetric(content)
+		session.Prompts = append(session.Prompts, model.PromptMetric{
+			EventID: strconv.FormatInt(messageID, 10), At: unixSeconds(timestamp),
+			Words: words, Characters: characters, HasText: true,
+		})
+	}
 	return rows.Err()
+}
+
+func hasMessageColumn(ctx context.Context, db *sql.DB, column string) (bool, error) {
+	rows, err := db.QueryContext(ctx, `PRAGMA table_info(messages)`)
+	if err != nil {
+		return false, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var (
+			position     int
+			name         string
+			columnType   string
+			notNull      int
+			defaultValue sql.NullString
+			primaryKey   int
+		)
+		if err := rows.Scan(&position, &name, &columnType, &notNull, &defaultValue, &primaryKey); err != nil {
+			return false, err
+		}
+		if name == column {
+			return true, nil
+		}
+	}
+	return false, rows.Err()
 }
 
 // promptIdentity is a transient, content-free key for one stored prompt event.

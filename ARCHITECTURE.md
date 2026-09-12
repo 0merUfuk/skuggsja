@@ -124,6 +124,8 @@ All Hermes interfaces that write the same state database share these session sem
 
 Prompt identity is the stored event, not the physical row. Hermes compaction archives the carried-tail original and inserts a byte-exact clone with a fresh row id, so the adapter groups eligible user rows by session, timestamp and content and counts each group once. A group holding several active rows is never merged: it is counted once per active row, because simultaneously live messages are not proof of one event.
 
+When a messages table predates the activity flags, the adapter falls back to one prompt per physical row and emits `prompt_identity_unavailable` instead of failing the provider.
+
 Tool calls are Hermes's stored `sessions.tool_call_count`, an active-transcript counter that in-place compaction, transcript replacement, rewind or clear can lower. It is reported as a provider-native counter, not a cumulative lifetime ledger.
 
 ### Cursor

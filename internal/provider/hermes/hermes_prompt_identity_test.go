@@ -165,3 +165,61 @@ func TestReaderReportsStoredActiveToolCounter(t *testing.T) {
 		t.Fatalf("tool calls = %d, want the stored active counter 9", toolCalls)
 	}
 }
+
+func TestReaderFallsBackOnSchemaWithoutActivityFlags(t *testing.T) {
+	t.Parallel()
+	path := filepath.Join(t.TempDir(), "state.db")
+	db, err := sql.Open("sqlite", path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	legacySchema := `
+		CREATE TABLE sessions (
+			id TEXT PRIMARY KEY, parent_session_id TEXT, started_at REAL NOT NULL,
+			ended_at REAL, last_activity_at REAL, git_repo_root TEXT, cwd TEXT,
+			tool_call_count INTEGER, model TEXT, api_call_count INTEGER,
+			input_tokens INTEGER, output_tokens INTEGER, cache_read_tokens INTEGER,
+			cache_write_tokens INTEGER, reasoning_tokens INTEGER
+		);
+		CREATE TABLE messages (
+			id INTEGER PRIMARY KEY, session_id TEXT, role TEXT, content TEXT,
+			timestamp REAL NOT NULL, _compressed_summary INTEGER
+		);
+		CREATE TABLE session_model_usage (session_id TEXT, model TEXT, api_call_count INTEGER,
+			input_tokens INTEGER, output_tokens INTEGER, cache_read_tokens INTEGER,
+			cache_write_tokens INTEGER, reasoning_tokens INTEGER);
+		INSERT INTO sessions (id, started_at, ended_at, tool_call_count)
+			VALUES ('root', 1767520800, 1767521400, 4);
+		INSERT INTO messages (id, session_id, role, content, timestamp, _compressed_summary)
+			VALUES (1, 'root', 'user', 'Owner action', 1767520801, 0),
+			       (2, 'root', 'user', 'Owner action', 1767520801, 0);
+	`
+	if _, err := db.Exec(legacySchema); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	reader := Reader{DatabasePath: path}
+	discovery, err := reader.Discover(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	result := reader.Read(context.Background(), discovery)
+	if result.Status != "supported with warnings" {
+		t.Fatalf("status = %q, want an explicit warning instead of a hard failure", result.Status)
+	}
+	warned := false
+	for _, warning := range result.Warnings {
+		if warning.Code == "prompt_identity_unavailable" {
+			warned = true
+		}
+	}
+	if !warned {
+		t.Fatalf("warnings = %#v, want prompt_identity_unavailable", result.Warnings)
+	}
+	if len(result.Sessions) != 1 || len(result.Sessions[0].Prompts) != 2 || result.Sessions[0].ToolCalls != 4 {
+		t.Fatalf("legacy fallback = %#v", result.Sessions)
+	}
+}
