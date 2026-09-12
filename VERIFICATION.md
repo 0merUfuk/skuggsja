@@ -315,3 +315,50 @@ An isolated empty-prefix first-command installation passed only with
 result is not claimed. The migration helper is individually atomic per receipt,
 not a transaction across every retained keg. Existing provider, coverage and
 metric limitations remain in force.
+
+## Data-correctness and provenance fixes — 2026-09-12
+
+Three confirmed findings from the retained data-comparison review were fixed and
+re-verified from source and behavior; the finding text itself was re-derived
+against the current Hermes revision rather than inherited.
+
+Hermes compaction archives the carried-tail original and inserts a byte-exact
+clone with a fresh row id (`_clone_message_rows` copies every column except
+`id`, `active` and `compacted`). The adapter had keyed prompts by physical row
+id, so one owner action could count twice. Prompt identity is now the stored
+event: eligible user rows are grouped by session, exact timestamp and content
+and count once per group, while a group holding several active rows is counted
+once per active row so simultaneously live messages are never merged. A schema
+without the `active` column falls back to one prompt per row and emits
+`prompt_identity_unavailable`.
+
+Measured on this machine's live Hermes history with the previous v0.1.1 binary
+and the fixed build against the same sources (isolated output directories,
+`--no-source-audit`, no source writes): Hermes root prompts **1,671 → 1,383**,
+removing 288 duplicate representations, which matches the 288 extra rows
+measured directly by grouping the same eligible rows in SQL. Aggregate prompts
+fell **9,108 → 8,820**; Hermes tool calls and sessions were unchanged. The
+synthetic control set covers the clone case (2 → 1), a summary-only archived
+original (1), repeated text at distinct timestamps (2, preserved), and the
+stored active tool counter (9, unchanged).
+
+Project ordering for equal-count names that differ only by case is now
+deterministic through an exact-name tie-break; the regression test builds 200
+reports and requires one stable order. The persisted artifact now records
+`generator_version`, the executable that produced it, and the report footer
+shows it. `schema_version` remains 3 and the field is additive.
+
+Local gates on the exact head: `go test ./...` 12/12 packages, `go test -race
+./...` 12/12 packages, `go vet` and `gofmt` clean, frontend suites 36/36,
+release-workflow regression 20/20, installed-CLI smoke 29/29, and the offline
+runtime check passed with zero observed external connect attempts. Pull request
+[#2](https://github.com/0merUfuk/skuggsja/pull/2) CI passed all required
+contexts on head `04fd9a6` in
+[run 34691635005](https://github.com/0merUfuk/skuggsja/actions/runs/34691635005).
+
+The Hermes tool-call total is unchanged numerically; it is the stored
+active-transcript counter, which in-place compaction, transcript replacement,
+rewind or clear can lower. It is now disclosed as a provider limitation rather
+than presented only as a native count. The historical +47 prompt / −539
+tool-call attribution remains unattributed; the old database and WAL states
+needed to reconstruct it do not exist.
