@@ -71,11 +71,13 @@ if args[:2]==['release','upload']:
  if set(args[5:])!={str(p.relative_to(root)) for p in paths}:sys.exit(96)
  sys.exit(1 if mode=='upload-failure' else 0)
 if args[0]=='api':
- if args[1]!='repos/'+os.environ['GITHUB_REPOSITORY']+'/releases/tags/'+os.environ['RELEASE_TAG']:sys.exit(97)
- if '--jq' in args:
-  if args[args.index('--jq')+1]!='.draft == false and .immutable == true':sys.exit(98)
-  print('false' if mode in ['mutable-publication','publication-still-draft'] else 'true')
-  sys.exit(0)
+ tag_url='repos/'+os.environ['GITHUB_REPOSITORY']+'/releases/tags/'+os.environ['RELEASE_TAG']
+ list_url='repos/'+os.environ['GITHUB_REPOSITORY']+'/releases?per_page=100'
+ if args[1] not in (tag_url,list_url):sys.exit(97)
+ # GitHub answers 404 for a draft looked up by tag even with contents: write.
+ if args[1]==tag_url:
+  prior=[json.loads(line) for line in (root/'calls.jsonl').read_text().splitlines()]
+  if not any(call[:2]==['release','edit'] for call in prior):sys.exit(99)
  data={'tag_name':os.environ['RELEASE_TAG'],'draft':True,'prerelease':False,'assets':[{'name':p.name,'size':p.stat().st_size,'state':'uploaded'} for p in paths]}
  if mode=='wrong-tag':data['tag_name']='v9.9.8'
  if mode=='already-published':data['draft']=False
@@ -85,6 +87,14 @@ if args[0]=='api':
  if mode=='extra-asset':data['assets'].append({'name':'unexpected.rb','size':1,'state':'uploaded'})
  if mode=='wrong-size':data['assets'][0]['size']+=1
  if mode=='incomplete-upload':data['assets'][0]['state']='starter'
+ if '--jq' in args:
+  expression=args[args.index('--jq')+1]
+  if expression=='.draft == false and .immutable == true':
+   print('false' if mode in ['mutable-publication','publication-still-draft'] else 'true')
+   sys.exit(0)
+  if args[1]==list_url and expression.startswith('map(select('):
+   print(json.dumps(data));sys.exit(0)
+  sys.exit(98)
  print(json.dumps(data));sys.exit(0)
 if args[:2]==['release','download']:
  if mode=='download-failure':sys.exit(1)
@@ -145,11 +155,23 @@ class ReleaseFlow(unittest.TestCase):
         self.assertEqual(code, 0, self.last_evidence)
         self.assertEqual([call[:2] for call in calls], [
             ['release', 'create'], ['release', 'upload'],
-            ['api', 'repos/0merUfuk/skuggsja/releases/tags/v9.9.9'],
+            ['api', 'repos/0merUfuk/skuggsja/releases?per_page=100'],
             ['release', 'download'], ['release', 'edit'],
             ['api', 'repos/0merUfuk/skuggsja/releases/tags/v9.9.9'],
         ])
         self.assertIn('8/8 uploaded assets', self.last_evidence['stages'][1]['stdout'])
+
+    def test_draft_is_resolved_from_the_release_list_not_by_tag(self):
+        code, calls = self.run_flow('success')
+        self.assertEqual(code, 0, self.last_evidence)
+        upload_index = next(index for index, call in enumerate(calls) if call[:2] == ['release', 'upload'])
+        publish_index = next(index for index, call in enumerate(calls) if call[:2] == ['release', 'edit'])
+        lookups = [(index, call[1]) for index, call in enumerate(calls) if call[:1] == ['api']]
+        self.assertEqual([url for index, url in lookups if index < publish_index],
+                         ['repos/0merUfuk/skuggsja/releases?per_page=100'])
+        self.assertEqual([url for index, url in lookups if index > publish_index],
+                         ['repos/0merUfuk/skuggsja/releases/tags/v9.9.9'])
+        self.assertGreater(upload_index, 0)
 
     def test_existing_release_is_never_uploaded_or_edited(self):
         code, calls = self.run_flow('existing-release')
