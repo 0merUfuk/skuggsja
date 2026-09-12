@@ -21,6 +21,8 @@ type GenerateOptions struct {
 	Now          func() time.Time
 	OutputPath   string
 	AuditSources bool
+	// Version identifies the producing executable in the persisted artifact.
+	Version string
 	// TempParent optionally selects a private-workspace parent without changing
 	// process environment. Its prospective child must be separate from sources.
 	TempParent string
@@ -163,6 +165,7 @@ func Generate(ctx context.Context, options GenerateOptions) (generation Generati
 
 	report := analytics.Build(results, analytics.Options{
 		Now: now(), Location: options.Location, SourceAudit: comparison, SourceObservation: observation,
+		GeneratorVersion: options.Version,
 	})
 	// A canceled read must not replace a previous complete report with partial
 	// metrics. Once WriteReport begins, its atomic install runs to completion.

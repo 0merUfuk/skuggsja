@@ -58,7 +58,7 @@ func New(version string) *cobra.Command {
 			}
 			generation, err := app.Generate(cmd.Context(), app.GenerateOptions{
 				Readers: readers(paths), Location: time.Local, OutputPath: outputPath,
-				AuditSources: !noSourceAudit,
+				AuditSources: !noSourceAudit, Version: version,
 			})
 			if err != nil {
 				return err

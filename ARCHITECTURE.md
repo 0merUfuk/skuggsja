@@ -122,6 +122,12 @@ Per-model usage is preferred. If that table is absent or empty, session-level mo
 
 All Hermes interfaces that write the same state database share these session semantics, so channel and CLI histories are not separated.
 
+Prompt identity is the stored event, not the physical row. Hermes compaction archives the carried-tail original and inserts a byte-exact clone with a fresh row id, so the adapter groups eligible user rows by session, timestamp and content and counts each group once. A group holding several active rows is never merged: it is counted once per active row, because simultaneously live messages are not proof of one event.
+
+When a messages table predates the activity flags, the adapter falls back to one prompt per physical row and emits `prompt_identity_unavailable` instead of failing the provider.
+
+Tool calls are Hermes's stored `sessions.tool_call_count`, an active-transcript counter that in-place compaction, transcript replacement, rewind or clear can lower. It is reported as a provider-native counter, not a cumulative lifetime ledger.
+
 ### Cursor
 
 Cursor discovers only the canonical global `state.vscdb`. It opens a private copy and feature-detects modern `composerHeaders` plus legacy `ItemTable` header blobs within that database, with modern records taking precedence during deduplication. It does not merge the derived conversation-search database or per-workspace legacy stores.
@@ -149,7 +155,7 @@ The JSON artifact is `analytics.Report`, currently schema version `3`. Version 3
 
 | Field | Meaning |
 | --- | --- |
-| `schema_version`, `product_name`, `generated_at` | Format identity and generation time |
+| `schema_version`, `product_name`, `generated_at`, `generator_version` | Format identity, the producing executable version, and generation time |
 | `coverage` | Earliest start, latest end, local timezone, honest display label, and `calendar_framing` presentation hint |
 | `totals` | Root sessions, prompts, unique projects, active days, child sessions, declared provider-input count, and changed-source count; no combined tool-call or model-event count |
 | `providers` | Per-harness status, verification scope, metrics, span, time basis, token ledger, limitations, warnings, declared input-file count, and explicit coverage assessment |

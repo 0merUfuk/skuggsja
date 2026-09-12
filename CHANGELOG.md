@@ -6,6 +6,19 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+### Added
+
+- `generator_version` in the persisted artifact, recording the producing executable (`dev` marks a source build).
+
+### Fixed
+
+- Hermes compaction copies of one stored prompt (identical session, exact timestamp and content) now count once instead of once per physical row. Rows that are live at the same time are never merged.
+- Project ordering is deterministic when two project names differ only by case and have equal root-session counts.
+
+### Changed
+
+- Document the Hermes tool-call total as its stored active-transcript counter, which compaction, rewind or transcript replacement can lower.
+
 ## [0.1.1] - 2026-09-06
 
 ### Fixed

@@ -215,3 +215,55 @@ func TestUntimedPhysicalSessionRetainsProjectWithoutRhythm(t *testing.T) {
 		t.Fatalf("untimed session incorrectly counted: %#v", report)
 	}
 }
+
+func TestProjectOrderingIsDeterministicForCaseVariants(t *testing.T) {
+	t.Parallel()
+	start := time.Date(2026, 1, 2, 12, 0, 0, 0, time.UTC)
+	sessions := []model.Session{
+		{Harness: model.Claude, ID: "upper", StartedAt: start, EndedAt: start.Add(time.Minute),
+			ActivityBasis: "session start", Project: "Project"},
+		{Harness: model.Claude, ID: "lower", StartedAt: start, EndedAt: start.Add(time.Minute),
+			ActivityBasis: "session start", Project: "project"},
+	}
+	result := []model.ProviderResult{{
+		Harness: model.Claude, DisplayName: "Claude Code", Status: "supported", Sessions: sessions,
+	}}
+
+	var first string
+	for run := 0; run < 200; run++ {
+		report := Build(result, Options{Now: start, Location: time.UTC})
+		names := make([]string, 0, len(report.Projects))
+		for _, project := range report.Projects {
+			names = append(names, project.Name)
+		}
+		order := strings.Join(names, " > ")
+		if run == 0 {
+			first = order
+			continue
+		}
+		if order != first {
+			t.Fatalf("tied case variants changed order on run %d: %q then %q", run, first, order)
+		}
+	}
+	if first != "Project > project" {
+		t.Fatalf("tied case variants ordered %q, want the exact-name tie-break", first)
+	}
+}
+
+func TestReportCarriesGeneratorVersion(t *testing.T) {
+	t.Parallel()
+	report := Build(nil, Options{
+		Now: time.Date(2026, 1, 2, 0, 0, 0, 0, time.UTC), Location: time.UTC,
+		GeneratorVersion: "1.2.3",
+	})
+	if report.GeneratorVersion != "1.2.3" {
+		t.Fatalf("generator version = %q, want 1.2.3", report.GeneratorVersion)
+	}
+	payload, err := json.Marshal(report)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(payload), `"generator_version":"1.2.3"`) {
+		t.Fatalf("persisted artifact lost generator provenance: %s", payload)
+	}
+}
