@@ -6,6 +6,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+## [0.1.2] - 2026-09-12
+
 ### Added
 
 - `generator_version` in the persisted artifact, recording the producing executable (`dev` marks a source build).
@@ -98,6 +100,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 - The local report server has no authentication or encryption and is not intended for remote exposure.
 - Abrupt termination can leave a private SQLite copy in the OS temporary directory.
 
-[Unreleased]: https://github.com/0merUfuk/skuggsja/compare/v0.1.1...HEAD
+[Unreleased]: https://github.com/0merUfuk/skuggsja/compare/v0.1.2...HEAD
+[0.1.2]: https://github.com/0merUfuk/skuggsja/compare/v0.1.1...v0.1.2
 [0.1.1]: https://github.com/0merUfuk/skuggsja/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/0merUfuk/skuggsja/releases/tag/v0.1.0
