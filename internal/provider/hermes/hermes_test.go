@@ -49,7 +49,9 @@ func TestReaderUsesCanonicalSessionAndModelUsageTables(t *testing.T) {
 		);
 		CREATE TABLE messages (
 			id INTEGER PRIMARY KEY, session_id TEXT, role TEXT, content TEXT,
-			timestamp REAL, _compressed_summary INTEGER
+			timestamp REAL NOT NULL, platform_message_id TEXT,
+			active INTEGER NOT NULL DEFAULT 1, compacted INTEGER NOT NULL DEFAULT 0,
+			_compressed_summary INTEGER NOT NULL DEFAULT 0
 		);
 		CREATE TABLE session_model_usage (
 			session_id TEXT, model TEXT, api_call_count INTEGER, input_tokens INTEGER,
@@ -59,7 +61,8 @@ func TestReaderUsesCanonicalSessionAndModelUsageTables(t *testing.T) {
 		INSERT INTO sessions VALUES ('root', NULL, 1767520800, 1767521400, 1767521400,
 			'/synthetic/hermes-project', '/synthetic/hermes-project', 3, 'hermes-synthetic', 2,
 			110, 25, 30, 5, 4);
-		INSERT INTO messages VALUES (1, 'root', 'user', 'Review the synthetic patch.', 1767520801, 0);
+		INSERT INTO messages (id, session_id, role, content, timestamp)
+			VALUES (1, 'root', 'user', 'Review the synthetic patch.', 1767520801);
 		INSERT INTO session_model_usage VALUES ('root', 'hermes-synthetic', 2, 110, 25, 30, 5, 4);
 	`
 	if _, err := db.Exec(schema); err != nil {

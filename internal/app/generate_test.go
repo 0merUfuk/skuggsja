@@ -108,6 +108,7 @@ func TestGenerateRunsAuditedContentFreePipeline(t *testing.T) {
 	generation, err := Generate(context.Background(), GenerateOptions{
 		Readers: []provider.Reader{reader}, Location: time.UTC,
 		Now: func() time.Time { return at.Add(time.Hour) }, OutputPath: output, AuditSources: true,
+		Version: "0.9.9-fixture",
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -125,6 +126,9 @@ func TestGenerateRunsAuditedContentFreePipeline(t *testing.T) {
 	var decoded map[string]any
 	if err := json.Unmarshal(payload, &decoded); err != nil {
 		t.Fatal(err)
+	}
+	if decoded["generator_version"] != "0.9.9-fixture" {
+		t.Fatalf("persisted generator version = %v, want the injected executable version", decoded["generator_version"])
 	}
 	for _, forbidden := range []string{secret, source, "private-source-id", "private-event-id"} {
 		if strings.Contains(string(payload), forbidden) {

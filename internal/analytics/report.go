@@ -18,20 +18,24 @@ const SchemaVersion = 3
 // Report is the only persisted representation. It contains no raw text,
 // source identifiers, or absolute filesystem paths.
 type Report struct {
-	SchemaVersion int               `json:"schema_version"`
-	GeneratedAt   time.Time         `json:"generated_at"`
-	ProductName   string            `json:"product_name"`
-	Coverage      Coverage          `json:"coverage"`
-	Totals        Totals            `json:"totals"`
-	Providers     []ProviderSummary `json:"providers"`
-	Rhythm        Rhythm            `json:"rhythm"`
-	PromptStyle   PromptStyle       `json:"prompt_style"`
-	Models        []ModelSummary    `json:"models"`
-	Projects      []ProjectSummary  `json:"projects"`
-	Longest       LongestSession    `json:"longest_session"`
-	Privacy       Privacy           `json:"privacy"`
-	Methodology   []string          `json:"methodology"`
-	Warnings      []ReportWarning   `json:"warnings"`
+	SchemaVersion int       `json:"schema_version"`
+	GeneratedAt   time.Time `json:"generated_at"`
+	ProductName   string    `json:"product_name"`
+	// GeneratorVersion identifies the executable that produced this artifact.
+	// It carries no source paths or identifiers; "dev" marks a source build and
+	// an empty value marks an artifact written before this field existed.
+	GeneratorVersion string            `json:"generator_version"`
+	Coverage         Coverage          `json:"coverage"`
+	Totals           Totals            `json:"totals"`
+	Providers        []ProviderSummary `json:"providers"`
+	Rhythm           Rhythm            `json:"rhythm"`
+	PromptStyle      PromptStyle       `json:"prompt_style"`
+	Models           []ModelSummary    `json:"models"`
+	Projects         []ProjectSummary  `json:"projects"`
+	Longest          LongestSession    `json:"longest_session"`
+	Privacy          Privacy           `json:"privacy"`
+	Methodology      []string          `json:"methodology"`
+	Warnings         []ReportWarning   `json:"warnings"`
 }
 
 type Coverage struct {
@@ -158,6 +162,7 @@ type Options struct {
 	Location          *time.Location
 	SourceAudit       audit.Comparison
 	SourceObservation string
+	GeneratorVersion  string
 }
 
 // Build derives a report from every provider result.
@@ -170,9 +175,10 @@ func Build(results []model.ProviderResult, options Options) Report {
 		options.Now = time.Now()
 	}
 	report := Report{
-		SchemaVersion: SchemaVersion,
-		GeneratedAt:   options.Now,
-		ProductName:   "skuggsja",
+		SchemaVersion:    SchemaVersion,
+		GeneratedAt:      options.Now,
+		ProductName:      "skuggsja",
+		GeneratorVersion: options.GeneratorVersion,
 		Privacy: Privacy{
 			RawContentPersisted: false, AbsolutePathsPersisted: false,
 			SourceAccess: "read-only", SourceObservation: options.SourceObservation,
@@ -278,10 +284,16 @@ func Build(results []model.ProviderResult, options Options) Report {
 		report.Projects = append(report.Projects, ProjectSummary{Name: name, Sessions: count})
 	}
 	sort.Slice(report.Projects, func(i, j int) bool {
-		if report.Projects[i].Sessions == report.Projects[j].Sessions {
-			return strings.ToLower(report.Projects[i].Name) < strings.ToLower(report.Projects[j].Name)
+		if report.Projects[i].Sessions != report.Projects[j].Sessions {
+			return report.Projects[i].Sessions > report.Projects[j].Sessions
 		}
-		return report.Projects[i].Sessions > report.Projects[j].Sessions
+		left, right := strings.ToLower(report.Projects[i].Name), strings.ToLower(report.Projects[j].Name)
+		if left != right {
+			return left < right
+		}
+		// Case variants compare equal under ToLower, and the rows originate from
+		// a map. Fall back to the exact name so tied ordering is deterministic.
+		return report.Projects[i].Name < report.Projects[j].Name
 	})
 	report.Totals.Projects = len(report.Projects)
 	report.Totals.SourceFilesChanged = options.SourceAudit.ChangedFiles

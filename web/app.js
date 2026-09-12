@@ -1034,6 +1034,7 @@
     const coverage = recordOrEmpty(data.coverage);
     setText("generated-at", formatDateTime(data.generated_at, coverage.timezone));
     setText("schema-version", cleanText(data.schema_version, "Not reported", 40));
+    setText("generator-version", cleanText(data.generator_version, "Not reported", 40));
   }
 
   function renderEmptyState(data) {

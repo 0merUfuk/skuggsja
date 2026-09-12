@@ -3,12 +3,14 @@ package hermes
 
 import (
 	"context"
+	"crypto/sha256"
 	"database/sql"
 	"errors"
+	"fmt"
+	"math"
 	"os"
 	"path/filepath"
 	"sort"
-	"strconv"
 	"time"
 
 	"github.com/0merUfuk/skuggsja/internal/model"
@@ -60,6 +62,8 @@ func (r Reader) Read(ctx context.Context, d provider.Discovery) (result model.Pr
 		Limitations: []string{
 			"All Hermes interfaces share session semantics in state.db; channel and CLI sessions are included together.",
 			"Model events are source-recorded API calls across main and auxiliary tasks, not a cross-harness turn unit.",
+			"Tool calls are Hermes's stored active-transcript counter; compaction, rewind or transcript replacement can lower it, so it is not a cumulative lifetime ledger.",
+			"Prompts count stored user messages: byte-identical compaction copies of one session, timestamp and content count once, and rows that are live at the same time are never merged.",
 		},
 	}
 	if len(d.Files) == 0 {
@@ -170,22 +174,30 @@ func readSessions(ctx context.Context, db *sql.DB) ([]model.Session, map[string]
 	return sessions, fallbacks, rows.Err()
 }
 
+// readPrompts records one metric per stored prompt event. Hermes compaction
+// rewrites the same message into fresh physical rows whose session, timestamp
+// and content are byte-exact copies, so the stored event — not the row id — is
+// the identity. Rows that are live at the same time are never merged: a group
+// holding several active rows is counted once per active row.
 func readPrompts(ctx context.Context, db *sql.DB, sessions map[string]*model.Session) error {
 	rows, err := db.QueryContext(ctx, `
-		SELECT id, session_id, timestamp, content
+		SELECT session_id, timestamp, content,
+		       SUM(CASE WHEN active = 1 THEN 1 ELSE 0 END)
 		FROM messages
 		WHERE role = 'user' AND COALESCE(_compressed_summary, 0) = 0
 		  AND content IS NOT NULL AND content != ''
+		GROUP BY session_id, timestamp, content
+		ORDER BY MIN(id)
 	`)
 	if err != nil {
 		return err
 	}
 	defer rows.Close()
 	for rows.Next() {
-		var messageID int64
 		var sessionID, content string
 		var timestamp float64
-		if err := rows.Scan(&messageID, &sessionID, &timestamp, &content); err != nil {
+		var liveRows int64
+		if err := rows.Scan(&sessionID, &timestamp, &content, &liveRows); err != nil {
 			return err
 		}
 		session := sessions[sessionID]
@@ -193,12 +205,30 @@ func readPrompts(ctx context.Context, db *sql.DB, sessions map[string]*model.Ses
 			continue
 		}
 		words, characters := provider.TextMetric(content)
-		session.Prompts = append(session.Prompts, model.PromptMetric{
-			EventID: strconv.FormatInt(messageID, 10), At: unixSeconds(timestamp),
-			Words: words, Characters: characters, HasText: true,
-		})
+		identity := promptIdentity(sessionID, timestamp, content)
+		count := liveRows
+		if count < 1 {
+			count = 1
+		}
+		for index := int64(0); index < count; index++ {
+			eventID := identity
+			if count > 1 {
+				eventID = fmt.Sprintf("%s#%d", identity, index)
+			}
+			session.Prompts = append(session.Prompts, model.PromptMetric{
+				EventID: eventID, At: unixSeconds(timestamp),
+				Words: words, Characters: characters, HasText: true,
+			})
+		}
 	}
 	return rows.Err()
+}
+
+// promptIdentity is a transient, content-free key for one stored prompt event.
+// The digest keeps the key bounded without putting raw text in the model.
+func promptIdentity(sessionID string, timestamp float64, content string) string {
+	digest := sha256.Sum256([]byte(content))
+	return fmt.Sprintf("%x:%x:%s", math.Float64bits(timestamp), digest[:8], sessionID)
 }
 
 func readModelUsage(ctx context.Context, db *sql.DB, sessions map[string]*model.Session) (int, error) {
