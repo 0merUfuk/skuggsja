@@ -26,7 +26,7 @@ In **Usage**, switch the harness mix between **Sessions** and **Prompts**. Circl
 
 Models remain in separate expandable lists for each harness. The report has no model-level session or prompt attribution, so model bubbles would imply data it does not contain. Model bars use each harness's native events with independent scales. Open **Sources** for coverage, token availability and parser notes before interpreting usage. The Rewind is a generated snapshot; restart the command to include newer history.
 
-The zero-outbound guarantee applies to the installed/built program at runtime: Skuggsja has no telemetry, update check, remote API call, CDN, remote font, or remote browser asset. Use `--no-open` if you also do not want Skuggsja to launch your browser.
+The zero-outbound guarantee applies to the installed/built program at runtime: Skuggsja has no telemetry, update check, remote API call, CDN, remote font, or remote browser asset. The report's typefaces ship inside the binary and are served from the loopback origin with the rest of the UI. Use `--no-open` if you also do not want Skuggsja to launch your browser.
 
 ## Installation and updates
 

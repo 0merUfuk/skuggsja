@@ -92,7 +92,10 @@ def main():
         require(set(files) == {executable, "README.md", "LICENSE"}, "unexpected archive contents")
         for document in ("README.md", "LICENSE"):
             require(files[document] == (repository / document).read_bytes(), f"stale packaged {document}")
-        for asset in ("web/index.html", "web/app.js", "web/styles.css"):
+        bundled = ["web/index.html", "web/app.js", "web/styles.css",
+                   *(f"web/fonts/{path.name}" for path in sorted((repository / "web/fonts").glob("*.woff2"))),
+                   "web/fonts/OFL.txt"]
+        for asset in bundled:
             require((repository / asset).read_bytes() in files[executable], f"stale or missing embedded {asset}")
         verify_executable(files[executable], system, architecture, revision, release=len(sys.argv) == 3)
         if system == native_os and architecture == native_arch:

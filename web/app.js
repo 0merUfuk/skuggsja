@@ -1468,3 +1468,50 @@
     return arrayOrEmpty(value).filter(function (item) { return typeof item === "string"; });
   }
 }());
+
+// BEGIN SKUGGSJA FOLIO RAIL
+(function () {
+  "use strict";
+
+  const nav = document.querySelector(".folio-nav");
+  if (!nav || typeof nav.querySelectorAll !== "function" || typeof IntersectionObserver !== "function") {
+    return;
+  }
+  const rewind = document.getElementById("rewind");
+  if (!rewind || typeof rewind.querySelectorAll !== "function") {
+    return;
+  }
+  const sections = Array.prototype.slice.call(rewind.querySelectorAll("section[id]"));
+  const links = new Map();
+  Array.prototype.forEach.call(nav.querySelectorAll('a[href^="#"]'), function (link) {
+    const id = (link.getAttribute("href") || "").slice(1);
+    if (id) {
+      links.set(id, link);
+    }
+  });
+  if (!sections.length || !links.size) {
+    return;
+  }
+
+  const onScreen = new Set();
+  function sync() {
+    links.forEach(function (link) { link.removeAttribute("aria-current"); });
+    const crossed = sections.filter(function (section) { return onScreen.has(section.id); });
+    const current = links.get(crossed.length ? crossed[crossed.length - 1].id : sections[0].id);
+    if (current) {
+      current.setAttribute("aria-current", "true");
+    }
+  }
+  const observer = new IntersectionObserver(function (entries) {
+    entries.forEach(function (entry) {
+      if (entry.isIntersecting) {
+        onScreen.add(entry.target.id);
+      } else {
+        onScreen.delete(entry.target.id);
+      }
+    });
+    sync();
+  }, { rootMargin: "-40% 0px -55% 0px", threshold: 0 });
+  sections.forEach(function (section) { observer.observe(section); });
+}());
+// END SKUGGSJA FOLIO RAIL

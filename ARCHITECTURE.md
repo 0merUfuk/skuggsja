@@ -59,7 +59,7 @@ The runtime dependency surface is deliberately small:
 - `github.com/klauspost/compress/zstd` streams compressed Codex rollouts with a decoder-memory bound;
 - `golang.org/x/sys/windows` creates and validates private SQLite-copy ACLs on Windows.
 
-The web UI has no package-manager dependencies, remote fonts, remote scripts, or runtime assets outside the binary. Standard-library packages provide JSON parsing, hashing, filesystems, embedded assets, and the loopback HTTP server.
+The web UI has no package-manager dependencies, remote fonts, remote scripts, or runtime assets outside the binary. Its typefaces are the bundled Open Font License subsets in `web/fonts`, embedded with the three UI files and served from the same loopback origin. Standard-library packages provide JSON parsing, hashing, filesystems, embedded assets, and the loopback HTTP server.
 
 `scripts/verify-runtime-offline.sh` builds disposable inputs that exercise all four provider adapters, then runs generation and serving with remote sockets denied by macOS Seatbelt and observed/blocked by a verification-only DYLD guard. Its calibrated Go probe must produce an external-attempt record; Skuggsja must produce none while every embedded route is retrieved over loopback. The helper binaries and interposer are development evidence only and are not part of release archives.
 

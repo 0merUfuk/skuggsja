@@ -4,6 +4,7 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/0merUfuk/skuggsja/internal/analytics"
@@ -13,13 +14,16 @@ func TestHandlerServesEmbeddedAssetsWithStrictHeaders(t *testing.T) {
 	t.Parallel()
 
 	handler := Handler(analytics.Report{SchemaVersion: 1, ProductName: "skuggsja"})
-	for _, path := range []string{"/", "/styles.css", "/app.js", "/api/rewind", "/healthz"} {
+	for _, path := range []string{"/", "/styles.css", "/app.js", "/api/rewind", "/healthz", "/fonts/newsreader-latin-var.woff2", "/fonts/OFL.txt"} {
 		request := httptest.NewRequest(http.MethodGet, path, nil)
 		request.Host = "127.0.0.1:4321"
 		response := httptest.NewRecorder()
 		handler.ServeHTTP(response, request)
 		if response.Code != http.StatusOK {
 			t.Errorf("GET %s returned %d", path, response.Code)
+		}
+		if strings.HasPrefix(path, "/fonts/") && response.Body.Len() == 0 {
+			t.Errorf("GET %s served an empty bundled font asset", path)
 		}
 		csp := response.Header().Get("Content-Security-Policy")
 		if csp != contentSecurityPolicy {

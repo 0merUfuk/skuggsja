@@ -284,7 +284,7 @@ async function main() {
   try {
     const url = await readyURL(server);
     check("installed UI binds an ephemeral IPv4 loopback URL", () => { assert.equal(url.hostname, "127.0.0.1"); assert(Number(url.port) > 0); });
-    for (const [route, type] of [["/healthz", "text/plain"], ["/", "text/html"], ["/styles.css", "text/css"], ["/app.js", "javascript"], ["/api/rewind", "application/json"]]) {
+    for (const [route, type] of [["/healthz", "text/plain"], ["/", "text/html"], ["/styles.css", "text/css"], ["/app.js", "javascript"], ["/api/rewind", "application/json"], ["/fonts/plex-mono-latin-400.woff2", "font/woff2"]]) {
       const response = await request(url, route);
       check(`${route} serves local content with the unchanged CSP`, () => {
         assert.equal(response.status, 200);

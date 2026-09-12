@@ -4,3 +4,8 @@
 (allow default)
 (deny network*)
 (allow network* (local ip))
+; Chrome 132+ creates a per-profile process-singleton unix socket even in
+; headless mode, and headless Chrome aborts when that bind is denied. Permit
+; only that local socket path: unix sockets are machine-local IPC, and every
+; remote socket class remains denied above.
+(allow network-bind network-outbound (local unix-socket (path-regex #".*/T/com\.google\.Chrome\.[^/]*/SingletonSocket")))

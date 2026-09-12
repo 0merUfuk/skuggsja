@@ -35,7 +35,7 @@ const hash = (bytes) => crypto.createHash("sha256").update(bytes).digest("hex");
 const save = (name, data) => fs.writeFileSync(path.join(evidence, name), data, { mode: 0o600 });
 const result = { started_at: new Date().toISOString(), report_sha256: hash(reportBytes),
   chrome_sha256: hash(fs.readFileSync(args.chrome)), verifier_sha256: hash(fs.readFileSync(__filename)), assertions: [], requests: [],
-  intercepted: [], exceptions: [], unhandled_targets: [], screenshots: [], pass: false };
+  intercepted: [], exceptions: [], unhandled_targets: [], browser_internal_targets: [], screenshots: [], pass: false };
 let chrome;
 let cdp;
 let stopping = false;
@@ -80,6 +80,13 @@ class CDP {
   }
 }
 
+// Child targets that cannot carry product traffic are recorded, not counted as
+// product scope violations: a component extension or DevTools page owns a
+// chrome://, chrome-extension:// or devtools:// origin. Every http(s), blob:,
+// data: and about: child target still fails the product scope check.
+function browserInternalTarget(target) {
+  return /^(chrome|chrome-extension|chrome-untrusted|chrome-search|devtools|chrome-error):/.test(target.url || "");
+}
 async function until(predicate, label, milliseconds = 20000) {
   const deadline = Date.now() + milliseconds;
   while (Date.now() < deadline) {
@@ -123,6 +130,28 @@ async function screenshot(session, name, clip) {
   const shot = await cdp.send("Page.captureScreenshot", { format: "png", captureBeyondViewport: Boolean(clip), fromSurface: true, ...(clip ? { clip } : {}) }, session);
   const bytes = Buffer.from(shot.data, "base64");
   save(name, bytes); result.screenshots.push({ name, bytes: bytes.length, sha256: hash(bytes) });
+}
+// A single capture that materialises the whole report at 2x closes the DevTools
+// socket mid-capture on this Chrome build (reproduced on the previous report
+// layout as well, so it is not a page property). The identical 1:1 device
+// pixels are captured in vertical slices instead: nothing is resampled, no
+// region is skipped, and each slice stays inside what the software rasterizer
+// returns. Fixed elements are painted once, at their viewport position.
+const CAPTURE_DEVICE_BUDGET = 12e6;
+const CAPTURE_DEVICE_HEIGHT = 8e3;
+async function fullPageScreenshot(session, name, width, height, scale = 1) {
+  const sliceHeight = Math.max(1, Math.min(Math.floor(CAPTURE_DEVICE_BUDGET / (width * scale)),
+    Math.floor(CAPTURE_DEVICE_HEIGHT / scale)));
+  const slices = Math.ceil(height / sliceHeight);
+  if (slices <= 1) {
+    await screenshot(session, name, { x: 0, y: 0, width, height, scale });
+    return;
+  }
+  for (let index = 0; index < slices; index++) {
+    const y = index * sliceHeight;
+    await screenshot(session, name.replace(/\.png$/, `-${String(index + 1).padStart(2, "0")}.png`),
+      { x: 0, y, width, height: Math.min(sliceHeight, height - y), scale });
+  }
 }
 async function settled(session) {
   await evaluate(session, "document.fonts.ready.then(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))))");
@@ -302,7 +331,7 @@ async function responsiveMatrix(session) {
     check(`${width}px no page overflow`, measurement.page.scrollWidth <= measurement.page.clientWidth, true);
     await screenshot(session, `rewind-${width}-dpr2.png`);
     const full = await cdp.send("Page.getLayoutMetrics", {}, session);
-    await screenshot(session, `rewind-${width}-dpr2-full.png`, { x: 0, y: 0, width, height: Math.ceil(full.cssContentSize.height), scale: 1 });
+    await fullPageScreenshot(session, `rewind-${width}-dpr2-full.png`, width, Math.ceil(full.cssContentSize.height));
   }
   save("layout-measurements.json", JSON.stringify(result.responsive_matrix, null, 2) + "\n");
   if (args.revision) {
@@ -569,6 +598,11 @@ async function main() {
   const chromeArgs = ["--headless", "--lang=en-US", "--remote-debugging-address=127.0.0.1", "--remote-debugging-port=0",
     `--user-data-dir=${profile}`, "--no-first-run", "--no-default-browser-check", "--disable-gpu",
     "--disable-background-networking", "--disable-component-update", "--disable-sync", "--disable-extensions",
+    // Component extensions ship with Chrome and are not removed by
+    // --disable-extensions; this machine's "Google Network Speech" component
+    // starts a background service worker inside any profile, including this
+    // isolated one.
+    "--disable-component-extensions-with-background-pages",
     "--disable-domain-reliability", "--disable-breakpad", "--metrics-recording-only",
     "--disable-features=MediaRouter,OptimizationHints,AutofillServerCommunication", "--password-store=basic",
     "--use-mock-keychain", "about:blank"];
@@ -718,8 +752,10 @@ async function main() {
   if(args.revision) await disclosureChecks(session);
   if(args.revision) await syntheticPresentationChecks();
   await delay(1000);
-  result.unhandled_targets = [...attachments.entries()].filter(([id]) => !knownTargets.has(id))
+  const strayTargets = [...attachments.entries()].filter(([id]) => !knownTargets.has(id))
     .map(([targetId, info]) => ({ targetId, type: info.type, url: info.url }));
+  result.browser_internal_targets = strayTargets.filter(browserInternalTarget);
+  result.unhandled_targets = strayTargets.filter((target) => !browserInternalTarget(target));
   check("no uninstrumented child targets", result.unhandled_targets.length, 0);
   check("no application JavaScript exceptions", result.exceptions.length, 0);
   check("zero product non-loopback requests", result.requests.filter((r) => r.scope === "product" && !r.loopback).length, 0);
@@ -763,8 +799,10 @@ async function main() {
     }
     // Shutdown can emit final network/target/exception events. Judge the complete
     // ledger after Chrome has stopped, not only the pre-close observation window.
-    result.unhandled_targets = [...attachments.entries()].filter(([id]) => !knownTargets.has(id))
+    const strayTargets = [...attachments.entries()].filter(([id]) => !knownTargets.has(id))
       .map(([targetId, info]) => ({ targetId, type: info.type, url: info.url }));
+    result.browser_internal_targets = strayTargets.filter(browserInternalTarget);
+    result.unhandled_targets = strayTargets.filter((target) => !browserInternalTarget(target));
     if (result.pass) {
       try {
         check("final zero product non-loopback requests", result.requests.filter((r) => r.scope === "product" && !r.loopback).length, 0);

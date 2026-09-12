@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <meta name="theme-color" content="#f4f4ef">
+    <meta name="theme-color" content="#f6f4ee">
     <meta name="description" content="A private, local-first rewind of your AI coding-agent history.">
     <title>skuggsja — your AI coding-agent rewind</title>
     <link rel="stylesheet" href="/styles.css">
@@ -14,17 +14,23 @@
     <svg id="svg-namespace-probe" class="visually-hidden" aria-hidden="true" focusable="false"></svg>
 
     <header class="masthead" aria-label="Rewind masthead">
-      <a class="wordmark" href="#top" aria-label="skuggsja, back to top">
-        <span class="wordmark__name">skuggsja</span>
-        <span class="wordmark__meaning">local agent rewind</span>
-      </a>
-      <nav class="folio-nav" aria-label="Rewind sections" hidden>
-        <a href="#usage">Usage</a>
-        <a href="#shape">Activity</a>
-        <a href="#harnesses">Sources</a>
-        <a href="#method">Method</a>
-      </nav>
-      <p class="local-mark">skuggsjá / mirror</p>
+      <div class="masthead__inner">
+        <a class="wordmark" href="#top" aria-label="skuggsja, back to top">
+          <span class="wordmark__name">skuggsja</span>
+          <span class="wordmark__meaning">local agent rewind</span>
+        </a>
+        <nav class="folio-nav" aria-label="Rewind sections" hidden>
+          <a href="#usage"><span class="folio-nav__index" aria-hidden="true">01</span><span class="folio-nav__label">Usage</span></a>
+          <a href="#shape"><span class="folio-nav__index" aria-hidden="true">02</span><span class="folio-nav__label">Activity</span></a>
+          <a href="#rhythm"><span class="folio-nav__index" aria-hidden="true">03</span><span class="folio-nav__label">Rhythm</span></a>
+          <a href="#voice"><span class="folio-nav__index" aria-hidden="true">04</span><span class="folio-nav__label">Prompts</span></a>
+          <a href="#harnesses"><span class="folio-nav__index" aria-hidden="true">05</span><span class="folio-nav__label">Sources</span></a>
+          <a href="#projects"><span class="folio-nav__index" aria-hidden="true">06</span><span class="folio-nav__label">Projects</span></a>
+          <a href="#privacy"><span class="folio-nav__index" aria-hidden="true">07</span><span class="folio-nav__label">Privacy</span></a>
+          <a href="#method"><span class="folio-nav__index" aria-hidden="true">08</span><span class="folio-nav__label">Method</span></a>
+        </nav>
+        <p class="local-mark">skuggsjá / mirror</p>
+      </div>
     </header>
 
     <main id="main-content">
@@ -32,346 +38,358 @@
         <p><strong>Read-only source access.</strong> skuggsja does not write to source paths.</p>
         <p id="source-activity" aria-live="polite" hidden></p>
       </aside>
+
       <section id="loading-state" class="state-page" aria-labelledby="loading-title" aria-live="polite">
-        <p class="eyebrow">Opening the local archive</p>
-        <h1 id="loading-title">Loading your rewind<span class="loading-mark" aria-hidden="true">…</span></h1>
-        <p class="state-page__copy">Reading the derived report from this machine.</p>
-        <div class="skeleton" aria-hidden="true">
-          <div class="skeleton__line skeleton__line--short"></div>
-          <div class="skeleton__number"></div>
-          <div class="skeleton__line"></div>
-          <div class="skeleton__spread">
-            <div></div>
-            <div></div>
-            <div></div>
+        <div class="state-page__inner">
+          <p class="eyebrow">Opening the local archive</p>
+          <h1 id="loading-title">Loading your rewind<span class="loading-mark" aria-hidden="true">…</span></h1>
+          <p class="state-page__copy">Reading the derived report from this machine.</p>
+          <div class="skeleton" aria-hidden="true">
+            <div class="skeleton__line skeleton__line--short"></div>
+            <div class="skeleton__number"></div>
+            <div class="skeleton__line"></div>
+            <div class="skeleton__spread">
+              <div></div>
+              <div></div>
+              <div></div>
+            </div>
           </div>
         </div>
       </section>
 
       <section id="error-state" class="state-page state-page--error" aria-labelledby="error-title" aria-live="assertive" hidden>
-        <p class="eyebrow">Local report unavailable</p>
-        <h1 id="error-title">The report could not be loaded.</h1>
-        <p id="error-message" class="state-page__copy">The local report endpoint did not answer.</p>
-        <div class="state-actions">
-          <button id="retry-button" class="press-button" type="button">Try the local report again</button>
-          <p>Keep this page open, return to the terminal, and rerun <code>skuggsja</code> if the server stopped.</p>
+        <div class="state-page__inner">
+          <p class="eyebrow">Local report unavailable</p>
+          <h1 id="error-title">The report could not be loaded.</h1>
+          <p id="error-message" class="state-page__copy">The local report endpoint did not answer.</p>
+          <div class="state-actions">
+            <button id="retry-button" class="press-button" type="button">Try the local report again</button>
+            <p>Keep this page open, return to the terminal, and rerun <code>skuggsja</code> if the server stopped.</p>
+          </div>
         </div>
       </section>
 
       <section id="empty-state" class="state-page state-page--empty" aria-labelledby="empty-title" hidden>
-        <p class="eyebrow">Field note · no sessions in view</p>
-        <h1 id="empty-title">No sessions recovered.</h1>
-        <p id="empty-copy" class="state-page__copy">No supported sessions landed inside this recorded span.</p>
-        <div class="state-actions">
-          <button id="empty-retry-button" class="press-button" type="button">Check the report again</button>
-          <p>Review discovery warnings below, check that your agent histories still exist, then rerun the command.</p>
+        <div class="state-page__inner">
+          <p class="eyebrow">Field note · no sessions in view</p>
+          <h1 id="empty-title">No sessions recovered.</h1>
+          <p id="empty-copy" class="state-page__copy">No supported sessions landed inside this recorded span.</p>
+          <div class="state-actions">
+            <button id="empty-retry-button" class="press-button" type="button">Check the report again</button>
+            <p>Review discovery warnings below, check that your agent histories still exist, then rerun the command.</p>
+          </div>
+          <div id="empty-provider-summary" class="empty-provider-summary" aria-label="Provider discovery summary"></div>
+          <div id="empty-warnings" class="empty-warnings"></div>
         </div>
-        <div id="empty-provider-summary" class="empty-provider-summary" aria-label="Provider discovery summary"></div>
-        <div id="empty-warnings" class="empty-warnings"></div>
       </section>
 
       <div id="rewind" hidden>
         <section class="hero" aria-labelledby="hero-title">
-          <div class="hero__copy">
-            <p id="hero-edition" class="eyebrow">Personal archive</p>
-            <h1 id="hero-title">Your working record.</h1>
-            <p id="hero-narrative" class="hero__narrative"></p>
-            <p id="coverage-stamp" class="coverage-stamp"></p>
+          <div class="hero__inner">
+            <div class="hero__rule">
+              <p id="hero-edition" class="eyebrow">Personal archive</p>
+              <p class="hero__imprint">local artifact · no network</p>
+            </div>
+            <div class="hero__grid">
+              <div class="hero__copy">
+                <h1 id="hero-title">Your working record.</h1>
+                <p id="hero-narrative" class="hero__narrative"></p>
+                <p id="coverage-stamp" class="coverage-stamp"></p>
+              </div>
+              <figure class="hero-total" aria-labelledby="hero-session-count hero-session-label">
+                <figcaption class="hero-total__overline">Locally recovered sessions</figcaption>
+                <strong id="hero-session-count" class="hero-total__number">0</strong>
+                <p id="hero-session-label" class="hero-total__label">top-level sessions · children counted separately</p>
+              </figure>
+            </div>
+            <dl class="proof-strip" aria-label="Archive proof points">
+              <div>
+                <dt>Prompts recovered</dt>
+                <dd id="proof-prompts">—</dd>
+              </div>
+              <div>
+                <dt>Projects represented</dt>
+                <dd id="proof-projects">—</dd>
+              </div>
+              <div>
+                <dt>Active days</dt>
+                <dd id="proof-days">—</dd>
+              </div>
+              <div>
+                <dt>Source access</dt>
+                <dd id="proof-audit">—</dd>
+              </div>
+            </dl>
           </div>
-          <figure class="hero-total" aria-labelledby="hero-session-count hero-session-label">
-            <figcaption class="hero-total__overline">Locally recovered sessions</figcaption>
-            <strong id="hero-session-count" class="hero-total__number">0</strong>
-            <p id="hero-session-label" class="hero-total__label">top-level sessions · children counted separately</p>
-          </figure>
-          <dl class="proof-strip" aria-label="Archive proof points">
-            <div>
-              <dt>Prompts recovered</dt>
-              <dd id="proof-prompts">—</dd>
-            </div>
-            <div>
-              <dt>Projects represented</dt>
-              <dd id="proof-projects">—</dd>
-            </div>
-            <div>
-              <dt>Active days</dt>
-              <dd id="proof-days">—</dd>
-            </div>
-            <div>
-              <dt>Source access</dt>
-              <dd id="proof-audit">—</dd>
-            </div>
-          </dl>
         </section>
 
         <aside id="coverage-notice" class="coverage-notice" aria-labelledby="coverage-notice-title" hidden>
-
-          <div>
+          <div class="coverage-notice__inner">
             <h2 id="coverage-notice-title">Local history is not lifetime usage.</h2>
             <p id="coverage-notice-copy"></p>
           </div>
         </aside>
 
         <aside id="sparse-note" class="field-note" aria-labelledby="sparse-title" hidden>
-
-          <div>
+          <div class="field-note__inner">
             <h2 id="sparse-title">Read this as a field note.</h2>
             <p id="sparse-copy"></p>
           </div>
         </aside>
 
         <section id="usage" class="chapter chapter--usage" aria-labelledby="usage-title">
-          <header class="chapter-heading">
-            <div>
+          <div class="chapter__inner">
+            <header class="chapter-heading">
+              <p class="chapter-index" aria-hidden="true">01</p>
               <p class="eyebrow">Usage</p>
               <h2 id="usage-title">The tools behind the record</h2>
-            </div>
-          </header>
-          <div class="usage-layout">
-            <div class="harness-usage" aria-labelledby="harness-usage-title">
-              <h3 id="harness-usage-title">Harness mix</h3>
-              <p class="usage-context">Recovered local usage. Coverage differs by harness.</p>
-              <div id="usage-chart"></div>
-            </div>
-            <div class="model-index" aria-labelledby="model-index-title">
-              <div class="index-heading">
-                <h3 id="model-index-title">Models within each harness</h3>
-                <p>Model-level sessions and prompts are not available in this report. These bars show native events, compared only within each harness.</p>
+            </header>
+            <div class="usage-layout">
+              <div class="harness-usage" aria-labelledby="harness-usage-title">
+                <h3 id="harness-usage-title">Harness mix</h3>
+                <p class="usage-context">Recovered local usage. Coverage differs by harness.</p>
+                <div id="usage-chart"></div>
               </div>
-              <div id="model-list"></div>
+              <div class="model-index" aria-labelledby="model-index-title">
+                <div class="index-heading">
+                  <h3 id="model-index-title">Models within each harness</h3>
+                  <p>Model-level sessions and prompts are not available in this report. These bars show native events, compared only within each harness.</p>
+                </div>
+                <div id="model-list"></div>
+              </div>
             </div>
           </div>
         </section>
 
         <section id="shape" class="chapter chapter--shape" aria-labelledby="shape-title">
-          <header class="chapter-heading">
-            <div>
+          <div class="chapter__inner">
+            <header class="chapter-heading">
+              <p class="chapter-index" aria-hidden="true">02</p>
               <p class="eyebrow">Activity</p>
               <h2 id="shape-title">Days at the keyboard</h2>
-            </div>
-          </header>
-
-          <div class="activity-layout">
-            <div class="activity-plate">
-              <div class="plate-heading">
+            </header>
+            <div class="activity-layout">
+              <div class="activity-plate">
+                <div class="plate-heading">
+                  <div>
+                    <p class="plate-label">Session activity</p>
+                    <p id="activity-caption" class="plate-caption">Calendar view</p>
+                  </div>
+                  <div class="heat-legend" aria-label="Activity intensity legend">
+                    <span>Quiet</span>
+                    <i class="heat-key heat-key--0" aria-hidden="true"></i>
+                    <i class="heat-key heat-key--1" aria-hidden="true"></i>
+                    <i class="heat-key heat-key--2" aria-hidden="true"></i>
+                    <i class="heat-key heat-key--3" aria-hidden="true"></i>
+                    <i class="heat-key heat-key--4" aria-hidden="true"></i>
+                    <span>Busy</span>
+                  </div>
+                </div>
+                <div class="heatmap-scroll" tabindex="0" aria-label="Scrollable activity calendar">
+                  <div id="activity-heatmap"></div>
+                </div>
+              </div>
+              <dl class="folio-facts" aria-label="Activity highlights">
+                <div class="folio-fact folio-fact--vermilion">
+                  <dt>Busiest day</dt>
+                  <dd id="busiest-day-date" class="folio-fact__primary">—</dd>
+                  <dd id="busiest-day-count" class="folio-fact__secondary">No recorded sessions</dd>
+                </div>
                 <div>
-                  <p class="plate-label">Session activity</p>
-                  <p id="activity-caption" class="plate-caption">Calendar view</p>
+                  <dt>Busiest month</dt>
+                  <dd id="busiest-month-label" class="folio-fact__primary">—</dd>
+                  <dd id="busiest-month-count" class="folio-fact__secondary">No recorded sessions</dd>
                 </div>
-                <div class="heat-legend" aria-label="Activity intensity legend">
-                  <span>Quiet</span>
-                  <i class="heat-key heat-key--0" aria-hidden="true"></i>
-                  <i class="heat-key heat-key--1" aria-hidden="true"></i>
-                  <i class="heat-key heat-key--2" aria-hidden="true"></i>
-                  <i class="heat-key heat-key--3" aria-hidden="true"></i>
-                  <i class="heat-key heat-key--4" aria-hidden="true"></i>
-                  <span>Busy</span>
+                <div>
+                  <dt>Source files discovered</dt>
+                  <dd id="source-file-count" class="folio-fact__primary">—</dd>
+                  <dd class="folio-fact__secondary">read-only inputs discovered</dd>
                 </div>
-              </div>
-              <div class="heatmap-scroll" tabindex="0" aria-label="Scrollable activity calendar">
-                <div id="activity-heatmap"></div>
-              </div>
+              </dl>
             </div>
-
-            <dl class="folio-facts" aria-label="Activity highlights">
-              <div class="folio-fact folio-fact--vermilion">
-                <dt>Busiest day</dt>
-                <dd id="busiest-day-date" class="folio-fact__primary">—</dd>
-                <dd id="busiest-day-count" class="folio-fact__secondary">No recorded sessions</dd>
-              </div>
-              <div>
-                <dt>Busiest month</dt>
-                <dd id="busiest-month-label" class="folio-fact__primary">—</dd>
-                <dd id="busiest-month-count" class="folio-fact__secondary">No recorded sessions</dd>
-              </div>
-              <div>
-                <dt>Source files discovered</dt>
-                <dd id="source-file-count" class="folio-fact__primary">—</dd>
-                <dd class="folio-fact__secondary">read-only inputs discovered</dd>
-              </div>
-            </dl>
           </div>
         </section>
 
         <section id="rhythm" class="chapter chapter--rhythm" aria-labelledby="rhythm-title">
-          <header class="chapter-heading chapter-heading--offset">
-            <div>
+          <div class="chapter__inner">
+            <header class="chapter-heading chapter-heading--offset">
+              <p class="chapter-index" aria-hidden="true">03</p>
               <p class="eyebrow">Rhythm</p>
-              <h2 id="rhythm-title">Hours & habits</h2>
-            </div>
-          </header>
-
-          <div class="rhythm-layout">
-            <figure class="clock-plate" aria-labelledby="clock-caption">
-              <div id="rhythm-clock" class="rhythm-clock"></div>
-              <figcaption id="clock-caption">
-                <span>Favorite hour</span>
-                <strong id="favorite-hour">—</strong>
-                <small>local time</small>
-              </figcaption>
-            </figure>
-
-            <div class="weekday-plate">
-              <p class="plate-label">Weekday cadence</p>
-              <ol id="weekday-list" class="weekday-list"></ol>
-            </div>
-
-            <dl class="rhythm-notes" aria-label="Rhythm highlights">
-              <div>
-                <dt>Longest streak</dt>
-                <dd><strong id="longest-streak">—</strong> <span>days</span></dd>
+              <h2 id="rhythm-title">Hours &amp; habits</h2>
+            </header>
+            <div class="rhythm-layout">
+              <figure class="clock-plate" aria-labelledby="clock-caption">
+                <div id="rhythm-clock" class="rhythm-clock"></div>
+                <figcaption id="clock-caption">
+                  <span>Favorite hour</span>
+                  <strong id="favorite-hour">—</strong>
+                  <small>local time</small>
+                </figcaption>
+              </figure>
+              <div class="weekday-plate">
+                <p class="plate-label">Weekday cadence</p>
+                <ol id="weekday-list" class="weekday-list"></ol>
               </div>
-              <div>
-                <dt>Late-night share</dt>
-                <dd><strong id="late-night-percent">—</strong> <span>of sessions</span></dd>
-              </div>
-            </dl>
+              <dl class="rhythm-notes" aria-label="Rhythm highlights">
+                <div>
+                  <dt>Longest streak</dt>
+                  <dd><strong id="longest-streak">—</strong> <span>days</span></dd>
+                </div>
+                <div>
+                  <dt>Late-night share</dt>
+                  <dd><strong id="late-night-percent">—</strong> <span>of sessions</span></dd>
+                </div>
+              </dl>
+            </div>
           </div>
         </section>
 
         <section id="voice" class="chapter chapter--voice" aria-labelledby="voice-title">
-          <header class="chapter-heading">
-            <div>
+          <div class="chapter__inner">
+            <header class="chapter-heading">
+              <p class="chapter-index" aria-hidden="true">04</p>
               <p class="eyebrow">Prompt style</p>
               <h2 id="voice-title">The shape of a prompt</h2>
+            </header>
+            <div id="prompt-unavailable" class="unavailable-note" hidden>
+              <p class="unavailable-note__mark">Not measured</p>
+              <p>The available histories do not include measurable prompt-length statistics.</p>
             </div>
-          </header>
-
-          <div id="prompt-unavailable" class="unavailable-note" hidden>
-            <p class="unavailable-note__mark">Not measured</p>
-            <p>The available histories do not include measurable prompt-length statistics.</p>
-          </div>
-          <div id="prompt-available" class="prompt-layout">
-            <div class="prompt-lead">
-              <p class="plate-label">Median prompt</p>
-              <p><strong id="median-words">—</strong><span>words</span></p>
-              <small id="prompt-label">Measured locally from prompt text, then discarded</small>
+            <div id="prompt-available" class="prompt-layout">
+              <div class="prompt-lead">
+                <p class="plate-label">Median prompt</p>
+                <p><strong id="median-words">—</strong><span>words</span></p>
+                <small id="prompt-label">Measured locally from prompt text, then discarded</small>
+              </div>
+              <dl class="prompt-facts" aria-label="Prompt style statistics">
+                <div>
+                  <dt>Average words</dt>
+                  <dd id="average-words">—</dd>
+                </div>
+                <div>
+                  <dt>Average characters</dt>
+                  <dd id="average-characters">—</dd>
+                </div>
+                <div>
+                  <dt>Prompts measured</dt>
+                  <dd id="prompts-measured">—</dd>
+                </div>
+              </dl>
             </div>
-            <dl class="prompt-facts" aria-label="Prompt style statistics">
-              <div>
-                <dt>Average words</dt>
-                <dd id="average-words">—</dd>
-              </div>
-              <div>
-                <dt>Average characters</dt>
-                <dd id="average-characters">—</dd>
-              </div>
-              <div>
-                <dt>Prompts measured</dt>
-                <dd id="prompts-measured">—</dd>
-              </div>
-            </dl>
           </div>
-
-
         </section>
 
         <section id="harnesses" class="chapter chapter--providers" aria-labelledby="harnesses-title">
-          <header class="chapter-heading chapter-heading--offset">
-            <div>
+          <div class="chapter__inner">
+            <header class="chapter-heading chapter-heading--offset">
+              <p class="chapter-index" aria-hidden="true">05</p>
               <p class="eyebrow">Source ledger</p>
               <h2 id="harnesses-title">What each harness recorded</h2>
               <p class="chapter-deck">Open a source for coverage, recorded metrics and parser notes. Tool-call units differ by harness; counts stay separate without a combined total or ranking.</p>
+            </header>
+            <div class="ledger-labels" aria-hidden="true">
+              <span>Harness</span>
+              <span>Recovered sessions</span>
+              <span>Verification</span>
             </div>
-          </header>
-          <div class="ledger-labels" aria-hidden="true">
-            <span>Harness</span>
-            <span>Recovered sessions</span>
-            <span>Verification</span>
+            <div id="provider-list" class="provider-list"></div>
           </div>
-          <div id="provider-list" class="provider-list"></div>
         </section>
 
         <section id="projects" class="chapter chapter--projects" aria-labelledby="projects-title">
-          <header class="chapter-heading">
-            <div>
+          <div class="chapter__inner">
+            <header class="chapter-heading">
+              <p class="chapter-index" aria-hidden="true">06</p>
               <p class="eyebrow">Projects</p>
               <h2 id="projects-title">Where the sessions gathered</h2>
+            </header>
+            <div class="projects-layout">
+              <div id="project-list"></div>
+              <aside class="long-session" aria-labelledby="long-session-title">
+                <p class="plate-label">Longest session</p>
+                <h3 id="long-session-title"><span id="longest-session-duration">—</span><small>minutes</small></h3>
+                <p id="longest-session-harness">Harness unavailable</p>
+              </aside>
             </div>
-          </header>
-
-          <div class="projects-layout">
-            <div id="project-list"></div>
-            <aside class="long-session" aria-labelledby="long-session-title">
-              <p class="plate-label">Longest session</p>
-              <h3 id="long-session-title"><span id="longest-session-duration">—</span><small>minutes</small></h3>
-              <p id="longest-session-harness">Harness unavailable</p>
-            </aside>
           </div>
         </section>
 
-        <section id="privacy" class="chapter chapter--privacy" aria-labelledby="privacy-title">
-          <header class="chapter-heading chapter-heading--inverse">
-            <div>
+        <section id="privacy" class="chapter chapter--privacy chapter--inverse" aria-labelledby="privacy-title">
+          <div class="chapter__inner">
+            <header class="chapter-heading chapter-heading--inverse">
+              <p class="chapter-index" aria-hidden="true">07</p>
               <p class="eyebrow">Privacy</p>
               <h2 id="privacy-title">The report boundary</h2>
-            </div>
-          </header>
-
-          <div class="privacy-layout">
-            <dl class="privacy-claims" aria-label="Privacy report">
-              <div>
-                <dt>Raw content persisted</dt>
-                <dd id="privacy-raw">—</dd>
+            </header>
+            <div class="privacy-layout">
+              <dl class="privacy-claims" aria-label="Privacy report">
+                <div>
+                  <dt>Raw content persisted</dt>
+                  <dd id="privacy-raw">—</dd>
+                </div>
+                <div>
+                  <dt>Absolute paths persisted</dt>
+                  <dd id="privacy-paths">—</dd>
+                </div>
+                <div>
+                  <dt>Source access</dt>
+                  <dd id="privacy-source-access">Read-only</dd>
+                </div>
+                <div>
+                  <dt>Files observed</dt>
+                  <dd id="privacy-audit-files">—</dd>
+                </div>
+              </dl>
+              <div class="audit-stamp" aria-labelledby="audit-title">
+                <p id="audit-title" class="plate-label">Concurrent source activity</p>
+                <strong id="audit-verdict">Not observed</strong>
+                <p id="privacy-source-activity" class="audit-stamp__detail"></p>
               </div>
-              <div>
-                <dt>Absolute paths persisted</dt>
-                <dd id="privacy-paths">—</dd>
-              </div>
-              <div>
-                <dt>Source access</dt>
-                <dd id="privacy-source-access">Read-only</dd>
-              </div>
-              <div>
-                <dt>Files observed</dt>
-                <dd id="privacy-audit-files">—</dd>
-              </div>
-            </dl>
-            <div class="audit-stamp" aria-labelledby="audit-title">
-              <p id="audit-title">Concurrent source activity</p>
-              <strong id="audit-verdict">Not observed</strong>
-              <p id="privacy-source-activity" class="audit-stamp__detail"></p>
             </div>
           </div>
         </section>
 
         <section id="method" class="chapter chapter--method" aria-labelledby="method-title">
-          <header class="chapter-heading">
-            <div>
+          <div class="chapter__inner">
+            <header class="chapter-heading">
+              <p class="chapter-index" aria-hidden="true">08</p>
               <p class="eyebrow">Method</p>
-              <h2 id="method-title">Definitions & caveats</h2>
+              <h2 id="method-title">Definitions &amp; caveats</h2>
               <p class="chapter-deck">Counts reflect surviving local records and the fields each harness exposes.</p>
+            </header>
+            <div class="method-layout">
+              <details class="method-notes" open>
+                <summary>How this rewind was derived</summary>
+                <ol id="methodology-list"></ol>
+              </details>
+              <details class="warning-notes">
+                <summary><span>Discovery and parsing warnings</span><span id="warning-count" class="summary-count">0</span></summary>
+                <div id="warning-list"></div>
+              </details>
             </div>
-          </header>
-
-          <div class="method-layout">
-            <details class="method-notes" open>
-              <summary>How this rewind was derived</summary>
-              <ol id="methodology-list"></ol>
-            </details>
-            <details class="warning-notes">
-              <summary><span>Discovery and parsing warnings</span><span id="warning-count" class="summary-count">0</span></summary>
-              <div id="warning-list"></div>
-            </details>
           </div>
         </section>
       </div>
     </main>
 
     <aside id="page-footer" class="page-footer" aria-label="Report metadata" hidden>
-      <dl>
-        <div>
-          <dt>Generated</dt>
-          <dd id="generated-at">—</dd>
-        </div>
-        <div>
-          <dt>Schema</dt>
-          <dd id="schema-version">—</dd>
-        </div>
-        <div>
-          <dt>Generator</dt>
-          <dd id="generator-version">—</dd>
-        </div>
-      </dl>
+      <div class="page-footer__inner">
+        <dl>
+          <div>
+            <dt>Generated</dt>
+            <dd id="generated-at">—</dd>
+          </div>
+          <div>
+            <dt>Schema</dt>
+            <dd id="schema-version">—</dd>
+          </div>
+          <div>
+            <dt>Generator</dt>
+            <dd id="generator-version">—</dd>
+          </div>
+        </dl>
+        <p class="colophon">skuggsjá · mirror — a local-only artifact rendered by the embedded binary.</p>
+      </div>
     </aside>
 
     <noscript>
