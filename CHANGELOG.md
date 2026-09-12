@@ -4,11 +4,21 @@ All notable changes to this project will be documented in this file.
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and releases use [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.2.0] - 2026-09-13
+
+### Changed
+
+- Rebuilt the Rewind interface around a printed-instrument art direction: full-bleed bands with one inset content column, chapter folios with numerals and a margin rail, hairline data tables in place of cards, a single sealed inverse band for the report boundary, and one signal colour over bone paper and blue-black ink. Layout, type scale, spacing, chart marks and disclosure affordances changed; the aggregate, the read-only language, every state and every control behave as before.
+- The report renders with bundled Open Font License webfonts (Newsreader, IBM Plex Sans, IBM Plex Mono; latin and latin-ext subsets) that are embedded in the binary, served from loopback only, and shipped with their licence text. Unsupported glyphs fall back to the system stack, and no font is ever fetched from a network origin.
 
 ### Fixed
 
 - Release verification resolves the unpublished draft from the release list instead of the tag endpoint, which GitHub answers with 404 for drafts. Post-publication package verification accepts the stable tag when the built `metadata.json` is not a published asset.
+- The hero session figure no longer clips its own content box, so its full value is visible at every captured width.
+- Weekday meter rows keep both the day label and the value wide enough for their content, so a heavy weekday can no longer widen the mobile layout or overlap the meter.
+- Disclosure summaries in Method keep the expand marker beside its label and the warning count at the trailing edge instead of stranding the marker against an empty column.
+- Browser verification captures full-page DPR-2 evidence in vertical tiles. A single 2x capture that exceeds Chromium's raster budget closed the DevTools socket mid-run, which made the last full-page width the verifier reached look like a product failure.
+- Browser verification records browser-internal child targets (for example a Chrome component extension's background service worker) separately from product scope, and launches with `--disable-component-extensions-with-background-pages` so an unrelated component cannot fail an otherwise clean run.
 
 ## [0.1.2] - 2026-09-12
 
