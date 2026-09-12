@@ -362,3 +362,50 @@ rewind or clear can lower. It is now disclosed as a provider limitation rather
 than presented only as a native count. The historical +47 prompt / −539
 tool-call attribution remains unattributed; the old database and WAL states
 needed to reconstruct it do not exist.
+
+## v0.1.2 release and Homebrew synchronization — 2026-09-12
+
+The v0.1.2 tag points at the reviewed `main` commit `ef4dfe7` (annotated tag
+object `badfb041`). Release run
+[34699613650](https://github.com/0merUfuk/skuggsja/actions/runs/34699613650)
+passed the full verification matrix, built the six platform archives, verified
+them, attested all eight assets and created the draft release.
+
+The workflow's draft byte-verification step then aborted because
+`GET /releases/tags/{tag}` answers 404 for an unpublished draft even with
+`contents: write`. The draft was completed with equivalent verification:
+
+- 8/8 assets downloaded by release id; every SHA-256 matched GitHub's uploaded
+  asset digest and the published `checksums.txt` covered 6/6 archives.
+- The formula pinned every macOS/Linux archive checksum and was byte-identical
+  to fresh generator output (`e8065419…`).
+- `gh attestation verify` passed for all eight assets with the release
+  workflow signer, `refs/tags/v0.1.2` and self-hosted runners denied.
+- `verify-packages.py dist v0.1.2` from a clean worktree at the tag passed 6/6
+  archive, embedded-asset and Go provenance checks plus 29/29 native
+  installed-package checks.
+
+The release was then published with `gh release edit v0.1.2 --draft=false
+--verify-tag`; the API reports `draft: false`, `immutable: true`, eight assets
+and the latest release. Pull request
+[#4](https://github.com/0merUfuk/skuggsja/pull/4) (merged `263bf20`) fixes the
+pipeline defect by resolving drafts from the release list and lets the package
+verifier derive the version from the stable tag when the unpublished
+`metadata.json` is absent; its regression suite passes 21/21.
+
+Homebrew synchronization: the importer was dispatched and opened
+[candidate PR #3](https://github.com/0merUfuk/homebrew-skuggsja/pull/3). Its
+five required checks passed on the exact head, the candidate formula was
+byte-identical to the attested release formula, and it was approved and merged
+as `d8e2271`. The tap's post-merge CI passed, and the public formula now serves
+0.1.2. The former Matrix tap still maps `{"skuggsja":"0merUfuk/skuggsja"}` and
+contains no Skuggsja formula.
+
+On the owner's machine `brew update` and `brew upgrade` moved the installation
+from 0.1.1 to 0.1.2, `brew test` passed, and the installed binary's SHA-256
+(`bc9f4c26…`) equals the binary inside the released darwin_arm64 archive. A
+regenerated report records `generator_version: 0.1.2`, schema 3, and Hermes
+prompts of 1,387 — exactly the distinct stored prompt events counted directly
+in the live database (1,676 physical rows) — with 77 root sessions, 157
+children, and the stored active-transcript tool counter unchanged in
+semantics.
