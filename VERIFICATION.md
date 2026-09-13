@@ -570,3 +570,65 @@ changes presentation, embedded assets and verification tooling only; per
 [RELEASING.md](RELEASING.md) that leaves the scope of the existing source-access
 and release-equality records intact, and the browser record remains a
 presentation record rather than a data-equality record.
+
+## Divider audit for v0.2.1 — 2026-09-13
+
+The v0.2.0 interface was sound but read as a grid of lines: separators, rather
+than composition, were carrying every section boundary. The review looked for
+that specific failure mode instead of restyling the page, and each claim below
+was re-checked on a rendered page before a rule was touched. The change is
+presentation only — one file, `web/styles.css`, with no markup, script,
+aggregate or control behaviour changed.
+
+### Findings, classified before any change
+
+| Claim | Verdict | Evidence |
+| --- | --- | --- |
+| Boundaries are carried by rules to the point of visual noise | Confirmed | The stylesheet declared 72 border declarations, 63 of them side/block/inline, and used a `--rule*` token 56 times; full-page captures at 1440 showed a hairline at nearly every band edge, table row and panel boundary |
+| The inverse report-boundary band and the per-section colour treatments are themselves the problem | Not reproduced | The dark boundary band and the series colours are the page's only strong tone; the noise came from separators between sections, not from the treatments |
+| Every remaining hairline is decorative | Not reproduced | The folio-nav underline, meter tracks, series ticks, margin markers and the forced-colours outline carry meaning; each was kept deliberately |
+| Tone, air and elevation can replace the removed rules without loss of grouping | Confirmed | Captures at 1440, 1280, 390 and 320 keep every section legible through background tone, spacing and one low shadow |
+
+### What changed
+
+The masthead and the standing source-status line became one tinted chrome band;
+the chapter bands dropped their top rule and separate on padding alone; the
+usage and model panels, the coverage notice, the rhythm, prompt, projects and
+method notes and the colophon became grouped `--panel` surfaces with one low
+elevation shadow. Rules inside the ranked lists, the token ledger, the folio
+facts, the weekday plate and the prompt facts were replaced by grid gaps, panel
+tone and a row hover tint. The two functional left markers (the margin note and
+the usage detail line) and the series ticks stayed. Side borders fell from 63 to
+8, `--rule*` uses from 56 to 11, and the remaining side borders are the folio-nav
+underline, the mobile reset for it, two margin markers, two series ticks and the
+forced-colours outline. Print media sets the new tones to white and removes every
+shadow, so a printed report does not gain grey blocks.
+
+### Local gates on the exact head
+
+| Gate | Result |
+| --- | --- |
+| `go build ./...`, `go test ./...`, `go vet ./...`, `gofmt -l .` | All 12 packages pass; no vet or format findings |
+| `node --test web/source_activity_test.cjs web/usage_chart_test.cjs scripts/generate_homebrew_test.cjs` | **36/36** pass |
+| `python3 scripts/release_workflow_test.py` | **21/21** pass |
+| `python3 scripts/verify_packages_test.py` | **9/9** pass |
+| `node scripts/verify-install.cjs <fresh build> dev` | **30/30** checks |
+| `./scripts/verify-runtime-offline.sh` | Generation and loopback viewing with zero observed external connect attempts |
+| `node scripts/verify-browser.cjs --revision true` | **1,625/1,625** assertions, 61 screenshots, pass |
+
+The browser record again served the production handler from the retained
+aggregate, so it covers the embedded stylesheet rather than a static preview.
+
+### Regression found by the gate and corrected
+
+The first revision failed the browser record at 320 px: `320px prompts circle
+labels are at least 12 CSS px` returned false. The cause was the change itself.
+The new panel inset narrowed the chart box, and the chart scales its value
+labels with that box, so the shortest harness label measured **11.909 CSS px**
+against the documented 12 px floor. The same inset squeezed a ranked row's name
+column to **28.4 px**, which broke `claude-sonnet-5` mid-token. Below 30 rem the
+panel inset now tightens to `--space-4`/`--space-3` and a rank row stacks its
+value and meter under the name; re-measured on the same page, the shortest label
+is **13.1 CSS px** and the name column is **204 px**. The full browser record
+then passed. The 12 px floor is a property the v0.2.0 record already established,
+so the correction preserved the floor rather than relaxing the check.

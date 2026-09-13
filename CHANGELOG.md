@@ -4,6 +4,16 @@ All notable changes to this project will be documented in this file.
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and releases use [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.1] - 2026-09-13
+
+### Changed
+
+- Separators in the Rewind interface are now carried by tone, air and elevation instead of rules. The masthead and source-status band, the chapter bands, the usage and model panels, the coverage notices, the rhythm, prompt, projects and method sections and the colophon group their content with a background tone, one low shadow and wider spacing; the stylesheet's side-border declarations drop from 63 to 8 and its `--rule` token uses from 56 to 11. The hairlines that remain are deliberate marks — series ticks, margin markers, meter tracks, the folio-nav underline and the forced-colours legibility outline — and the section colour treatments, the sealed inverse report boundary, the type scale and every control and state are unchanged.
+
+### Fixed
+
+- The new grouped panels inset the narrowest layout, which pushed the shortest harness circle label to 11.9 CSS px against the documented 12 px floor at a 320 px viewport and squeezed model and project identifiers into mid-token breaks. Below 30 rem the panel inset tightens and a rank row stacks its value and meter under the name so identifiers stay whole.
+
 ## [0.2.0] - 2026-09-13
 
 ### Changed
