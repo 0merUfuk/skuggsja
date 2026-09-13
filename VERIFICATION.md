@@ -684,3 +684,105 @@ on the reviewed head, so the merge used the documented administrator bypass reco
 PR #5 and PR #7, and CI was then confirmed green on the merge commit itself before the tag was
 created. The tap change went through its gated path end to end: bot-authored candidate, owner
 approval of the workflow runs, five required checks, review, and a squash merge with no bypass.
+
+## Design-asset implementation for v0.3.0 — 2026-09-14
+
+The owner supplied a design archive at `~/Downloads/skuggsja_design_assets` that separates two
+surfaces in its own README: `Local Website UI/` (ten browser mockups of the report served at
+`127.0.0.1:4321`) and `Public Official Website/` (five mockups of a project landing page). Only
+the local-report mockups describe this repository's code. The public-site mockups describe a
+surface that does not exist here and were not implemented; treating them as in scope would have
+invented a second product.
+
+Each panel the mockups show was matched against fields the retained aggregate actually carries
+before any markup was written. The archive's `00_full_local_dashboard_overview` was used as the
+composition reference and `01`–`08` for their sections.
+
+### Findings, classified before any change
+
+| Claim | Verdict | Evidence |
+| --- | --- | --- |
+| The projects-by-tool rows sit inside their own column header | Confirmed | Measured at 1440: the `Tool` header starts at x=938 while `Claude Code` started at x=978. `.tool-list` had inherited the browser's `40px` `ol` padding-inline-start and `list-style: decimal` |
+| The `Projects` header does not line up with its values | Confirmed | Measured at 1440: the header column ended at x=1317 while its values ended at x=1280, x=1294 and x=1302. Header and rows each sized their own `auto` tracks, so the wider `Sessions` value in every row shifted the middle column |
+| A hero proof figure overflows its cell | Confirmed by the browser gate | `scripts/verify-browser.cjs` failed at 1280 px with `dd#proof-prompts` reporting `scrollWidth 147` against `width 136`. The figures were sized from `--text-figure`, which resolves against the viewport, not the cell |
+| `READ-ONLY` breaks across its hyphen | Confirmed | Rendered over two lines from 1152 px to 1920 px: the clamped stamp needed about `5.7 × font-size` while the fourth cell's content box is the strip's quarter minus its `1.5rem` inset |
+| The masthead imprint wraps below roughly 480 px | Confirmed | At 390 px the artifact stamp rendered `LOCAL`/`ARTIFACT`/`·`/`NO`/`NETWORK` over four lines and `SKUGGSJA / MIRROR` over two, because the imprint shared one row with the wordmark |
+| The source-status band repeats the read-only sentence and should drop one copy | Not reproduced as a defect | The repetition is a recorded product guarantee, not an accident. `web/source_activity_test.cjs` asserts the static line, the same file asserts the full dynamic sentence verbatim, `scripts/verify-browser.cjs` requires the static string in `.source-status`, and README, PRIVACY.md and ARCHITECTURE.md quote the sentence. The band was compacted into one two-column ledger row instead; no required text was removed |
+| The four harness cells in the activity strip have unequal widths | Not reproduced | Measured at 1440: `316.406px` each, and `278.8px` each at 1280. The apparent difference was an artefact of a scaled screenshot |
+| The active-days mini-histogram overflows its proof cell | Not reproduced | Measured at 1440: the spark spans x=1080 to x=1214 inside a cell spanning x=1055 to x=1214 |
+| The ranked local-path header misaligns with its rows | Not reproduced | Measured at 1440: the `Sessions` header and the `4,574 sessions` value both end at x=858; `.rank-head` places its third span in the same grid column as the value |
+| The heat legend's swatch order is wrong | Not reproduced | The legend lists the ramp from `--heat-8` down to `--heat-1`, and `heatLevel` returns 1–8, so the darkest swatch and the busiest day agree |
+| Bullet lists reported by the list audit are unstyled | Not reproduced | The remaining bare `ul` elements are the deliberate bullet lists in the masthead note, the definition grid and the methodology well; only the tool ledger had lost its reset |
+
+### What changed
+
+`web/index.html`, `web/styles.css` and `web/app.js` were rewritten against the mockups. The page
+gained the chapter spine, the masthead imprint, chapter folios, the hero ledger and its four proof
+cells, harness glyphs, the projects-by-tool ledger, the four-cell boundary brief above the
+full-bleed inverse band, and the six-cell definition grid. The charts were rebuilt: weekly hero
+buckets with a logarithmic axis and a caption that states the scale, an eight-step heat ramp over a
+weekday-by-date grid with `Mon`–`Sun` labels, and session meters on the source rows.
+
+Three mockup panels were replaced rather than filled. The archive shows per-harness recent-activity
+strips, a prompt token-size distribution, an example prompt and a redaction table; the aggregate
+carries no per-provider daily series, no prompt text and no redaction records. The four-cell
+boundary brief, the facts ledger beside an explicit "prompt text is not stored" panel, and the
+definition grid carry the same intent using measured fields. The longest session is still rendered
+as the artifact's own `187,401` minutes.
+
+### Local gates on the exact head
+
+| Gate | Result |
+| --- | --- |
+| `go build ./...`, `go test ./...`, `go vet ./...`, `gofmt -l .` | All 12 tested packages pass; no vet or format findings |
+| `node --test web/*.cjs scripts/generate_homebrew_test.cjs` | **36/36** pass |
+| `python3 scripts/release_workflow_test.py` | **21/21** pass |
+| `python3 scripts/verify_packages_test.py` | **9/9** pass |
+| `node scripts/verify-install.cjs <fresh build> dev` | **30/30** checks |
+| `./scripts/verify-runtime-offline.sh` | Generation and loopback viewing with zero observed external connect attempts |
+| `goreleaser check` | One configuration file validated |
+| `goreleaser release --snapshot --clean --skip=publish` then `python3 scripts/verify-packages.py dist` | Six archives: checksums, regular-file contents, embedded assets, every bundled webfont and Go target/provenance metadata; native installed-package smoke **30/30** |
+| `node scripts/verify-browser.cjs --revision true` | **1,620/1,620** assertions, 63 screenshots, zero product non-loopback requests, pass |
+
+The browser record served the production handler from the retained aggregate, so it covers the
+embedded stylesheet rather than a static preview. It captured 1280, 1440, 1728, 1920, 320 and 390
+px at DPR 2 with zero horizontal overflow, and the full-page evidence tiles render the spine,
+masthead, hero ledger and every chapter at 1440.
+
+### Regression found by the gate and corrected
+
+The first full browser run on this head failed: `1280px key values are fully visible` returned
+`dd#proof-prompts` with a `147` scroll width against a `136` box, so 145 assertions passed and the
+record stopped there. The cause was this change — the hero proof figures were sized from
+`--text-figure`, which resolves against the viewport, while their boxes shrink with the ledger
+column. Sizing each figure from its own cell fixed the overflow but made the three trailing cells
+about eight pixels smaller than the first, because only they carry the `1.5rem` divider inset. The
+figures and the stamp now size from the strip, so all four cells keep one size and every value fits:
+measured after the correction, `13,407` renders at `44.3px` in a `138px` box at 1280 and at `50px`
+in a `159px` box at 1440, `READ-ONLY` is one line at every captured width, and the full record
+passes. `@supports (container-type: inline-size)` guards the sizing, so a browser without container
+queries keeps the previous viewport-based figures rather than an invalid declaration.
+
+### Review findings classified before any change — 2026-09-14
+
+The code review on PR #11 raised five items against `ec8df70`. Each was re-derived from the source,
+the rendered page and the published standards before anything was edited, and only the confirmed
+ones were changed. The four later bullets of the previous section are the review's own claims
+re-tested; this table is the second pass over the review itself.
+
+| Claim | Verdict | Evidence |
+| --- | --- | --- |
+| The release note states an incomplete logarithmic-axis predicate | **Confirmed** | `web/app.js` gates the axis on `positives.length >= 4 && maximum >= 20 && maximum >= median * 8`. The note named only the eight-times-median term, so a span that is skewed but has fewer than four non-zero buckets, or peaks below 20, would not switch and the note did not say so |
+| The active-days mini-histogram mislabels its slice | **Confirmed** | `drawSpark` builds its series with `values.slice(0, 96)` (and `filter(…).slice(0, 48)`) — a positional slice from the earliest bucket — while the label said `Largest N of M`. Run against one aggregate stretched to a 401-week span, the pre-fix binary served `Active days per week across the recorded span. Largest 96 of 401.` and the corrected binary serves `… Earliest 96 of 401.` |
+| The proof strip is an invalid description list | **Confirmed** | The Nu HTML checker returned three errors for the strip as committed: `Element "p" not allowed as child of element "div" in this context`, plus the same for the spark `div` and its `p`. A `<dl>` grouping `div` may hold only `dt` and `dd`. `0d9868c`, the previous release, carried a conforming strip, so this change introduced the defect |
+| Inverse text is unreadable when printed | **Confirmed, narrower than reported** | `.audit-files p:last-child` is `rgba(242, 241, 233, 0.78)` inside `.boundary`, which the print block repaints to `#fff`. Every sibling in that band was reset to black; this one was not, and print-media emulation measured it at **1.1:1** against white while its neighbours measured 21:1. The claim also named `.chapter--inverse .chapter-index` and its eyebrow separator, but `.chapter--inverse` matches nothing in `web/index.html` or `web/app.js` (`document.querySelectorAll(".chapter--inverse").length === 0`), so those two rules are dead and were left as written |
+| Docstring coverage is 8.70% against an 80% threshold | **Not a defect for this project** | `web/app.js` holds 82 functions and 96% of them carry no preceding prose comment; the file's convention is section banners and inline rationale. No workflow, gate or documented convention in this repository asks for docstrings — `ci.yml` runs `actionlint` and the Go toolchain, and docstring coverage is not one of the seven required status checks. The 80% figure is the reviewing tool's default, so this was recorded rather than acted on |
+| The closed warnings well is shorter than the open methodology well | **Not a defect** | `.warning-notes` is a closed `<details>`, so its height is the disclosure's own collapsed height. `align-items: start` on `.method-layout` predates this change (present in `8290fde`), and stretching the closed well would replace an accurate collapsed state with an empty panel |
+
+**Corrections.** Moving the figure, the spark and the note inside each `dd` keeps the ids and the
+`<dl>` grouping unchanged, and the value elements are block-level so the browser gate's
+`scrollWidth > clientWidth` guard still measures a real box. The Nu checker returns zero errors for
+the strip now, and the rendered geometry is byte-identical to the committed head: the strip measures
+`361.72` px with four `313.72` by `158.78` px cells, and `#proof-prompts` reports `clientWidth 159`
+and `scrollWidth 159` at 1440 px. The print reset adds one selector, and the corrected print record
+measures 21:1 for every text element in the source-boundary band.

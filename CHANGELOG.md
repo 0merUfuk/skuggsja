@@ -4,6 +4,31 @@ All notable changes to this project will be documented in this file.
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and releases use [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.0] - 2026-09-14
+
+### Changed
+
+- The Rewind interface now implements the supplied design assets end to end. Above 80 rem a fixed chapter spine numbers and names all eight sections; the masthead carries a `SKUGGSJA / MIRROR` imprint and a boxed `LOCAL ARTIFACT · NO NETWORK` stamp; and every chapter opens with a numeral folio, a serif headline, a deck and one hairline. The hero became a ledger: the recovered-session figure and its chart beside four proof cells split by vertical rules, each with a note and a grey mini-histogram. Harness identity is drawn as one warm scale of glyphs — a Claude Code starburst, nested Codex hexagons, a Hermes triangle and a neutral Cursor cube — beside the usage ledger and every source row. Rhythm gained an eight-step heat ramp with a labelled legend over a weekday-by-date grid; prompts gained a median figure, a facts ledger, an explicit "prompt text is not stored" panel and an interpretation band; projects gained a ranked local-path list beside a projects-by-tool ledger and a longest-session aside; the report boundary became a light four-cell brief above a full-bleed inverse band; and method became a six-cell definition grid above the existing expandable wells. The source-status line is one compact ledger row and the new panels replaced the v0.2.1 group surfaces. Layout, type scale, spacing, chart marks and section treatments changed; the aggregate, the read-only language, every state and every control behave as before.
+
+### Added
+
+- The hero chart resolves weekly buckets once the recorded span exceeds 62 days and switches to a logarithmic axis when the record is both skewed and large enough to need one — at least four non-zero buckets, a peak bucket of at least 20 sessions and a peak at least eight times the median — drawing grid lines at powers of ten and naming the scale, the peak week and its share in the caption. A linear axis cannot show a span whose busiest week holds 4,636 of 5,465 recorded sessions.
+- Proof cells carry measured mini-histograms: the active-days cell plots weekly active days, and the projects-by-tool ledger and every source row carry a session meter.
+
+### Fixed
+
+- The projects-by-tool ledger sat 40 px inside its own column header and its `Projects` header never lined up with its values. The list had inherited the browser's default `ol` indent and decimal markers, and header and rows sized their columns independently. The list is reset and both now share one column template, so every header sits directly over its values.
+- The hero proof figures were sized from the viewport rather than their own strip, so the five-digit prompt count overflowed its content box between roughly 1150 px and 1920 px. Browser verification failed on `dd#proof-prompts` at 1280 px with a 147 px scroll width against a 136 px box. The figures and the `READ-ONLY` stamp now follow the strip's own width, which keeps the four cells equal and their values inside them at every captured width.
+- `READ-ONLY` broke across the hyphen into two lines wherever its clamped size exceeded the cell. It is one line at every captured width now.
+- The masthead imprint forced its artifact stamp and the `SKUGGSJA / MIRROR` mark into two lines each below roughly 480 px. Below 30 rem the imprint stacks instead of sharing a row with the wordmark.
+- The files-observed line in the source-boundary band kept its near-white colour when the band repaints to white for print, so the one sentence naming the read-only inputs printed at 1.1:1 contrast. Every text colour in that band resets for print now, and the sentence measures 21:1.
+- The hero proof strip is a conforming description list again. Each grouping element now holds one term and its description, with the figure, the mini-histogram and the note inside the description rather than as siblings of it. Verified against the Nu HTML checker: three errors before, none after, with the strip's measured geometry unchanged.
+- The active-days mini-histogram described its slice as the largest buckets in its accessible label, but it draws the earliest ones. On a 401-week span the label read `Largest 96 of 401`; it reads `Earliest 96 of 401` now.
+
+### Notes
+
+- The supplied mockups show panels the aggregate cannot populate: per-harness recent-activity strips, a prompt token-size distribution, an example prompt and a redaction table. The artifact carries no per-provider daily series, no prompt text and no redaction records, so those panels were replaced with what the aggregate does measure rather than filled with invented values. The four-cell boundary brief, the definition grid and the measured mini-histograms are those replacements.
+
 ## [0.2.1] - 2026-09-13
 
 ### Changed
