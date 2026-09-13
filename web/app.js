@@ -517,7 +517,11 @@
     const pitch = 4;
     const barWidth = 2.6;
     const height = 34;
-    const clipped = values.length > series.length ? " Largest " + formatNumber(series.length) + " of " + formatNumber(values.length) + "." : "";
+    const clipped = values.length > series.length
+      ? (keepZeros
+        ? " Earliest " + formatNumber(series.length) + " of " + formatNumber(values.length) + "."
+        : " Earliest " + formatNumber(series.length) + " non-zero values of " + formatNumber(values.length) + ".")
+      : "";
     const svg = svgElement("svg", {
       viewBox: "0 0 " + (series.length * pitch) + " " + height,
       preserveAspectRatio: "none",

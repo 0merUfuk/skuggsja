@@ -762,3 +762,27 @@ measured after the correction, `13,407` renders at `44.3px` in a `138px` box at 
 in a `159px` box at 1440, `READ-ONLY` is one line at every captured width, and the full record
 passes. `@supports (container-type: inline-size)` guards the sizing, so a browser without container
 queries keeps the previous viewport-based figures rather than an invalid declaration.
+
+### Review findings classified before any change — 2026-09-14
+
+The code review on PR #11 raised five items against `ec8df70`. Each was re-derived from the source,
+the rendered page and the published standards before anything was edited, and only the confirmed
+ones were changed. The four later bullets of the previous section are the review's own claims
+re-tested; this table is the second pass over the review itself.
+
+| Claim | Verdict | Evidence |
+| --- | --- | --- |
+| The release note states an incomplete logarithmic-axis predicate | **Confirmed** | `web/app.js` gates the axis on `positives.length >= 4 && maximum >= 20 && maximum >= median * 8`. The note named only the eight-times-median term, so a span that is skewed but has fewer than four non-zero buckets, or peaks below 20, would not switch and the note did not say so |
+| The active-days mini-histogram mislabels its slice | **Confirmed** | `drawSpark` builds its series with `values.slice(0, 96)` (and `filter(…).slice(0, 48)`) — a positional slice from the earliest bucket — while the label said `Largest N of M`. Run against one aggregate stretched to a 401-week span, the pre-fix binary served `Active days per week across the recorded span. Largest 96 of 401.` and the corrected binary serves `… Earliest 96 of 401.` |
+| The proof strip is an invalid description list | **Confirmed** | The Nu HTML checker returned three errors for the strip as committed: `Element "p" not allowed as child of element "div" in this context`, plus the same for the spark `div` and its `p`. A `<dl>` grouping `div` may hold only `dt` and `dd`. `0d9868c`, the previous release, carried a conforming strip, so this change introduced the defect |
+| Inverse text is unreadable when printed | **Confirmed, narrower than reported** | `.audit-files p:last-child` is `rgba(242, 241, 233, 0.78)` inside `.boundary`, which the print block repaints to `#fff`. Every sibling in that band was reset to black; this one was not, and print-media emulation measured it at **1.1:1** against white while its neighbours measured 21:1. The claim also named `.chapter--inverse .chapter-index` and its eyebrow separator, but `.chapter--inverse` matches nothing in `web/index.html` or `web/app.js` (`document.querySelectorAll(".chapter--inverse").length === 0`), so those two rules are dead and were left as written |
+| Docstring coverage is 8.70% against an 80% threshold | **Not a defect for this project** | `web/app.js` holds 82 functions and 96% of them carry no preceding prose comment; the file's convention is section banners and inline rationale. No workflow, gate or documented convention in this repository asks for docstrings — `ci.yml` runs `actionlint` and the Go toolchain, and docstring coverage is not one of the seven required status checks. The 80% figure is the reviewing tool's default, so this was recorded rather than acted on |
+| The closed warnings well is shorter than the open methodology well | **Not a defect** | `.warning-notes` is a closed `<details>`, so its height is the disclosure's own collapsed height. `align-items: start` on `.method-layout` predates this change (present in `8290fde`), and stretching the closed well would replace an accurate collapsed state with an empty panel |
+
+**Corrections.** Moving the figure, the spark and the note inside each `dd` keeps the ids and the
+`<dl>` grouping unchanged, and the value elements are block-level so the browser gate's
+`scrollWidth > clientWidth` guard still measures a real box. The Nu checker returns zero errors for
+the strip now, and the rendered geometry is byte-identical to the committed head: the strip measures
+`361.72` px with four `313.72` by `158.78` px cells, and `#proof-prompts` reports `clientWidth 159`
+and `scrollWidth 159` at 1440 px. The print reset adds one selector, and the corrected print record
+measures 21:1 for every text element in the source-boundary band.

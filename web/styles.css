@@ -449,6 +449,7 @@ dt { color: var(--ink-soft); }
   margin-top: var(--space-3);
   font: 400 var(--text-figure)/1 var(--font-display); letter-spacing: -0.025em;
 }
+.proof-strip .proof-figure { display: block; }
 @supports (container-type: inline-size) {
   /* The proof figures follow the strip, not the viewport, so one long count
      can never spill into the rule beside it while the four cells stay equal. */
@@ -1068,7 +1069,7 @@ meter::-moz-meter-bar { background: var(--series); }
   .masthead, .hero, .chapter, .state-page, .coverage-notice, .field-note, .page-footer { padding-inline: 0; }
   .chapter--inverse, .boundary { background: #fff; color: #000; }
   .chapter--inverse dt, .chapter--inverse .eyebrow, .boundary .plate-label, .audit-stamp > p:last-child,
-  .boundary__lede p:last-child, .audit-stamp__detail { color: #000; }
+  .boundary__lede p:last-child, .audit-stamp__detail, .audit-files p:last-child { color: #000; }
   .chapter--inverse h2, .chapter-heading--inverse h2, .boundary strong { color: #000; }
   .provider-body { background: #fff; }
   .hero { padding-block: 0 var(--space-6); }

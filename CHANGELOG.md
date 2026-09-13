@@ -12,7 +12,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ### Added
 
-- The hero chart resolves weekly buckets once the recorded span exceeds 62 days and switches to a logarithmic axis when the peak week is at least eight times the median, drawing grid lines at powers of ten and naming the scale, the peak week and its share in the caption. A linear axis cannot show a span whose busiest week holds 4,636 of 5,465 recorded sessions.
+- The hero chart resolves weekly buckets once the recorded span exceeds 62 days and switches to a logarithmic axis when the record is both skewed and large enough to need one — at least four non-zero buckets, a peak bucket of at least 20 sessions and a peak at least eight times the median — drawing grid lines at powers of ten and naming the scale, the peak week and its share in the caption. A linear axis cannot show a span whose busiest week holds 4,636 of 5,465 recorded sessions.
 - Proof cells carry measured mini-histograms: the active-days cell plots weekly active days, and the projects-by-tool ledger and every source row carry a session meter.
 
 ### Fixed
@@ -21,6 +21,9 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 - The hero proof figures were sized from the viewport rather than their own strip, so the five-digit prompt count overflowed its content box between roughly 1150 px and 1920 px. Browser verification failed on `dd#proof-prompts` at 1280 px with a 147 px scroll width against a 136 px box. The figures and the `READ-ONLY` stamp now follow the strip's own width, which keeps the four cells equal and their values inside them at every captured width.
 - `READ-ONLY` broke across the hyphen into two lines wherever its clamped size exceeded the cell. It is one line at every captured width now.
 - The masthead imprint forced its artifact stamp and the `SKUGGSJA / MIRROR` mark into two lines each below roughly 480 px. Below 30 rem the imprint stacks instead of sharing a row with the wordmark.
+- The files-observed line in the source-boundary band kept its near-white colour when the band repaints to white for print, so the one sentence naming the read-only inputs printed at 1.1:1 contrast. Every text colour in that band resets for print now, and the sentence measures 21:1.
+- The hero proof strip is a conforming description list again. Each grouping element now holds one term and its description, with the figure, the mini-histogram and the note inside the description rather than as siblings of it. Verified against the Nu HTML checker: three errors before, none after, with the strip's measured geometry unchanged.
+- The active-days mini-histogram described its slice as the largest buckets in its accessible label, but it draws the earliest ones. On a 401-week span the label read `Largest 96 of 401`; it reads `Earliest 96 of 401` now.
 
 ### Notes
 
