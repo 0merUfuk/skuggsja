@@ -17,26 +17,33 @@
       <div class="masthead__inner">
         <a class="wordmark" href="#top" aria-label="skuggsja, back to top">
           <span class="wordmark__name">skuggsja</span>
-          <span class="wordmark__meaning">local agent rewind</span>
+          <span class="wordmark__meaning">Local agent rewind</span>
         </a>
-        <nav class="folio-nav" aria-label="Rewind sections" hidden>
-          <a href="#usage"><span class="folio-nav__index" aria-hidden="true">01</span><span class="folio-nav__label">Usage</span></a>
-          <a href="#shape"><span class="folio-nav__index" aria-hidden="true">02</span><span class="folio-nav__label">Activity</span></a>
-          <a href="#rhythm"><span class="folio-nav__index" aria-hidden="true">03</span><span class="folio-nav__label">Rhythm</span></a>
-          <a href="#voice"><span class="folio-nav__index" aria-hidden="true">04</span><span class="folio-nav__label">Prompts</span></a>
-          <a href="#harnesses"><span class="folio-nav__index" aria-hidden="true">05</span><span class="folio-nav__label">Sources</span></a>
-          <a href="#projects"><span class="folio-nav__index" aria-hidden="true">06</span><span class="folio-nav__label">Projects</span></a>
-          <a href="#privacy"><span class="folio-nav__index" aria-hidden="true">07</span><span class="folio-nav__label">Privacy</span></a>
-          <a href="#method"><span class="folio-nav__index" aria-hidden="true">08</span><span class="folio-nav__label">Method</span></a>
-        </nav>
-        <p class="local-mark">skuggsjá / mirror</p>
+        <div class="masthead__imprint">
+          <p class="local-mark">skuggsjá / mirror</p>
+          <p class="artifact-mark"><span>Local artifact</span><span aria-hidden="true">·</span><span>No network</span></p>
+        </div>
       </div>
+      <nav class="folio-nav" aria-label="Rewind sections" hidden>
+        <ol class="folio-nav__list">
+          <li class="folio-nav__item"><a href="#usage"><span class="folio-nav__index" aria-hidden="true">01</span><span class="folio-nav__label">Usage</span></a></li>
+          <li class="folio-nav__item"><a href="#activity"><span class="folio-nav__index" aria-hidden="true">02</span><span class="folio-nav__label">Activity</span></a></li>
+          <li class="folio-nav__item"><a href="#rhythm"><span class="folio-nav__index" aria-hidden="true">03</span><span class="folio-nav__label">Rhythm</span></a></li>
+          <li class="folio-nav__item"><a href="#prompts"><span class="folio-nav__index" aria-hidden="true">04</span><span class="folio-nav__label">Prompts</span></a></li>
+          <li class="folio-nav__item"><a href="#harnesses"><span class="folio-nav__index" aria-hidden="true">05</span><span class="folio-nav__label">Sources</span></a></li>
+          <li class="folio-nav__item"><a href="#projects"><span class="folio-nav__index" aria-hidden="true">06</span><span class="folio-nav__label">Projects</span></a></li>
+          <li class="folio-nav__item"><a href="#privacy"><span class="folio-nav__index" aria-hidden="true">07</span><span class="folio-nav__label">Privacy</span></a></li>
+          <li class="folio-nav__item"><a href="#method"><span class="folio-nav__index" aria-hidden="true">08</span><span class="folio-nav__label">Method</span></a></li>
+        </ol>
+      </nav>
     </header>
 
     <main id="main-content">
       <aside class="source-status" aria-label="Source access">
-        <p><strong>Read-only source access.</strong> skuggsja does not write to source paths.</p>
-        <p id="source-activity" aria-live="polite" hidden></p>
+        <div class="source-status__inner">
+          <p><strong>Read-only source access.</strong> skuggsja does not write to source paths.</p>
+          <p id="source-activity" aria-live="polite" hidden></p>
+        </div>
       </aside>
 
       <section id="loading-state" class="state-page" aria-labelledby="loading-title" aria-live="polite">
@@ -84,42 +91,49 @@
       </section>
 
       <div id="rewind" hidden>
-        <section class="hero" aria-labelledby="hero-title">
+        <section id="usage" class="hero chapter--usage" aria-labelledby="hero-title">
           <div class="hero__inner">
-            <div class="hero__rule">
-              <p id="hero-edition" class="eyebrow">Personal archive</p>
-              <p class="hero__imprint">local artifact · no network</p>
+            <div class="hero__lede">
+              <h1 id="hero-title">Your working record.</h1>
+              <p id="hero-narrative" class="hero__narrative"></p>
+              <p id="coverage-stamp" class="coverage-stamp"></p>
             </div>
-            <div class="hero__grid">
-              <div class="hero__copy">
-                <h1 id="hero-title">Your working record.</h1>
-                <p id="hero-narrative" class="hero__narrative"></p>
-                <p id="coverage-stamp" class="coverage-stamp"></p>
-              </div>
+            <div class="hero__ledger">
               <figure class="hero-total" aria-labelledby="hero-session-count hero-session-label">
-                <figcaption class="hero-total__overline">Locally recovered sessions</figcaption>
-                <strong id="hero-session-count" class="hero-total__number">0</strong>
-                <p id="hero-session-label" class="hero-total__label">top-level sessions · children counted separately</p>
+                <figcaption class="hero-total__overline">
+                  <span>Locally recovered sessions</span>
+                  <span id="hero-edition" class="hero-total__range"></span>
+                </figcaption>
+                <p class="hero-total__readout">
+                  <strong id="hero-session-count" class="hero-total__number">0</strong>
+                  <span id="hero-session-label" class="hero-total__label">top-level sessions · children counted separately</span>
+                </p>
+                <div id="hero-chart" class="hero-chart" hidden></div>
               </figure>
+              <dl class="proof-strip" aria-label="Archive proof points">
+                <div>
+                  <dt>Prompts recovered</dt>
+                  <dd id="proof-prompts">—</dd>
+                  <p id="proof-prompts-note" class="proof-note"></p>
+                </div>
+                <div>
+                  <dt>Projects represented</dt>
+                  <dd id="proof-projects">—</dd>
+                  <p id="proof-projects-note" class="proof-note"></p>
+                </div>
+                <div>
+                  <dt>Active days</dt>
+                  <dd id="proof-days">—</dd>
+                  <div id="proof-days-spark" class="proof-spark" hidden></div>
+                  <p id="proof-days-note" class="proof-note"></p>
+                </div>
+                <div>
+                  <dt>Source access</dt>
+                  <dd id="proof-audit">—</dd>
+                  <p id="proof-audit-note" class="proof-note">Nothing on this page writes to a source path.</p>
+                </div>
+              </dl>
             </div>
-            <dl class="proof-strip" aria-label="Archive proof points">
-              <div>
-                <dt>Prompts recovered</dt>
-                <dd id="proof-prompts">—</dd>
-              </div>
-              <div>
-                <dt>Projects represented</dt>
-                <dd id="proof-projects">—</dd>
-              </div>
-              <div>
-                <dt>Active days</dt>
-                <dd id="proof-days">—</dd>
-              </div>
-              <div>
-                <dt>Source access</dt>
-                <dd id="proof-audit">—</dd>
-              </div>
-            </dl>
           </div>
         </section>
 
@@ -137,17 +151,19 @@
           </div>
         </aside>
 
-        <section id="usage" class="chapter chapter--usage" aria-labelledby="usage-title">
+        <section id="activity" class="chapter chapter--activity" aria-labelledby="activity-title">
           <div class="chapter__inner">
             <header class="chapter-heading">
-              <p class="chapter-index" aria-hidden="true">01</p>
-              <p class="eyebrow">Usage</p>
-              <h2 id="usage-title">The tools behind the record</h2>
+              <p class="chapter-folio"><span class="chapter-index chapter-number" aria-hidden="true">02</span><span class="eyebrow">Activity</span></p>
+              <h2 id="activity-title">The tools behind the record</h2>
+              <p class="chapter-deck">Sessions and prompts recovered from each local agent.</p>
             </header>
             <div class="usage-layout">
               <div class="harness-usage" aria-labelledby="harness-usage-title">
-                <h3 id="harness-usage-title">Harness mix</h3>
-                <p class="usage-context">Recovered local usage. Coverage differs by harness.</p>
+                <div class="plate-heading">
+                  <h3 id="harness-usage-title" class="plate-label">Harness mix</h3>
+                  <p class="plate-caption">Coverage differs by harness.</p>
+                </div>
                 <div id="usage-chart"></div>
               </div>
               <div class="model-index" aria-labelledby="model-index-title">
@@ -161,95 +177,79 @@
           </div>
         </section>
 
-        <section id="shape" class="chapter chapter--shape" aria-labelledby="shape-title">
+        <section id="rhythm" class="chapter chapter--rhythm" aria-labelledby="rhythm-title">
           <div class="chapter__inner">
             <header class="chapter-heading">
-              <p class="chapter-index" aria-hidden="true">02</p>
-              <p class="eyebrow">Activity</p>
-              <h2 id="shape-title">Days at the keyboard</h2>
+              <p class="chapter-folio"><span class="chapter-index chapter-number" aria-hidden="true">03</span><span class="eyebrow">Rhythm</span></p>
+              <h2 id="rhythm-title">Days at the keyboard</h2>
+              <p class="chapter-deck">A view of your coding activity over time, recovered from local data.</p>
+              <p id="activity-caption" class="chapter-readout">Calendar view</p>
             </header>
             <div class="activity-layout">
               <div class="activity-plate">
-                <div class="plate-heading">
-                  <div>
-                    <p class="plate-label">Session activity</p>
-                    <p id="activity-caption" class="plate-caption">Calendar view</p>
-                  </div>
-                  <div class="heat-legend" aria-label="Activity intensity legend">
-                    <span>Quiet</span>
-                    <i class="heat-key heat-key--0" aria-hidden="true"></i>
-                    <i class="heat-key heat-key--1" aria-hidden="true"></i>
-                    <i class="heat-key heat-key--2" aria-hidden="true"></i>
-                    <i class="heat-key heat-key--3" aria-hidden="true"></i>
-                    <i class="heat-key heat-key--4" aria-hidden="true"></i>
-                    <span>Busy</span>
-                  </div>
-                </div>
                 <div class="heatmap-scroll" tabindex="0" aria-label="Scrollable activity calendar">
                   <div id="activity-heatmap"></div>
                 </div>
+                <div class="heat-legend" aria-label="Activity intensity legend">
+                  <span class="heat-legend__label">More activity</span>
+                  <span class="heat-legend__key" aria-hidden="true">
+                    <i class="heat-key heat-key--8"></i>
+                    <i class="heat-key heat-key--7"></i>
+                    <i class="heat-key heat-key--6"></i>
+                    <i class="heat-key heat-key--5"></i>
+                    <i class="heat-key heat-key--4"></i>
+                    <i class="heat-key heat-key--3"></i>
+                    <i class="heat-key heat-key--2"></i>
+                    <i class="heat-key heat-key--1"></i>
+                    <i class="heat-key heat-key--0"></i>
+                  </span>
+                  <span class="heat-legend__label">Less activity</span>
+                </div>
               </div>
-              <dl class="folio-facts" aria-label="Activity highlights">
-                <div class="folio-fact folio-fact--vermilion">
-                  <dt>Busiest day</dt>
-                  <dd id="busiest-day-date" class="folio-fact__primary">—</dd>
-                  <dd id="busiest-day-count" class="folio-fact__secondary">No recorded sessions</dd>
+            </div>
+            <div class="hours-block">
+              <div class="plate-heading">
+                <h3 id="hours-title">Hours &amp; habits</h3>
+                <p class="plate-caption">When you work, and how your activity shows up across the day.</p>
+              </div>
+              <div class="rhythm-layout">
+                <figure class="clock-plate" aria-labelledby="clock-caption">
+                  <div id="rhythm-clock" class="rhythm-clock"></div>
+                  <figcaption id="clock-caption">
+                    <span>Favorite hour</span>
+                    <strong id="favorite-hour">—</strong>
+                    <small>local time</small>
+                  </figcaption>
+                </figure>
+                <dl class="rhythm-notes" aria-label="Rhythm highlights">
+                  <div>
+                    <dt>Most active day</dt>
+                    <dd><strong id="busiest-weekday">—</strong> <span id="busiest-weekday-count">no recorded sessions</span></dd>
+                  </div>
+                  <div>
+                    <dt>Longest streak</dt>
+                    <dd><strong id="longest-streak">—</strong> <span>days</span></dd>
+                  </div>
+                  <div>
+                    <dt>Late-night share</dt>
+                    <dd><strong id="late-night-percent">—</strong> <span>of sessions</span></dd>
+                  </div>
+                </dl>
+                <div class="weekday-plate">
+                  <p class="plate-label">Sessions by weekday</p>
+                  <ol id="weekday-list" class="weekday-list"></ol>
                 </div>
-                <div>
-                  <dt>Busiest month</dt>
-                  <dd id="busiest-month-label" class="folio-fact__primary">—</dd>
-                  <dd id="busiest-month-count" class="folio-fact__secondary">No recorded sessions</dd>
-                </div>
-                <div>
-                  <dt>Source files discovered</dt>
-                  <dd id="source-file-count" class="folio-fact__primary">—</dd>
-                  <dd class="folio-fact__secondary">read-only inputs discovered</dd>
-                </div>
-              </dl>
+              </div>
             </div>
           </div>
         </section>
 
-        <section id="rhythm" class="chapter chapter--rhythm" aria-labelledby="rhythm-title">
-          <div class="chapter__inner">
-            <header class="chapter-heading chapter-heading--offset">
-              <p class="chapter-index" aria-hidden="true">03</p>
-              <p class="eyebrow">Rhythm</p>
-              <h2 id="rhythm-title">Hours &amp; habits</h2>
-            </header>
-            <div class="rhythm-layout">
-              <figure class="clock-plate" aria-labelledby="clock-caption">
-                <div id="rhythm-clock" class="rhythm-clock"></div>
-                <figcaption id="clock-caption">
-                  <span>Favorite hour</span>
-                  <strong id="favorite-hour">—</strong>
-                  <small>local time</small>
-                </figcaption>
-              </figure>
-              <div class="weekday-plate">
-                <p class="plate-label">Weekday cadence</p>
-                <ol id="weekday-list" class="weekday-list"></ol>
-              </div>
-              <dl class="rhythm-notes" aria-label="Rhythm highlights">
-                <div>
-                  <dt>Longest streak</dt>
-                  <dd><strong id="longest-streak">—</strong> <span>days</span></dd>
-                </div>
-                <div>
-                  <dt>Late-night share</dt>
-                  <dd><strong id="late-night-percent">—</strong> <span>of sessions</span></dd>
-                </div>
-              </dl>
-            </div>
-          </div>
-        </section>
-
-        <section id="voice" class="chapter chapter--voice" aria-labelledby="voice-title">
+        <section id="prompts" class="chapter chapter--prompts" aria-labelledby="prompts-title">
           <div class="chapter__inner">
             <header class="chapter-heading">
-              <p class="chapter-index" aria-hidden="true">04</p>
-              <p class="eyebrow">Prompt style</p>
-              <h2 id="voice-title">The shape of a prompt</h2>
+              <p class="chapter-folio"><span class="chapter-index chapter-number" aria-hidden="true">04</span><span class="eyebrow">Prompts</span></p>
+              <h2 id="prompts-title">The shape of a prompt</h2>
+              <p class="chapter-deck">A closer look at what you ask, from brief questions to complex requests.</p>
             </header>
             <div id="prompt-unavailable" class="unavailable-note" hidden>
               <p class="unavailable-note__mark">Not measured</p>
@@ -275,15 +275,22 @@
                   <dd id="prompts-measured">—</dd>
                 </div>
               </dl>
+              <div class="prompt-absent">
+                <p class="plate-label">Prompt text is not stored</p>
+                <p>Lengths are counted in memory and the text is discarded, so this report carries no prompt examples, token-size buckets or intent patterns.</p>
+              </div>
+            </div>
+            <div class="interpretation-band">
+              <p class="plate-label">Notes on interpretation</p>
+              <p>These figures reflect only locally available data from this machine. They may be incomplete due to tool settings, data retention, or missing local history.</p>
             </div>
           </div>
         </section>
 
-        <section id="harnesses" class="chapter chapter--providers" aria-labelledby="harnesses-title">
+        <section id="harnesses" class="chapter chapter--sources" aria-labelledby="harnesses-title">
           <div class="chapter__inner">
-            <header class="chapter-heading chapter-heading--offset">
-              <p class="chapter-index" aria-hidden="true">05</p>
-              <p class="eyebrow">Source ledger</p>
+            <header class="chapter-heading">
+              <p class="chapter-folio"><span class="chapter-index chapter-number" aria-hidden="true">05</span><span class="eyebrow">Sources</span></p>
               <h2 id="harnesses-title">What each harness recorded</h2>
               <p class="chapter-deck">Open a source for coverage, recorded metrics and parser notes. Tool-call units differ by harness; counts stay separate without a combined total or ranking.</p>
             </header>
@@ -299,51 +306,118 @@
         <section id="projects" class="chapter chapter--projects" aria-labelledby="projects-title">
           <div class="chapter__inner">
             <header class="chapter-heading">
-              <p class="chapter-index" aria-hidden="true">06</p>
-              <p class="eyebrow">Projects</p>
+              <p class="chapter-folio"><span class="chapter-index chapter-number" aria-hidden="true">06</span><span class="eyebrow">Projects</span></p>
               <h2 id="projects-title">Where the sessions gathered</h2>
+              <p class="chapter-deck">Your work, grouped by project, from local paths and repositories.</p>
             </header>
             <div class="projects-layout">
-              <div id="project-list"></div>
-              <aside class="long-session" aria-labelledby="long-session-title">
-                <p class="plate-label">Longest session</p>
-                <h3 id="long-session-title"><span id="longest-session-duration">—</span><small>minutes</small></h3>
-                <p id="longest-session-harness">Harness unavailable</p>
-              </aside>
+              <div class="projects-paths">
+                <div class="plate-heading">
+                  <h3 id="projects-paths-title" class="plate-label">Projects by local path</h3>
+                  <p class="plate-caption">Project directories discovered from your sessions.</p>
+                </div>
+                <div class="rank-head" aria-hidden="true">
+                  <span>#</span>
+                  <span>Project</span>
+                  <span>Sessions</span>
+                </div>
+                <div id="project-list" aria-labelledby="projects-paths-title"></div>
+              </div>
+              <div class="projects-aside">
+                <div class="projects-tools">
+                  <div class="plate-heading">
+                    <h3 id="projects-tools-title" class="plate-label">Projects by tool</h3>
+                    <p class="plate-caption">How often each tool appears in your sessions.</p>
+                  </div>
+                  <div id="projects-by-tool" aria-labelledby="projects-tools-title"></div>
+                </div>
+                <aside class="long-session" aria-labelledby="long-session-title">
+                  <p class="plate-label">Longest session</p>
+                  <h3 id="long-session-title"><span id="longest-session-duration">—</span><small>minutes</small></h3>
+                  <p id="longest-session-harness">Harness unavailable</p>
+                </aside>
+              </div>
             </div>
           </div>
         </section>
 
-        <section id="privacy" class="chapter chapter--privacy chapter--inverse" aria-labelledby="privacy-title">
-          <div class="chapter__inner">
-            <header class="chapter-heading chapter-heading--inverse">
-              <p class="chapter-index" aria-hidden="true">07</p>
-              <p class="eyebrow">Privacy</p>
-              <h2 id="privacy-title">The report boundary</h2>
-            </header>
-            <div class="privacy-layout">
-              <dl class="privacy-claims" aria-label="Privacy report">
-                <div>
-                  <dt>Raw content persisted</dt>
-                  <dd id="privacy-raw">—</dd>
+        <section id="privacy" class="chapter chapter--privacy" aria-labelledby="privacy-title">
+          <div class="chapter__pad">
+            <div class="chapter__inner">
+              <header class="chapter-heading">
+                <p class="chapter-folio"><span class="chapter-index chapter-number" aria-hidden="true">07</span><span class="eyebrow">Privacy</span></p>
+                <h2 id="privacy-title">The report boundary</h2>
+                <p class="chapter-deck">How skuggsja handles your data, paths, and local files.</p>
+              </header>
+              <div class="boundary-brief">
+                <section class="boundary-brief__cell" aria-labelledby="brief-handling">
+                  <h3 id="brief-handling">Data handling</h3>
+                  <p>Analysis runs on this machine. The report is derived from local artifacts and served on loopback; nothing is sent anywhere.</p>
+                </section>
+                <section class="boundary-brief__cell" aria-labelledby="brief-stored">
+                  <h3 id="brief-stored">What is stored</h3>
+                  <p>Aggregate timestamps, counts, model labels, project basenames, coverage notes, and source-audit digests. Privacy-reduced, not anonymous.</p>
+                </section>
+                <section class="boundary-brief__cell" aria-labelledby="brief-absent">
+                  <h3 id="brief-absent">What is not stored</h3>
+                  <p>Raw prompt text, file contents, source paths, and session or call identifiers. Prompt lengths are counted in memory and then discarded.</p>
+                </section>
+                <section class="boundary-brief__cell" aria-labelledby="brief-access">
+                  <h3 id="brief-access">Access mode</h3>
+                  <p>Every source handle is opened read-only. skuggsja never writes to, moves, or creates files in your repositories.</p>
+                </section>
+              </div>
+            </div>
+          </div>
+          <div class="boundary">
+            <div class="chapter__pad">
+              <div class="chapter__inner">
+                <div class="boundary__grid">
+                  <div class="boundary__lede">
+                    <p class="plate-label">Source boundary</p>
+                    <p>Your data stays on your machine. skuggsja only reads what’s already there.</p>
+                  </div>
+                  <div class="boundary__mark" aria-hidden="true">
+                    <svg viewBox="0 0 64 72" role="presentation" focusable="false">
+                      <path d="M32 2 62 19v34L32 70 2 53V19Z"></path>
+                      <path d="M32 2 32 36 2 19M32 36l30-17M32 36v34"></path>
+                    </svg>
+                  </div>
+                  <dl class="boundary__readouts" aria-label="Privacy report">
+                    <div>
+                      <dt>Raw content persisted</dt>
+                      <dd id="privacy-raw">—</dd>
+                    </div>
+                    <div>
+                      <dt>Absolute paths persisted</dt>
+                      <dd id="privacy-paths">—</dd>
+                    </div>
+                    <div>
+                      <dt>Source access</dt>
+                      <dd id="privacy-source-access">Read-only</dd>
+                    </div>
+                  </dl>
+                  <div class="boundary__stamp">
+                    <span class="stamp-mark" aria-hidden="true">
+                      <svg viewBox="0 0 48 48" role="presentation" focusable="false">
+                        <circle cx="24" cy="24" r="22"></circle>
+                        <path d="M16 16 32 32M32 16 16 32"></path>
+                      </svg>
+                    </span>
+                    <span class="stamp-copy"><strong>Local</strong> only</span>
+                  </div>
                 </div>
-                <div>
-                  <dt>Absolute paths persisted</dt>
-                  <dd id="privacy-paths">—</dd>
+                <div class="boundary__audit">
+                  <div class="audit-stamp" aria-labelledby="audit-title">
+                    <p id="audit-title" class="plate-label">Concurrent source activity</p>
+                    <strong id="audit-verdict">Not observed</strong>
+                    <p id="privacy-source-activity" class="audit-stamp__detail"></p>
+                  </div>
+                  <div class="audit-files">
+                    <p class="plate-label">Files observed</p>
+                    <p><span id="privacy-audit-files">—</span> read-only inputs discovered during this run</p>
+                  </div>
                 </div>
-                <div>
-                  <dt>Source access</dt>
-                  <dd id="privacy-source-access">Read-only</dd>
-                </div>
-                <div>
-                  <dt>Files observed</dt>
-                  <dd id="privacy-audit-files">—</dd>
-                </div>
-              </dl>
-              <div class="audit-stamp" aria-labelledby="audit-title">
-                <p id="audit-title" class="plate-label">Concurrent source activity</p>
-                <strong id="audit-verdict">Not observed</strong>
-                <p id="privacy-source-activity" class="audit-stamp__detail"></p>
               </div>
             </div>
           </div>
@@ -352,11 +426,56 @@
         <section id="method" class="chapter chapter--method" aria-labelledby="method-title">
           <div class="chapter__inner">
             <header class="chapter-heading">
-              <p class="chapter-index" aria-hidden="true">08</p>
-              <p class="eyebrow">Method</p>
+              <p class="chapter-folio"><span class="chapter-index chapter-number" aria-hidden="true">08</span><span class="eyebrow">Method</span></p>
               <h2 id="method-title">Definitions &amp; caveats</h2>
-              <p class="chapter-deck">Counts reflect surviving local records and the fields each harness exposes.</p>
+              <p class="chapter-deck">What skuggsja includes, what it doesn’t, and how to interpret the report.</p>
             </header>
+            <div class="definition-grid">
+              <section class="definition" aria-labelledby="definition-scope">
+                <h3 id="definition-scope">What this is</h3>
+                <p>skuggsja is a local, read-only report that reconstructs your work with AI coding tools from local artifacts. It summarizes activity, prompts, projects, and file references so you can read back your own working record.</p>
+              </section>
+              <section class="definition" aria-labelledby="definition-lifetime">
+                <h3 id="definition-lifetime">Local history is not lifetime usage.</h3>
+                <p>This report reflects only locally available data from supported tools on this machine. It may be incomplete due to tool settings, data retention, or missing local history.</p>
+              </section>
+              <section class="definition" aria-labelledby="definition-included">
+                <h3 id="definition-included">What’s included</h3>
+                <ul>
+                  <li>Local artifacts from the supported harnesses: Claude Code, Codex, Hermes Agent, and Cursor</li>
+                  <li>Sessions, prompts, projects, and source-file references, reduced to aggregates</li>
+                  <li>Activity timelines and simple statistics from recorded times</li>
+                  <li>Per-harness tool-call and model-event counts in native units</li>
+                </ul>
+              </section>
+              <section class="definition" aria-labelledby="definition-excluded">
+                <h3 id="definition-excluded">What’s not included</h3>
+                <ul>
+                  <li>Raw prompt or transcript text; lengths are measured in memory and discarded</li>
+                  <li>File contents or absolute file paths</li>
+                  <li>Data from cloud services, remote accounts, or unsupported tools</li>
+                  <li>Network activity, uploads, or telemetry</li>
+                </ul>
+              </section>
+              <section class="definition" aria-labelledby="definition-interpret">
+                <h3 id="definition-interpret">How to interpret</h3>
+                <ul>
+                  <li>Counts represent recoverable local records, not absolute truth</li>
+                  <li>Timelines show when activity was recorded locally, in this machine’s timezone</li>
+                  <li>Project names come from local data and may be approximate</li>
+                  <li>Use the report as a starting point for reflection, not an audit log</li>
+                </ul>
+              </section>
+              <section class="definition" aria-labelledby="definition-limits">
+                <h3 id="definition-limits">Limitations</h3>
+                <ul>
+                  <li>Results depend on tool configuration and on how long each tool retains history</li>
+                  <li>Some activity may be missing or only partially reconstructed</li>
+                  <li>Harness counts stay separate; they are never summed or ranked across tools</li>
+                  <li>skuggsja does not write to source paths and makes no changes to your data</li>
+                </ul>
+              </section>
+            </div>
             <div class="method-layout">
               <details class="method-notes" open>
                 <summary>How this rewind was derived</summary>

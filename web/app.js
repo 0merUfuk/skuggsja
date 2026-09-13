@@ -90,6 +90,58 @@
     return node;
   }
 
+  // One geometric mark per harness, drawn from local primitives so the same
+  // identity travels from the usage ledger to the source folios. Nothing here
+  // loads an external asset or a brand file.
+  const solidGlyphs = { claude: true };
+  const glyphShapes = {
+    claude: [["path", { d: "" }]],
+    codex: [
+      ["path", { d: "M12 3.4 19.6 7.8v8.4L12 20.6 4.4 16.2V7.8Z" }],
+      ["path", { d: "M12 7.2 16.2 9.6v4.8L12 16.8 7.8 14.4V9.6Z" }]
+    ],
+    hermes: [
+      ["path", { d: "M12 3.6 20.8 20.4H3.2Z" }],
+      ["path", { d: "M12 11.4 8.2 19.2h7.6Z" }]
+    ],
+    cursor: [
+      ["path", { d: "M12 2.8 21 7.5v9L12 21.2 3 16.5v-9Z" }],
+      ["path", { d: "M3 7.5 12 12.2l9-4.7M12 12.2v9" }]
+    ],
+    unknown: [
+      ["path", { d: "M12 3.2 20.8 12 12 20.8 3.2 12Z" }],
+      ["path", { d: "M12 8.6 15.4 12 12 15.4 8.6 12Z" }]
+    ]
+  };
+
+  function starburst(rays, outer, inner) {
+    const points = [];
+    for (let index = 0; index < rays * 2; index += 1) {
+      const radius = index % 2 === 0 ? outer : inner;
+      const angle = (Math.PI * index) / rays - Math.PI / 2;
+      points.push((12 + radius * Math.cos(angle)).toFixed(2) + " " + (12 + radius * Math.sin(angle)).toFixed(2));
+    }
+    return "M" + points.join("L") + "Z";
+  }
+  glyphShapes.claude = [["path", { d: starburst(12, 10, 3.4) }]];
+
+  function glyph(harness, className) {
+    const key = Object.prototype.hasOwnProperty.call(glyphShapes, harness) ? harness : "unknown";
+    const base = className || "usage-glyph";
+    const wrapper = element("span", base + (solidGlyphs[key] ? " " + base + "--solid" : ""));
+    const svg = document.createElementNS(document.getElementById("svg-namespace-probe").namespaceURI, "svg");
+    svg.setAttribute("viewBox", "0 0 24 24");
+    svg.setAttribute("focusable", "false");
+    glyphShapes[key].forEach(function (shape) {
+      const node = document.createElementNS(svg.namespaceURI, shape[0]);
+      Object.keys(shape[1]).forEach(function (name) { node.setAttribute(name, String(shape[1][name])); });
+      svg.append(node);
+    });
+    wrapper.setAttribute("aria-hidden", "true");
+    wrapper.append(svg);
+    return wrapper;
+  }
+
   function render(container, providers) {
     if (!container) return;
     const entries = (Array.isArray(providers) ? providers : []).filter(function (provider) {
@@ -175,14 +227,16 @@
         button.setAttribute("aria-label", entry.name + ": " + countLabel(entry[metric], metric) + ". " + entry.coverage);
         const label = element("span", "usage-key-name", entry.name);
         const value = element("span", "usage-key-value", entry[metric] === null ? "Not available" : formatter.format(entry[metric]));
-        button.append(label, value);
+        const other = metric === "sessions" ? "prompts" : "sessions";
+        const secondary = element("span", "usage-key-secondary", countLabel(entry[other], other));
+        button.append(glyph(entry.harness, "usage-glyph"), label, value);
         if (!packed && entry[metric] !== null) {
           const meter = element("meter", "usage-bar");
           meter.min = 0; meter.max = maximum; meter.value = entry[metric];
           meter.setAttribute("aria-hidden", "true");
           button.append(meter);
         }
-        button.append(element("span", "usage-key-coverage", entry.coverage));
+        button.append(secondary, element("span", "usage-key-coverage", entry.coverage));
         bind(button, entry, false);
         row.append(button);
         key.append(row);
@@ -228,7 +282,7 @@
     update();
   }
 
-  window.SkuggsjaUsageChart = { render: render, pack: pack };
+  window.SkuggsjaUsageChart = { render: render, pack: pack, glyph: glyph };
 }());
 // END SKUGGSJA USAGE CHART
 
@@ -247,6 +301,7 @@
   ];
   const shortMonthNames = monthNames.map(function (month) { return month.slice(0, 3); });
   const weekdayNames = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
+  const MondayFirstRowLabels = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
   let activeController = null;
   let requestSerial = 0;
@@ -335,7 +390,7 @@
     window.SkuggsjaUsageChart.render(document.getElementById("usage-chart"), data.providers);
     renderModels(data.models, data.providers);
     renderProviders(data.providers);
-    renderProjects(data.projects, data.longest_session);
+    renderProjects(data.projects, data.longest_session, data.providers);
     renderPrivacy(data);
     renderMethodology(data.methodology, data.warnings);
     showState("rewind");
@@ -357,6 +412,11 @@
     setText("proof-prompts", formatNumber(prompts));
     setText("proof-projects", formatNumber(projects));
     setText("proof-days", formatNumber(activeDays));
+    setText("proof-prompts-note", "Counted from local transcripts, then discarded.");
+    setText("proof-projects-note", "Distinct project names recovered.");
+    setText("proof-days-note", "Days carrying at least one session.");
+    renderProofSparks(data);
+    renderHeroChart(recordOrEmpty(data.rhythm).activity);
 
     setText(
       "hero-narrative",
@@ -407,28 +467,247 @@
 
   function renderActivity(data) {
     const coverage = recordOrEmpty(data.coverage);
-    const totals = recordOrEmpty(data.totals);
     const rhythm = recordOrEmpty(data.rhythm);
-    const busiestDay = recordOrEmpty(rhythm.busiest_day);
-    const busiestMonth = recordOrEmpty(rhythm.busiest_month);
-    const activity = normalizeActivity(rhythm.activity);
+    renderHeatmap(normalizeActivity(rhythm.activity), coverage);
+  }
 
-    renderHeatmap(activity, coverage);
-    setText("busiest-day-date", formatDateOnly(busiestDay.date));
-    setText(
-      "busiest-day-count",
-      numeric(busiestDay.count, 0) > 0
-        ? formatNumber(busiestDay.count) + " " + plural(numeric(busiestDay.count, 0), "session", "sessions")
-        : "No recorded sessions"
-    );
-    setText("busiest-month-label", cleanText(busiestMonth.label, "—", 60));
-    setText(
-      "busiest-month-count",
-      numeric(busiestMonth.count, 0) > 0
-        ? formatNumber(busiestMonth.count) + " " + plural(numeric(busiestMonth.count, 0), "session", "sessions")
-        : "No recorded sessions"
-    );
-    setText("source-file-count", formatNumber(totals.source_files));
+  // The hero chart and the two proof histograms draw only series the retained
+  // aggregate actually carries: recorded sessions per day, and recorded
+  // sessions per recovered project. Nothing is interpolated or invented.
+  function renderProofSparks(data) {
+    const byDate = new Map();
+    normalizeActivity(recordOrEmpty(data.rhythm).activity).forEach(function (point) {
+      byDate.set(point.date, point.count);
+    });
+    const days = Array.from(byDate.keys()).sort();
+    if (days.length < 2) {
+      return;
+    }
+    const first = parseDateOnly(days[0]);
+    const last = parseDateOnly(days[days.length - 1]);
+    const weeks = [];
+    let cursor = addUTCDays(first, -mondayIndex(first));
+    while (cursor.getTime() <= last.getTime()) {
+      let active = 0;
+      for (let day = 0; day < 7; day += 1) {
+        if ((byDate.get(isoDate(addUTCDays(cursor, day))) || 0) > 0) {
+          active += 1;
+        }
+      }
+      weeks.push(active);
+      cursor = addUTCDays(cursor, 7);
+    }
+    // Active days per week stay inside 0–7, so the historgram carries the real
+    // shape without a single outlier flattening every other bar.
+    drawSpark("proof-days-spark", weeks, "Active days per week across the recorded span", true);
+  }
+
+  function drawSpark(id, values, label, keepZeros) {
+    const container = document.getElementById(id);
+    if (!container) {
+      return;
+    }
+    const series = (keepZeros ? values.slice(0, 96) : values.filter(function (value) { return value > 0; }).slice(0, 48));
+    container.replaceChildren();
+    if (series.length < 3) {
+      container.hidden = true;
+      return;
+    }
+    const maximum = Math.max.apply(null, series);
+    const pitch = 4;
+    const barWidth = 2.6;
+    const height = 34;
+    const clipped = values.length > series.length ? " Largest " + formatNumber(series.length) + " of " + formatNumber(values.length) + "." : "";
+    const svg = svgElement("svg", {
+      viewBox: "0 0 " + (series.length * pitch) + " " + height,
+      preserveAspectRatio: "none",
+      role: "img",
+      "aria-label": label + "." + clipped
+    });
+    const floor = height - 2;
+    series.forEach(function (value, index) {
+      if (value <= 0) {
+        return;
+      }
+      const barHeight = Math.max(1.5, (value / maximum) * floor);
+      svg.appendChild(svgElement("rect", {
+        x: String(index * pitch),
+        y: String(height - barHeight),
+        width: String(barWidth),
+        height: String(barHeight),
+        class: "spark-bar"
+      }));
+    });
+    container.appendChild(svg);
+    container.hidden = false;
+  }
+
+  function renderHeroChart(rawActivity) {
+    const container = document.getElementById("hero-chart");
+    if (!container) {
+      return;
+    }
+    container.replaceChildren();
+    const points = normalizeActivity(rawActivity);
+    if (points.length < 2) {
+      container.hidden = true;
+      return;
+    }
+
+    const byDate = new Map();
+    points.forEach(function (point) { byDate.set(point.date, point.count); });
+    const first = parseDateOnly(points[0].date);
+    const last = parseDateOnly(points[points.length - 1].date);
+    const span = daysBetween(first, last) + 1;
+    const weekly = span > 62;
+    const buckets = [];
+    if (weekly) {
+      let cursor = addUTCDays(first, -mondayIndex(first));
+      while (cursor.getTime() <= last.getTime()) {
+        let count = 0;
+        for (let day = 0; day < 7; day += 1) {
+          count += byDate.get(isoDate(addUTCDays(cursor, day))) || 0;
+        }
+        buckets.push({ label: cursor.getTime() < first.getTime() ? first : cursor, count: count });
+        cursor = addUTCDays(cursor, 7);
+      }
+    } else {
+      for (let index = 0; index < span; index += 1) {
+        const date = addUTCDays(first, index);
+        buckets.push({ label: date, count: byDate.get(isoDate(date)) || 0 });
+      }
+    }
+
+    const maximum = buckets.reduce(function (max, bucket) { return Math.max(max, bucket.count); }, 0);
+    const total = points.reduce(function (sum, point) { return sum + point.count; }, 0);
+    const positives = buckets
+      .map(function (bucket) { return bucket.count; })
+      .filter(function (count) { return count > 0; })
+      .sort(function (left, right) { return left - right; });
+    const median = positives.length > 0 ? positives[Math.floor(positives.length / 2)] : 0;
+    // One bulk import beside a long tail flattens every other bar on a linear
+    // axis, so a strongly skewed record switches to a labelled log scale.
+    const logScale = positives.length >= 4 && maximum >= 20 && maximum >= median * 8;
+    const scaleMaximum = logScale ? Math.pow(10, Math.ceil(Math.log10(maximum))) : niceMaximum(maximum);
+    const fraction = function (value) {
+      if (value <= 0) {
+        return 0;
+      }
+      if (!logScale) {
+        return value / scaleMaximum;
+      }
+      return Math.log10(value + 1) / Math.log10(scaleMaximum + 1);
+    };
+    const pitch = buckets.length > 60 ? 9 : 13;
+    const barWidth = Math.max(2, pitch - 4.5);
+    const gutter = 40;
+    const plotTop = 8;
+    const baseline = 112;
+    const labelY = 126;
+    const width = gutter + buckets.length * pitch + 4;
+    const height = 132;
+    const svg = svgElement("svg", {
+      viewBox: "0 0 " + width + " " + height,
+      role: "img",
+      "aria-labelledby": "hero-chart-title hero-chart-description"
+    });
+    const busiest = points.reduce(function (best, point) { return point.count > best.count ? point : best; }, points[0]);
+    svg.appendChild(svgElement("title", { id: "hero-chart-title" }, weekly ? "Recorded sessions per week" : "Recorded sessions per day"));
+    svg.appendChild(svgElement(
+      "desc",
+      { id: "hero-chart-description" },
+      formatNumber(total) + " recorded sessions across " +
+      formatNumber(span) + " days" + (logScale ? ", drawn on a logarithmic scale" : "") +
+      ". The busiest day, " + formatDateOnly(busiest.date) + ", held " +
+      formatNumber(busiest.count) + " " + plural(busiest.count, "session", "sessions") + "."
+    ));
+
+    const gridLine = function (label, level) {
+      const y = baseline - level * (baseline - plotTop);
+      svg.appendChild(svgElement("line", { x1: String(gutter - 4), y1: String(y), x2: String(width - 2), y2: String(y), class: "hero-grid-line" }));
+      svg.appendChild(svgElement("text", { x: String(gutter - 9), y: String(y + 3), "text-anchor": "end", class: "hero-axis-label" }, formatNumber(label)));
+    };
+    if (logScale) {
+      for (let tick = 1; tick <= scaleMaximum; tick *= 10) {
+        gridLine(tick, fraction(tick));
+      }
+    } else {
+      [0, 1 / 3, 2 / 3, 1].forEach(function (level) { gridLine(Math.round(scaleMaximum * level), level); });
+    }
+    svg.appendChild(svgElement("line", { x1: String(gutter - 4), y1: String(baseline), x2: String(width - 2), y2: String(baseline), class: "hero-axis-line" }));
+
+    buckets.forEach(function (bucket, index) {
+      if (bucket.count <= 0) {
+        return;
+      }
+      const barHeight = fraction(bucket.count) * (baseline - plotTop);
+      const bar = svgElement("rect", {
+        x: String(gutter + index * pitch + (pitch - barWidth) / 2),
+        y: String(baseline - barHeight),
+        width: String(barWidth),
+        height: String(Math.max(1, barHeight)),
+        class: "hero-bar"
+      });
+      bar.appendChild(svgElement(
+        "title",
+        {},
+        (weekly ? "Week starting " : "") + formatDateOnly(isoDate(bucket.label)) + ": " +
+        formatNumber(bucket.count) + " " + plural(bucket.count, "session", "sessions")
+      ));
+      svg.appendChild(bar);
+    });
+
+    const stride = Math.max(1, Math.ceil(buckets.length / 6));
+    const labelIndexes = [];
+    for (let index = 0; index < buckets.length; index += stride) {
+      labelIndexes.push(index);
+    }
+    const lastIndex = buckets.length - 1;
+    if (labelIndexes[labelIndexes.length - 1] !== lastIndex) {
+      if (lastIndex - labelIndexes[labelIndexes.length - 1] >= stride * 0.5) {
+        labelIndexes.push(lastIndex);
+      } else {
+        labelIndexes[labelIndexes.length - 1] = lastIndex;
+      }
+    }
+    let lastLabelX = -Infinity;
+    labelIndexes.forEach(function (index) {
+      const x = gutter + index * pitch + pitch / 2;
+      if (x - lastLabelX < 30) {
+        return;
+      }
+      const date = buckets[index].label;
+      svg.appendChild(svgElement("text", {
+        x: String(x),
+        y: String(labelY),
+        "text-anchor": "middle",
+        class: "hero-axis-label"
+      }, shortMonthNames[date.getUTCMonth()] + " " + date.getUTCDate()));
+      lastLabelX = x;
+    });
+
+    const busiestBucket = buckets.reduce(function (best, bucket) { return bucket.count > best.count ? bucket : best; }, buckets[0]);
+    let caption = (weekly ? "Weekly totals" : "Daily totals") + (logScale ? " on a log scale (each line ×10)" : "");
+    if (total > 0 && busiestBucket.count / total >= 0.5) {
+      caption += ", and " + (weekly ? "the week of " : "") + formatDateOnly(isoDate(busiestBucket.label)) +
+        " holds " + formatNumber(busiestBucket.count) + " of " + formatNumber(total) + " recorded sessions";
+    }
+    container.append(svg, element("p", "hero-chart__caption", caption + "."));
+    container.hidden = false;
+  }
+
+  function niceMaximum(value) {
+    if (value <= 5) {
+      return Math.max(1, value);
+    }
+    const magnitude = Math.pow(10, Math.floor(Math.log10(value)));
+    const steps = [1, 1.5, 2, 2.5, 3, 4, 5, 6, 7.5, 10];
+    for (let index = 0; index < steps.length; index += 1) {
+      if (value <= steps[index] * magnitude) {
+        return steps[index] * magnitude;
+      }
+    }
+    return 10 * magnitude;
   }
 
   function renderHeatmap(activity, coverage) {
@@ -451,22 +730,33 @@
       clipped = true;
     }
 
-    const visibleActivity = activity.filter(function (point) {
-      const date = parseDateOnly(point.date);
-      return date && date.getTime() >= start.getTime() && date.getTime() <= end.getTime();
-    });
     const activityMap = new Map();
-    visibleActivity.forEach(function (point) {
+    activity.forEach(function (point) {
       activityMap.set(point.date, point.count);
     });
 
     const firstWeekday = mondayIndex(start);
     const renderedDays = daysBetween(start, end) + 1;
     const columns = Math.ceil((renderedDays + firstWeekday) / 7);
-    const width = Math.max(360, 32 + columns * 12);
-    const height = 118;
-    const maximum = visibleActivity.reduce(function (max, point) { return Math.max(max, point.count); }, 0);
-    const total = visibleActivity.reduce(function (sum, point) { return sum + point.count; }, 0);
+    const cell = 12;
+    const pitch = 13.5;
+    const gutter = 34;
+    const top = 16;
+    const width = gutter + columns * pitch + 2;
+    const height = top + 7 * pitch + 2;
+
+    const days = [];
+    let maximum = 0;
+    let total = 0;
+    for (let index = 0; index < renderedDays; index += 1) {
+      const date = addUTCDays(start, index);
+      const key = isoDate(date);
+      const count = activityMap.get(key) || 0;
+      days.push({ date: date, key: key, count: count, position: index + firstWeekday });
+      maximum = Math.max(maximum, count);
+      total += count;
+    }
+
     const svg = svgElement("svg", {
       viewBox: "0 0 " + width + " " + height,
       width: String(width),
@@ -478,53 +768,54 @@
     svg.appendChild(svgElement(
       "desc",
       { id: "heatmap-description" },
-      formatNumber(total) + " recorded sessions across the displayed calendar range. Darker marks indicate busier days."
+      formatNumber(total) + " recorded sessions across " + formatNumber(renderedDays) +
+      " days. Darker marks indicate busier days."
     ));
 
-    [
-      { label: "Mon", row: 0 },
-      { label: "Wed", row: 2 },
-      { label: "Fri", row: 4 }
-    ].forEach(function (item) {
-      svg.appendChild(svgElement("text", { x: "0", y: String(34 + item.row * 12), class: "heat-label" }, item.label));
+    MondayFirstRowLabels.forEach(function (label, row) {
+      svg.appendChild(svgElement("text", {
+        x: "0",
+        y: String(top + row * pitch + cell * 0.5 + 3),
+        class: "heat-label"
+      }, label));
     });
 
-    let lastMonth = -1;
-    for (let index = 0; index < renderedDays; index += 1) {
-      const date = addUTCDays(start, index);
-      const key = isoDate(date);
-      const count = activityMap.get(key) || 0;
-      const position = index + firstWeekday;
-      const column = Math.floor(position / 7);
-      const row = position % 7;
-      const x = 30 + column * 12;
-      const y = 28 + row * 12;
-      const level = heatLevel(count, maximum);
-
-      if (date.getUTCMonth() !== lastMonth && (index === 0 || date.getUTCDate() <= 7)) {
-        svg.appendChild(svgElement(
-          "text",
-          { x: String(x), y: "12", class: "heat-month" },
-          shortMonthNames[date.getUTCMonth()]
-        ));
-        lastMonth = date.getUTCMonth();
+    let lastLabelColumn = -99;
+    days.forEach(function (day) {
+      if (day.position % 7 !== 0) {
+        return;
       }
+      const column = Math.round(day.position / 7);
+      const monthStart = day.date.getUTCDate() === 1;
+      if (column !== 0 && !monthStart && column - lastLabelColumn < 5) {
+        return;
+      }
+      svg.appendChild(svgElement("text", {
+        x: String(gutter + column * pitch),
+        y: "10",
+        class: monthStart || column === 0 ? "heat-month" : "heat-date"
+      }, shortMonthNames[day.date.getUTCMonth()] + " " + day.date.getUTCDate()));
+      lastLabelColumn = column;
+    });
 
+    days.forEach(function (day) {
+      const column = Math.floor(day.position / 7);
+      const row = day.position % 7;
       const rect = svgElement("rect", {
-        x: String(x),
-        y: String(y),
-        width: "9",
-        height: "9",
-        rx: "0.7",
-        class: "heat-cell heat-cell--" + level
+        x: String(gutter + column * pitch),
+        y: String(top + row * pitch),
+        width: String(cell),
+        height: String(cell),
+        rx: "1",
+        class: "heat-cell heat-cell--" + heatLevel(day.count, maximum)
       });
       rect.appendChild(svgElement(
         "title",
         {},
-        formatDateOnly(key) + ": " + formatNumber(count) + " " + plural(count, "session", "sessions")
+        formatDateOnly(day.key) + ": " + formatNumber(day.count) + " " + plural(day.count, "session", "sessions")
       ));
       svg.appendChild(rect);
-    }
+    });
 
     container.appendChild(svg);
     const caption = formatDateOnly(isoDate(start)) + " — " + formatDateOnly(isoDate(end));
@@ -541,6 +832,20 @@
 
     renderClock(hours);
     renderWeekdays(weekdays);
+    let busiest = 0;
+    weekdays.forEach(function (count, index) {
+      if (count > weekdays[busiest]) {
+        busiest = index;
+      }
+    });
+    const busiestCount = weekdays[busiest];
+    setText("busiest-weekday", busiestCount > 0 ? weekdayNames[busiest] : "—");
+    setText(
+      "busiest-weekday-count",
+      busiestCount > 0
+        ? formatNumber(busiestCount) + " " + plural(busiestCount, "session", "sessions")
+        : "no recorded sessions"
+    );
     setText("favorite-hour", formatHour(rhythm.favorite_hour));
     setText("longest-streak", formatNumber(rhythm.longest_streak));
     setText(
@@ -700,18 +1005,27 @@
     }
 
     let leadingIndex = 0;
+    let maximumSessions = 0;
     providers.forEach(function (provider, index) {
+      maximumSessions = Math.max(maximumSessions, numeric(provider.sessions, 0));
       if (numeric(provider.sessions, 0) > numeric(providers[leadingIndex].sessions, 0)) {
         leadingIndex = index;
       }
     });
 
     providers.forEach(function (provider, index) {
-      container.appendChild(providerFolio(provider, index === leadingIndex && numeric(provider.sessions, 0) > 0));
+      container.appendChild(
+        providerFolio(provider, index === leadingIndex && numeric(provider.sessions, 0) > 0, maximumSessions)
+      );
     });
   }
 
-  function providerFolio(provider, shouldOpen) {
+  function harnessGlyph(id, className) {
+    const chart = window.SkuggsjaUsageChart;
+    return chart && typeof chart.glyph === "function" ? chart.glyph(id, className) : null;
+  }
+
+  function providerFolio(provider, shouldOpen, maximumSessions) {
     const details = document.createElement("details");
     const summary = document.createElement("summary");
     const title = element("span", "provider-title");
@@ -719,6 +1033,15 @@
     const statusMark = element("span", "status-mark status-mark--" + status.kind, status.label);
     const name = element("strong", "", cleanText(provider.name, cleanText(provider.id, "Unknown harness", 80), 90));
     const sessions = element("span", "provider-session-count", formatNumber(provider.sessions));
+    const sessionCell = element("span", "provider-session-cell");
+    const sessionBar = document.createElement("meter");
+    sessionBar.className = "provider-session-bar";
+    sessionBar.min = 0;
+    sessionBar.max = maximumSessions > 0 ? maximumSessions : 1;
+    sessionBar.value = numeric(provider.sessions, 0);
+    sessionBar.setAttribute("aria-hidden", "true");
+    sessionBar.setAttribute("aria-label", cleanText(provider.name, "Harness", 90) + ": " + formatNumber(provider.sessions) + " recovered sessions");
+    sessionCell.append(sessions, sessionBar);
     const verification = element(
       "span",
       "provider-verification",
@@ -734,9 +1057,13 @@
     details.className = "provider-entry";
     details.setAttribute("data-harness", cleanText(provider.id, "unknown", 80));
     details.open = shouldOpen;
-    title.append(statusMark, name);
+    const mark = harnessGlyph(provider.id, "provider-glyph");
+    if (mark) {
+      title.append(mark);
+    }
+    title.append(name, statusMark);
     summary.append(
-      title, sessions, verification,
+      title, sessionCell, verification,
       element("span", "provider-summary-coverage", "Coverage: " + cleanText(coverage.status, "Completeness unknown", 70))
     );
 
@@ -859,7 +1186,8 @@
     parent.appendChild(section);
   }
 
-  function renderProjects(rawProjects, rawLongestSession) {
+  function renderProjects(rawProjects, rawLongestSession, rawProviders) {
+    renderProjectsByTool(rawProviders);
     const projects = arrayOrEmpty(rawProjects)
       .filter(isRecord)
       .map(function (project) {
@@ -880,6 +1208,53 @@
       "longest-session-harness",
       available ? cleanText(longest.harness, "Harness not attributed", 100) : "Duration unavailable from the surviving histories"
     );
+  }
+
+  // Sessions per harness, shown beside its project count. Tool-call units and
+  // totals stay scoped to each harness and are never combined here.
+  function renderProjectsByTool(rawProviders) {
+    const container = document.getElementById("projects-by-tool");
+    if (!container) {
+      return;
+    }
+    const providers = arrayOrEmpty(rawProviders).filter(isRecord).map(function (provider) {
+      return {
+        name: cleanText(provider.name, cleanText(provider.id, "Unknown harness", 80), 90),
+        projects: numeric(provider.projects, 0),
+        sessions: numeric(provider.sessions, 0)
+      };
+    }).sort(function (a, b) {
+      return b.sessions - a.sessions || a.name.localeCompare(b.name);
+    });
+    container.replaceChildren();
+    if (providers.length === 0) {
+      container.appendChild(emptyLedger("No harness records were included in this report."));
+      return;
+    }
+    const maximum = Math.max.apply(null, providers.map(function (provider) { return provider.sessions; }).concat([1]));
+    const head = element("p", "tool-head");
+    head.append(element("span", "", "Tool"), element("span", "", "Projects"), element("span", "", "Sessions"));
+    const list = element("ol", "tool-list");
+    providers.forEach(function (provider) {
+      const meter = document.createElement("meter");
+      meter.min = 0;
+      meter.max = maximum;
+      meter.value = provider.sessions;
+      meter.setAttribute(
+        "aria-label",
+        provider.name + ": " + formatNumber(provider.projects) + " " + plural(provider.projects, "project", "projects") +
+        ", " + formatNumber(provider.sessions) + " " + plural(provider.sessions, "session", "sessions")
+      );
+      const row = element("li", "tool-row");
+      row.append(
+        element("span", "tool-row__name", provider.name),
+        element("span", "tool-row__count", formatNumber(provider.projects)),
+        element("span", "tool-row__count", formatNumber(provider.sessions) + " " + plural(provider.sessions, "session", "sessions")),
+        meter
+      );
+      list.appendChild(row);
+    });
+    container.append(head, list);
   }
 
   function renderRankedIndex(container, items, emptyMessage) {
@@ -1224,7 +1599,7 @@
       return 0;
     }
     const ratio = Math.log1p(count) / Math.log1p(maximum);
-    return Math.max(1, Math.min(4, Math.ceil(ratio * 4)));
+    return Math.max(1, Math.min(8, Math.ceil(ratio * 8)));
   }
 
   function auditChangeCount(audit, totals) {
