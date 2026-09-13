@@ -632,3 +632,55 @@ value and meter under the name; re-measured on the same page, the shortest label
 is **13.1 CSS px** and the name column is **204 px**. The full browser record
 then passed. The 12 px floor is a property the v0.2.0 record already established,
 so the correction preserved the floor rather than relaxing the check.
+
+## Release v0.2.1 and Homebrew synchronization — 2026-09-13
+
+`v0.2.1` selects `8290fde`, the squash merge of [PR #9](https://github.com/0merUfuk/skuggsja/pull/9) on head
+`452501c`. The annotated tag object is `aebb14d`. All seven required checks passed on the
+tagged commit — the pull-request runs on `452501c` and the push run `34769652019` on `8290fde`
+itself — before the tag existed. Release run `34769838064` published the draft as
+`draft: false`, `immutable: true`, `prerelease: false` with eight assets: six archives,
+`checksums.txt` and the generated formula.
+
+The published bytes were verified from a fresh download rather than from the build
+directory. `python3 scripts/verify-packages.py <release-download> v0.2.1` re-checked all six
+archive checksums, the regular-file member sets, the embedded UI files, every bundled webfont
+and the licence against this checkout, the Go target/provenance metadata, and then ran the
+installed-package smoke test (**30/30** checks) against the downloaded `darwin/arm64`
+executable, which reports `skuggsja 0.2.1`. `gh attestation verify` on the same archive
+resolved the signer to `0merUfuk/skuggsja` with SLSA provenance v1. Before the tag, local
+`goreleaser check`, a clean snapshot release and `python3 scripts/verify-packages.py dist`
+passed the same six-archive comparison against a `0.2.0-SNAPSHOT-8290fde` build.
+
+### Homebrew tap
+
+The updater was dispatched for `v0.2.1` and opened candidate
+[PR #5](https://github.com/0merUfuk/homebrew-skuggsja/pull/5) on head `6ba1732`, one file and
+nine changed lines: the version comment and the four URL/SHA pairs. Before merge:
+
+| Check | Result |
+| --- | --- |
+| Candidate formula versus the attested release asset | Byte-identical; both `sha256 09e130716a701589d9edbe4e70ee0107bfe5429ef6aa613e6fa180dceaa70ebc` |
+| Four pinned platform checksums versus the downloaded archives | All match `checksums.txt` and the freshly downloaded bytes |
+| Candidate diff against the tap's `main` | One file, 9 insertions and 9 deletions: the version line and the four URL/SHA pairs |
+| Required tap checks on head `6ba1732` | All five passed: candidate verification plus the four native lifecycles |
+| Merge | Candidate reviewed on that head and squash-merged as `6e2325e` |
+
+The public qualified installation path was then exercised on this machine: `brew update` and
+`brew upgrade 0merUfuk/skuggsja/skuggsja` moved the keg from 0.2.0 to 0.2.1, `skuggsja
+version` prints `skuggsja 0.2.1`, and `brew test` passes. The installed keg is the released
+payload: its executable is byte-identical to the `darwin/arm64` archive member
+(`sha256 361fa8c0cf46e00e7db6264cf115eb0c6803a11ae3737d570606b77fb6a83cf7`), and the
+stylesheet that installed binary serves on its loopback origin is byte-identical to this
+checkout's `web/styles.css` (`sha256 afbe8f7e8215b62764ae5d11e40bf97a940aa25858350c12f5cd15196c6a2340`),
+with 11 `var(--panel)` uses and 8 side-border declarations. The divider reduction is what the
+package manager ships.
+
+### Process note
+
+PR #9 carried one self-authored commit, and the default branch requires one approving review
+that the author cannot supply for their own pull request. All seven required checks had passed
+on the reviewed head, so the merge used the documented administrator bypass recorded for
+PR #5 and PR #7, and CI was then confirmed green on the merge commit itself before the tag was
+created. The tap change went through its gated path end to end: bot-authored candidate, owner
+approval of the workflow runs, five required checks, review, and a squash merge with no bypass.
