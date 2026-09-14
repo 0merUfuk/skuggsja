@@ -908,3 +908,63 @@ wraps as a table of contents instead of a scrolling strip.
 | `node scripts/verify-browser.cjs --revision true` | **1,620** assertions, 63 screenshots, pass, zero product requests off loopback |
 | Browser layout measurements at 1280/1440/1728/1920/320/390 | 0 uncontained block overflows, 0 horizontal overflows and 0 key-value overflow findings at every width |
 | Rail axis after the change, measured per folio | Numerals and labels share one centre at every captured width: 63 px at 1280, 65.5 px at 1440, 70 px at 1728 and 1920 |
+
+## Release v0.3.1 and Homebrew synchronization — 2026-09-14
+
+`v0.3.1` selects `bdcb954`, the squash merge of [PR #13](https://github.com/0merUfuk/skuggsja/pull/13) on
+head `8aaa412`. The annotated tag object is `bb34b5e3`. All seven required checks passed before the tag
+existed — the pull-request run `34794829400` and the feature-branch push run `34794821991` on `8aaa412`,
+and the push run `34795062821` on `bdcb954` itself. Release run `34795234593` published the draft as
+`draft: false`, `immutable: true`, `prerelease: false` with eight assets: six archives, `checksums.txt`
+and the generated formula.
+
+The published bytes were verified from a fresh download rather than from the build directory.
+`python3 scripts/verify-packages.py <release-download> v0.3.1` re-checked all six archive checksums, the
+regular-file member sets, the embedded UI files, every bundled webfont and the licence against this
+checkout, the Go target/provenance metadata, and then ran the installed-package smoke test (**30/30**
+checks) against the downloaded `darwin/arm64` executable, which reports `skuggsja 0.3.1`.
+`shasum -a 256 -c checksums.txt` passed for all six archives. `gh attestation verify` on the
+`darwin/arm64` archive resolved one attestation with predicate type `https://slsa.dev/provenance/v1`,
+signed by `0merUfuk/skuggsja/.github/workflows/release.yml@refs/tags/v0.3.1` and covering all eight
+subjects. Before the tag, local `goreleaser check`, a clean snapshot release and
+`python3 scripts/verify-packages.py dist` passed the same six-archive comparison against a
+`0.3.0-SNAPSHOT-bdcb954` build whose installed CLI smoke also passed 30/30.
+
+### Homebrew tap
+
+The updater was dispatched for `v0.3.1` and opened candidate
+[PR #7](https://github.com/0merUfuk/homebrew-skuggsja/pull/7) on head `a2c284d`, one file and nine
+changed lines: the version comment and the four URL/SHA pairs. The candidate's CI was approved to run,
+since the commit is bot-authored. Before merge:
+
+| Check | Result |
+| --- | --- |
+| Candidate formula versus the attested release asset | Byte-identical; both `sha256 829b754d9a88525186224fc30b6856e415a8c94f13d1b34eaa2a023a68e25c56` |
+| Four pinned platform checksums versus the downloaded archives | All four match `checksums.txt` and the freshly downloaded bytes, and every URL points at the `v0.3.1` tag |
+| Candidate diff against the tap's `main` | One file, 9 insertions and 9 deletions: the version line and the four URL/SHA pairs |
+| Required tap checks on head `a2c284d` | All five passed: candidate verification plus the four native lifecycles |
+| Merge | Candidate reviewed on that head and squash-merged as `46057b7` |
+
+The public qualified installation path was then exercised on this machine: `brew update` and
+`brew upgrade 0merUfuk/skuggsja/skuggsja` moved the keg from 0.3.0 to 0.3.1, `skuggsja version` prints
+`skuggsja 0.3.1`, and `brew test` passes. The installed keg is the released payload: its executable is
+byte-identical to the `darwin/arm64` archive member
+(`sha256 ace526dfeefdd4e550b3e61a309c50b631dd46fc59df003782729fce602b65cc`), and all three files that
+installed binary serves on its loopback origin are byte-identical to this checkout —
+`index.html` `sha256 f445734051e6672ff135d70b2c24bc310fcf99aa471c1d244b916d1a77485fb7`, `styles.css`
+`sha256 6e2f3472ccb45640c360000890cd102a0f0abf31383205b8212041ef6b01f4dc` and `app.js`
+`sha256 cc43181135b6d3715d61e758c661d57c8c9572cb790bfdb7a95e99a5e1dceece`. Re-measured on that served
+page at 1672×941, the rail's origin bead renders at y 12–19 and its terminal diamond at y 918–927 with
+14 px of air below it, so the mark this review found clipped by the viewport edge is whole in the
+shipped bundle.
+
+### Process note
+
+PR #13 carried one self-authored commit, and the default branch requires one approving review that the
+author cannot supply for their own pull request. All seven required checks had passed on the reviewed
+head, so the merge used the documented administrator bypass recorded for PR #5, PR #7, PR #9 and
+PR #11, and CI was then confirmed green on the merge commit itself before the tag was created. The
+reviewing tool's docstring-coverage warning recurred on this pull request and is the same default
+threshold already classified as not a convention of this repository. The tap change went through its
+gated path end to end: bot-authored candidate, approval of the workflow run, five required checks, an
+owner review, and a squash merge under `enforce_admins`, which allows no bypass there.
