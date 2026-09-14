@@ -852,3 +852,59 @@ documented administrator bypass recorded for PR #5, PR #7 and PR #9, and CI was 
 on the merge commit itself before the tag was created. The tap change went through its gated path
 end to end: bot-authored candidate, approval of the workflow run, five required checks, an owner
 review, and a squash merge under `enforce_admins`, which allows no bypass there.
+
+
+## UI review for v0.3.1 — 2026-09-14
+
+The owner reported that the chapter spine still did not match the supplied mockups, that
+layout and alignment errors remained, and that the Claude, Codex, Cursor and Hermes marks
+were not the published ones. Each claim was re-derived from the rendered page, the
+stylesheet and the mockups before anything was edited. The change is presentation only:
+`web/styles.css` and `web/app.js`, with no markup, aggregate, control or read-only
+behaviour touched.
+
+### Findings, classified before any change
+
+| Claim | Verdict | Evidence |
+| --- | --- | --- |
+| The spine is not the mockups' folio axis | Confirmed | `.folio-nav` measured 86.39 px wide while the rail token is 5.5 rem, so labels left the shared axis. There was one continuous spine, no origin bead and no terminal mark, and the active number was recoloured signal orange instead of serif ink |
+| The reading bead is drawn at the wrong end of its folio | Confirmed | At 1440 px the 8×8 ink bead rendered at y 497–504, the top of the list item, instead of beside the numeral. `.folio-nav a` was `position: static`, so the absolutely positioned marker resolved against `.folio-nav__item` |
+| The harness marks are approximations, not the published geometry | Confirmed | Claude was a generated `starburst(12, 10, 3.4)`, Codex and Cursor were hand-drawn hexagons and Hermes a plain triangle. The mockups draw the Claude starburst, the Codex blossom, the notched Hermes triangle with one nested filled face, and the three-face Cursor cube |
+| The projects-by-tool ledger drops the harness identity the rest of the page carries | Confirmed | Every row painted its meter with the default `--series` `#4d565f`. The four rows now resolve `#a8351a`, `#c8622f`, `#a9b1b8` and `#d9a48d` |
+| The Cursor and Hermes meters read as empty track | Confirmed | Meter fill against the `--bar` track measured claude 4.77:1, codex 2.90:1, cursor 1.57:1 and hermes 1.58:1 — three of four below the 3:1 non-text minimum |
+| The chapter list clips a folio mid-word below 48 rem | Confirmed | The 320 px capture ended at `04 P`. The list was `overflow-x: auto` with `flex-wrap: nowrap` and no scroll affordance |
+| The hero note wraps into a line that begins with a separator | Confirmed, minor | At 390 px the `20ch` clamp wrapped `TOP-LEVEL SESSIONS` and the note continued with `· CHILDREN…` |
+| The terminal diamond is cut in half by the viewport edge | Confirmed | At 1440×900 `.folio-nav__list::after` sat at `bottom: -4px`, so its rotated bounds spanned 894.3–905.7 px against the fixed rail's 900 px box and the rendered capture showed a 5 px stub. The ink now reads 918–927 at a 941 px viewport, 14 px of air below it |
+| The folio type is smaller than the mockups' | Confirmed | Across the eight frames the numerals measure 13–17 px of ink and the labels 10–11 px, beside a body cap height near 10 px; ours measured 12 px and 8 px, so the folio read as body text rather than as the rail's own display scale. The numerals and labels now measure 13 px and 9–10 px |
+| The proof strip's notes hang at different heights | Not fixed, deliberately | Bottom-aligning them needs `.proof-strip dd` to become a flex column, which fails the browser record's own `scrollWidth/scrollHeight > box` guard at 1280 px. The record's contract wins over a few pixels of visual raggedness |
+| The hero lede copy does not match the mockups' sentence | Not a defect | The sentence is composed from the retained aggregate in `web/app.js`. Hard-coding the mockup's wording would state data the artifact does not carry |
+| The projects-by-tool meters are wrong because Claude fills its row | Not a defect | Each fill is that harness's own session count against the maximum: 5,759 full, Codex 218 ≈ 3.8 %, Cursor 95 and Hermes 91 ≈ 1.6 % |
+| The rail should take the mockups' exact pitch | Not reproducible | The frames disagree with each other: numerals sit on a 93 px pitch in `05`, 100 px in `01`, and `08` draws hollow rings where `05` draws filled beads. The assets describe a language, not a metric, so the rail keeps one axis and the pitch the viewport can hold |
+| The tool ledger's header disagrees with its values | Not reproduced | At 1672 px the header cells and the row cells share exact edges: 1062.77/1348, 1364/1428 and 1444/1552 |
+| The ranked ledger's labels and values are misaligned | Not reproduced | At 1440 px the label row and the value row measure the same x-positions: 139.19 / 754.14 / 994.83 |
+
+### What changed
+
+The rail is one numbered folio per section hung on the centre of its own box: an origin bead
+at the head, a line and closing tick into each folio, a bead for the folio being read, and a
+terminal diamond whose air is measured from its rotated bounding box so the fixed rail can no
+longer clip it. The numerals and labels take the rail's display scale. Claude and Codex carry
+their published monochrome paths — the Anthropic asterisk and the OpenAI blossom, both from
+simple-icons, which is CC0 — while the Hermes notched triangle and the Cursor three-face cube
+are original vector reproductions of the supplied design assets, which carry no licensable
+brand file. Harness marks are drawn in ink and the recorded value carries the harness colour.
+Meters use a per-harness bar tone that holds at least 3:1 against the track, while the bubbles
+keep the identity hue the chart's fill assertion depends on. Below 48 rem the chapter list
+wraps as a table of contents instead of a scrolling strip.
+
+### Local gates on the exact head
+
+| Gate | Result |
+| --- | --- |
+| `go build ./...`, `go vet ./...`, `gofmt -l .`, `go test ./... -count=1` | All 12 packages pass; no vet or format findings |
+| `node --test web/*.cjs scripts/generate_homebrew_test.cjs` | **36/36** pass |
+| `python3 scripts/release_workflow_test.py` | **21/21** pass |
+| `python3 scripts/verify_packages_test.py` | **9/9** pass |
+| `node scripts/verify-browser.cjs --revision true` | **1,620** assertions, 63 screenshots, pass, zero product requests off loopback |
+| Browser layout measurements at 1280/1440/1728/1920/320/390 | 0 uncontained block overflows, 0 horizontal overflows and 0 key-value overflow findings at every width |
+| Rail axis after the change, measured per folio | Numerals and labels share one centre at every captured width: 63 px at 1280, 65.5 px at 1440, 70 px at 1728 and 1920 |

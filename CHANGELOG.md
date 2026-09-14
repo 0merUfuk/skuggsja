@@ -4,6 +4,22 @@ All notable changes to this project will be documented in this file.
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and releases use [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.1] - 2026-09-14
+
+### Changed
+
+- The chapter spine on wide viewports is one numbered folio per section hung on a single axis: an origin bead at the head, a line and a closing tick into each folio, a filled bead on the folio you are reading and a terminal diamond at the foot. The rail takes the whole left margin and hangs every folio on the centre of its own box, so every numeral and label shares one line of centres at every captured width, and the numerals are serif ink rather than signal colour. The folio numerals and labels take the rail's own display scale, matching the size the supplied mockups give them rather than body-text scale.
+- Harness marks are the published monochrome geometry rather than hand-drawn approximations: Claude Code and Codex carry the upstream monochrome paths, and Hermes Agent and Cursor are drawn from the notched triangle and three-face cube the supplied design assets show. Marks are drawn in ink; the recorded value carries the harness colour.
+- Below 48 rem the chapter list wraps into a table of contents instead of a horizontal strip that clipped one folio mid-word with no scroll affordance.
+
+### Fixed
+
+- The reading bead on the active folio was drawn at the wrong end of its line. The folio link was `position: static`, so the absolutely positioned marker resolved against the list item and landed above the line instead of at its foot beside the numeral.
+- The projects-by-tool ledger drew every meter in the neutral default series colour, so the four harnesses that are colour-coded in the usage key and the model index lost that identity in the one table that names them. Each row now carries its own harness scope.
+- The Cursor and Hermes meter fills measured 1.57:1 and 1.58:1 against the meter track and Codex 2.90:1, all below the 3:1 non-text minimum, so those bars read as empty track. Meters now use a per-harness bar tone that holds at least 3:1 against the track; the identity hues the bubbles use are unchanged.
+- The hero recovered-sessions note wrapped at its desktop measure on narrow viewports, which left a line beginning with a separator glyph. Below 48 rem the note takes the width it has.
+- The terminal diamond was drawn half outside the viewport. The fixed rail pinned it to the very bottom edge with `bottom: calc(var(--folio-dot) / -2)`, so the closing mark of the spine was cut in half at every scroll position. The foot now reserves the closing line, the mark and the same air the head bead gets, and the mark's air is measured from its rotated bounding box.
+
 ## [0.3.0] - 2026-09-14
 
 ### Changed
