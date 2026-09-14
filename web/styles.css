@@ -332,6 +332,7 @@ dt { color: var(--ink-soft); }
     position: fixed; z-index: 5; inset-block: 0;
     left: 0; width: calc(var(--page-gutter) + var(--rail));
     display: flex; align-items: stretch;
+    background: var(--paper);
   }
   .folio-nav__list {
     flex: 1; display: flex; flex-direction: column; align-items: stretch;
