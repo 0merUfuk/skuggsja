@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/0merUfuk/skuggsja/internal/model"
+	"github.com/0merUfuk/skuggsja/internal/platform"
 	"github.com/0merUfuk/skuggsja/internal/provider"
 	"github.com/0merUfuk/skuggsja/internal/sqlitecopy"
 )
@@ -29,6 +30,12 @@ type Reader struct{ DatabasePath string }
 
 func (Reader) Harness() model.Harness { return model.Cursor }
 func (Reader) DisplayName() string    { return "Cursor" }
+
+// New builds the Cursor reader from the machine's discovered paths. It is
+// the harness's sole entry in the CLI's provider registry.
+func New(paths platform.Paths) provider.Reader {
+	return Reader{DatabasePath: paths.CursorStateDB}
+}
 
 func (r Reader) Discover(_ context.Context) (provider.Discovery, error) {
 	d := provider.Discovery{Harness: model.Cursor}

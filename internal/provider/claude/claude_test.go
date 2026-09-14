@@ -157,6 +157,96 @@ func TestRepeatedAssistantUpdateCompletesUsageAndReportsModelConflict(t *testing
 	}
 }
 
+func TestSyntheticModelSentinelExcludedFromModelsButUsageRetained(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	project := filepath.Join(root, "project")
+	if err := os.Mkdir(project, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	data := `{"type":"assistant","sessionId":"current","timestamp":"2026-01-02T21:00:00Z","message":{"id":"resp-real","role":"assistant","model":"claude-sonnet-5","content":[],"usage":{"input_tokens":10,"output_tokens":5}}}` + "\n" +
+		`{"type":"assistant","sessionId":"current","timestamp":"2026-01-02T21:00:01Z","message":{"id":"resp-synthetic","role":"assistant","model":"<synthetic>","content":[],"usage":{"input_tokens":7,"output_tokens":3}}}` + "\n"
+	if err := os.WriteFile(filepath.Join(project, "current.jsonl"), []byte(data), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	result := readTestRoot(t, root)
+	session := result.Sessions[0]
+	if got, want := len(session.Calls), 2; got != want {
+		t.Fatalf("calls = %d, want %d", got, want)
+	}
+	if _, exists := session.Models[syntheticModelSentinel]; exists {
+		t.Fatalf("models = %#v, the sentinel must never be model-attributed", session.Models)
+	}
+	if got, want := session.Models["claude-sonnet-5"].Turns, int64(1); got != want {
+		t.Errorf("claude-sonnet-5 turns = %d, want %d", got, want)
+	}
+	if got, want := session.Usage.Input, int64(17); got != want {
+		t.Errorf("session input tokens = %d, want %d (the synthetic record's usage must still count)", got, want)
+	}
+	if got, want := warningCount(result, "synthetic_model_records_excluded"), 1; got != want {
+		t.Errorf("synthetic_model_records_excluded = %d, want %d", got, want)
+	}
+}
+
+func TestSyntheticModelUpdateNeverOverwritesRealModel(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	project := filepath.Join(root, "project")
+	if err := os.Mkdir(project, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	data := `{"type":"assistant","sessionId":"current","timestamp":"2026-01-02T21:00:00Z","message":{"id":"response","role":"assistant","model":"claude-sonnet-5","content":[],"usage":{"input_tokens":10,"output_tokens":2}}}` + "\n" +
+		`{"type":"assistant","sessionId":"current","timestamp":"2026-01-02T21:00:01Z","message":{"id":"response","role":"assistant","model":"<synthetic>","content":[],"usage":{"input_tokens":10,"output_tokens":5}}}` + "\n"
+	if err := os.WriteFile(filepath.Join(project, "current.jsonl"), []byte(data), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	result := readTestRoot(t, root)
+	session := result.Sessions[0]
+	if got, want := len(session.Calls), 1; got != want {
+		t.Fatalf("calls = %d, want %d", got, want)
+	}
+	if got, want := session.Calls[0].Model, "claude-sonnet-5"; got != want {
+		t.Errorf("call model = %q, want %q (a synthetic update must not overwrite a real model)", got, want)
+	}
+	if got, want := session.Models["claude-sonnet-5"].Turns, int64(1); got != want {
+		t.Errorf("claude-sonnet-5 turns = %d, want %d", got, want)
+	}
+	if got, want := warningCount(result, "assistant_update_model_conflict"), 0; got != want {
+		t.Errorf("assistant_update_model_conflict = %d, want %d (a sentinel update is not a real conflict)", got, want)
+	}
+	if got, want := warningCount(result, "synthetic_model_records_excluded"), 1; got != want {
+		t.Errorf("synthetic_model_records_excluded = %d, want %d", got, want)
+	}
+	if got, want := session.Usage.Output, int64(5); got != want {
+		t.Errorf("session output tokens = %d, want %d (the latest usage snapshot is still retained)", got, want)
+	}
+}
+
+func TestSyntheticModelFirstRecordYieldsToRealModelUpdate(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	project := filepath.Join(root, "project")
+	if err := os.Mkdir(project, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	data := `{"type":"assistant","sessionId":"current","timestamp":"2026-01-02T21:00:00Z","message":{"id":"response","role":"assistant","model":"<synthetic>","content":[]}}` + "\n" +
+		`{"type":"assistant","sessionId":"current","timestamp":"2026-01-02T21:00:01Z","message":{"id":"response","role":"assistant","model":"claude-sonnet-5","content":[],"usage":{"input_tokens":10,"output_tokens":5}}}` + "\n"
+	if err := os.WriteFile(filepath.Join(project, "current.jsonl"), []byte(data), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	result := readTestRoot(t, root)
+	session := result.Sessions[0]
+	if got, want := session.Calls[0].Model, "claude-sonnet-5"; got != want {
+		t.Errorf("call model = %q, want %q (a later real-model update must win over an initial synthetic record)", got, want)
+	}
+	if got, want := session.Models["claude-sonnet-5"].Turns, int64(1); got != want {
+		t.Errorf("claude-sonnet-5 turns = %d, want %d", got, want)
+	}
+	if got, want := warningCount(result, "synthetic_model_records_excluded"), 1; got != want {
+		t.Errorf("synthetic_model_records_excluded = %d, want %d", got, want)
+	}
+}
+
 func TestPhysicalFileIdentityAnchorsCopiedHistory(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()

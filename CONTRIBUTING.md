@@ -129,6 +129,14 @@ type Reader interface {
 }
 ```
 
+A harness id is any string (`model.Harness` is `type Harness string`); it does not need a named constant in `internal/model`. The UI already degrades safely for an id it does not recognize (neutral colour, the `unknown` diamond glyph), so a new provider is honest and functional before anyone designs it a bespoke mark or colour.
+
+To register a genuinely new harness (rather than change an existing one):
+
+1. Add its native path-discovery fields to `platform.Paths` (`internal/platform/paths.go`) alongside the existing per-harness fields.
+2. Write the provider package (`internal/provider/<name>`) implementing `Reader`, plus a `New(platform.Paths) provider.Reader` constructor that maps the relevant `platform.Paths` fields onto it — see `internal/provider/claude.New` for the pattern.
+3. Append that constructor to the `registry` slice in `internal/cli/cli.go`. This is the only edit needed to the CLI, the terminal output, or the UI: `registry`'s order is the deterministic read/print/display order, and nothing else hard-codes the four shipped harnesses.
+
 ### Discovery
 
 - Resolve verified native source locations and explicit path overrides; document excluded metadata stores separately.
