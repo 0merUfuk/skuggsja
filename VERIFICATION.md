@@ -968,3 +968,63 @@ reviewing tool's docstring-coverage warning recurred on this pull request and is
 threshold already classified as not a convention of this repository. The tap change went through its
 gated path end to end: bot-authored candidate, approval of the workflow run, five required checks, an
 owner review, and a squash merge under `enforce_admins`, which allows no bypass there.
+
+## Rail isolation, synthetic-model exclusion, mark provenance and harness registry for v0.3.2 — 2026-09-15
+
+Four open items carried over from the v0.3.1 review as a handoff: the folio rail painting through
+full-bleed bands, a Claude Code transcript sentinel appearing as a model, the Cursor and Hermes marks,
+and a hard-coded provider list limiting the shipped harnesses to four. Each was independently
+re-confirmed against the live code and a real local aggregate before any change, in the stated priority
+order.
+
+### Findings, classified before any change
+
+| Claim | Verdict | Evidence |
+| --- | --- | --- |
+| The folio rail has no background of its own | Confirmed | `.folio-nav` in the `min-width: 80rem` block was `position: fixed` with no `background`; `.masthead` (`border-bottom`), `.chapter--inverse`, `.boundary` and panel surfaces such as `.model-index` are full-width, so their tone and hairlines painted straight through the rail column |
+| `<synthetic>` is counted as a Claude Code model | Confirmed | Real transcripts under `~/.claude/projects` contain assistant records with literal `"model":"<synthetic>"`; the parser passed that label through `provider.SafeLabel` unchanged, so it entered `session.Models` and the ranked model list like any other model name |
+| `providers[2].verification = "schema-verified with synthetic fixtures"` is the same defect | Not a defect | That string is Cursor's own honest verification level (`internal/provider/cursor/cursor.go:66`), unrelated to the transcript sentinel; it was left untouched and is still present after the fix |
+| Cursor's mark is not an official one | Confirmed | The shipped mark was a hand-drawn three-path cube (hexagon outline, one filled face, edge strokes). simple-icons (CC0-1.0) publishes a single-path "Cursor" mark declaring Cursor's own brand page as its source — the same library that already supplied the Claude and Codex marks the owner accepted as correct |
+| Hermes Agent has an available official mark | Not reproducible | Hermes Agent is the owner's own local orchestration agent, not a public product; no public brand asset exists to source. The mark stays mockup-derived, now matching the supplied design asset's nested-hollow-triangle geometry more faithfully than the previous filled-face rendering |
+| The reader list is a hard-coded, unextendable literal | Confirmed | `internal/cli/cli.go`'s `readers()` was a literal four-element slice constructing each provider's struct inline; nothing elsewhere in the aggregation pipeline (`internal/analytics`, `internal/app`) assumes a fixed harness count, and the UI already had a safe fallback path (neutral `--series` colour, the `unknown` diamond glyph) for an id it does not recognize |
+
+### What changed
+
+`.folio-nav` now declares `background: var(--paper)` inside the `min-width: 80rem` block — the page's
+own paper token — so the already-painted full-bleed bands are hidden behind the rail rather than
+restructured; no `position`/`z-index` change was needed. Claude Code's parser now recognizes the literal
+`<synthetic>` model label at the point it is read, blanks the call's model attribution, and records a new
+`synthetic_model_records_excluded` warning; the call's token usage and turns remain fully counted, only
+its model-ranking attribution is dropped. On this machine's real history the exclusion accounts for 6,874
+records and `<synthetic>` no longer appears in `models[]`. Cursor's glyph is now simple-icons' own
+"Cursor" path, rendered solid like Claude and Codex; Hermes's two nested triangles are now stroked at
+`2.1` (up from the shared `1.6` default) with the inner triangle hollow instead of filled, matching the
+mockup's nested-outline geometry. `internal/cli/cli.go` now assembles its four providers from a
+`registry` of `func(platform.Paths) provider.Reader` factories — one per harness, in read/print/display
+order — and each provider package (`claude`, `codex`, `hermes`, `cursor`) gained its own `New` constructor
+encapsulating the construction that used to live inline in `cli.go`; `readers()` is a two-line wrapper
+over a separately tested `buildReaders` so the registry mechanism itself, not just today's four
+harnesses, has direct test coverage. `CONTRIBUTING.md` documents the three-step process for a new
+harness: path-discovery fields on `platform.Paths`, a provider package with a `New` constructor, and one
+line appended to `registry`.
+
+### Local gates on the exact head
+
+| Gate | Result |
+| --- | --- |
+| `go build ./...`, `go vet ./...`, `go test ./...` | All 12 tested packages pass; `go vet` reports nothing |
+| `node --test web/*.cjs scripts/generate_homebrew_test.cjs` | **38/38** pass (36 baseline + 2 new: the unrecognized-harness glyph/colour/name fallback) |
+| `python3 scripts/release_workflow_test.py` | **21/21** pass |
+| `python3 scripts/verify_packages_test.py` | **9/9** pass |
+| `goreleaser check` | 1 configuration file validated |
+| `goreleaser release --snapshot --clean --skip=publish` then `python3 scripts/verify-packages.py dist` | 6/6 archive checksums, regular-file contents, embedded assets and Go target/provenance metadata; installed CLI smoke **30/30** |
+| `node scripts/verify-browser.cjs --revision true` against a freshly generated real aggregate | **1,620/1,620** assertions, 63 screenshots, pass, zero product requests off loopback; evidence retained at `~/Library/Caches/skuggsja/verify-evidence-v032-final` |
+| Live real-data check: rail over `.chapter--inverse`/`.boundary`, and over the masthead hairline, at 1600 px | Rail ground constant at every inspected scroll offset; no hairline visible inside the rail column |
+| Live real-data check: rendered glyph DOM for Cursor and Hermes, both `.usage-glyph` and `.provider-glyph` contexts | Cursor: one path, `usage-glyph--solid`, `fill` = ink, `stroke: none`. Hermes: two paths, no `--solid`, `fill: none`, computed `stroke-width: 2.1px` in both contexts (overriding the `1.6px`/`1.7px` context defaults) |
+| Live real-data check: `models[]` and provider warnings for the `claude` entry | `<synthetic>` absent from `models[]`; `synthetic_model_records_excluded` present with count 6,874 and the expected message; `claude-sonnet-5` unchanged as the top model (5,928 turns) |
+| `schema_version` | Unchanged at 3 — no aggregate schema change was needed for this round |
+
+Scope note: this round is presentation, parser-label and CLI-assembly only. The aggregate schema, the
+privacy guarantees, the CSP and every other harness's verification level are unchanged; `internal/cli`,
+`internal/provider/{claude,codex,hermes,cursor}`, `web/app.js`, `web/styles.css` and `CONTRIBUTING.md`
+were touched, nothing else.
