@@ -115,6 +115,10 @@
   --hermes: #d9a48d;
   --cursor: #a9b1b8;
   --series: var(--ink-soft);
+  /* Bars carry magnitude, so they take a version of the harness hue that
+     holds at least 3:1 against the meter track; the bubbles keep the
+     identity hue itself. */
+  --series-bar: var(--series);
   --series-ink: var(--ink);
 
   /* Type */
@@ -161,6 +165,13 @@
   --rail: 5.5rem;
   --hair: 1px;
   --rule-ink: 2px;
+  /* Folio rail rhythm: the line between two folios, the air it hands over,
+     the bead that marks the folio you are reading, and its closing tick. */
+  --folio-segment: 2rem;
+  --folio-lead: 0.5rem;
+  --folio-dot: 0.5rem;
+  --folio-cap: 0.5rem;
+  --folio-rule: #8d9599;
 }
 
 /* ==========================================================================
@@ -289,10 +300,12 @@ dt { color: var(--ink-soft); }
   .source-status__inner { grid-template-columns: minmax(0, 1fr) minmax(0, 1.05fr); align-items: baseline; }
 }
 
-/* The chapter spine: a fixed rail of ticks, numbers and labels */
+/* The chapter spine: one numbered folio per section, hung on a single axis.
+   An origin bead, a line and closing tick per folio, a filled bead for the
+   folio you are reading, and a terminal diamond at the foot of the rail. */
 .folio-nav { width: 100%; }
 .folio-nav__list {
-  display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 var(--space-4);
+  display: flex; flex-wrap: wrap; align-items: center; gap: 0 var(--space-4);
   margin: 0; padding: 0 0 var(--space-2); list-style: none;
 }
 .folio-nav a {
@@ -313,47 +326,82 @@ dt { color: var(--ink-soft); }
   .coverage-notice, .field-note, .page-footer {
     padding-inline-start: calc(var(--page-gutter) + var(--rail));
   }
+  /* The rail takes the whole left margin and hangs its folios on the centre of
+     its own box, so every mark lands on one line. */
   .folio-nav {
     position: fixed; z-index: 5; inset-block: 0;
-    left: 0; width: calc(2 * var(--page-gutter));
+    left: 0; width: calc(var(--page-gutter) + var(--rail));
     display: flex; align-items: stretch;
   }
   .folio-nav__list {
-    flex: 1; display: flex; flex-direction: column; justify-content: space-between;
-    gap: 0; padding: var(--space-5) 0 var(--space-4); position: relative;
+    flex: 1; display: flex; flex-direction: column; align-items: stretch;
+    justify-content: space-between; gap: 0;
+    /* The foot reserves the closing line, the terminal mark and the same air
+       the head bead gets, so the fixed rail never clips its own terminus. */
+    padding: var(--space-4) 0 calc(var(--folio-lead) + var(--folio-segment) + var(--space-4) + var(--space-3));
+    position: relative;
   }
-  /* the spine */
+  /* the origin bead at the head of the rail */
   .folio-nav__list::before {
-    content: ""; position: absolute; top: var(--space-3); bottom: var(--space-6); left: 50%;
-    width: var(--hair); background: var(--rule-strong);
+    content: ""; position: absolute; top: calc(var(--space-4) - var(--folio-dot) / 2); left: 50%;
+    width: var(--folio-dot); height: var(--folio-dot); margin-left: calc(var(--folio-dot) / -2);
+    border-radius: 50%; background: var(--ink);
   }
-  /* the terminal */
+  /* The terminal diamond at the foot of the rail. A square turned 45 degrees
+     paints past its own box, so the air is measured from the rotated bounds or
+     the viewport edge cuts the mark in half. */
   .folio-nav__list::after {
-    content: ""; position: absolute; bottom: var(--space-3); left: 50%;
-    width: 0.4rem; height: 0.4rem; margin-left: -0.2rem;
-    background: var(--ink-soft); transform: rotate(45deg);
+    content: ""; position: absolute; bottom: calc(var(--space-4) - var(--folio-dot) * 0.207); left: 50%;
+    width: var(--folio-dot); height: var(--folio-dot); margin-left: calc(var(--folio-dot) / -2);
+    background: var(--ink); transform: rotate(45deg);
   }
-  .folio-nav__item { display: flex; justify-content: center; }
+  .folio-nav__item {
+    position: relative; display: grid; justify-items: center;
+    padding-block-start: calc(var(--folio-segment) + var(--folio-lead));
+  }
+  /* the line that carries the folio above down to this one */
+  .folio-nav__item::before {
+    content: ""; position: absolute; top: 0; left: 50%;
+    width: var(--hair); height: var(--folio-segment);
+    margin-left: calc(var(--hair) / -2); background: var(--folio-rule);
+  }
+  /* the tick that closes that line */
+  .folio-nav__item::after {
+    content: ""; position: absolute; top: calc(var(--folio-segment) - var(--hair)); left: 50%;
+    width: var(--folio-cap); height: var(--hair);
+    margin-left: calc(var(--folio-cap) / -2); background: var(--folio-rule);
+  }
   .folio-nav a {
-    position: relative; flex-direction: column; align-items: center; gap: 0.2rem;
-    min-height: 0; padding: 0; border-bottom: 0;
-    text-align: center;
+    position: relative;
+    flex-direction: column; align-items: center; gap: 0.1rem;
+    width: 100%; min-height: 0; padding: 0; border-bottom: 0; text-align: center;
   }
-  .folio-nav a::before {
-    content: ""; position: absolute; top: 0; left: 50%; margin-left: -0.45rem;
-    width: 0.9rem; height: var(--hair); background: var(--rule-strong);
+  .folio-nav__index {
+    font: 400 var(--text-lg)/1 var(--font-display);
+    letter-spacing: 0.01em; color: var(--ink);
   }
-  .folio-nav a::after {
-    content: ""; position: absolute; top: -0.22rem; left: 50%; margin-left: -0.22rem;
-    width: 0.44rem; height: 0.44rem; border-radius: 50%; background: transparent;
+  .folio-nav__label { font-size: var(--text-sm); letter-spacing: 0.12em; color: var(--ink-soft); }
+  .folio-nav a:hover .folio-nav__index,
+  .folio-nav a:hover .folio-nav__label { color: var(--signal); }
+  /* the folio you are reading is the one whose hand is drawn in full ink */
+  .folio-nav a[aria-current="true"] .folio-nav__index { color: var(--ink); }
+  .folio-nav a[aria-current="true"] .folio-nav__label { color: var(--ink); }
+  /* the folio you are reading carries a bead where the tick would be */
+  .folio-nav a[aria-current="true"]::after {
+    content: ""; position: absolute;
+    top: calc(-1 * (var(--folio-lead) + var(--folio-dot))); left: 50%;
+    width: var(--folio-dot); height: var(--folio-dot); margin-left: calc(var(--folio-dot) / -2);
+    border-radius: 50%; background: var(--ink);
   }
-  .folio-nav a:hover { color: var(--signal); }
-  .folio-nav a:hover::before { background: var(--signal); }
-  .folio-nav a[aria-current="true"] { color: var(--ink); }
-  .folio-nav a[aria-current="true"]::after { background: var(--ink); }
-  .folio-nav a[aria-current="true"] .folio-nav__index { color: var(--signal); }
-  .folio-nav__index { font-size: var(--text-sm); letter-spacing: 0.02em; }
-  .folio-nav__label { font-size: var(--text-micro); letter-spacing: 0.1em; }
+  .folio-nav__item:has(a[aria-current="true"])::after { background: transparent; }
+  /* the head bead already marks the first folio when it is the one you read */
+  .folio-nav__item:first-child a[aria-current="true"]::after { display: none; }
+  /* the last folio runs on into the terminal mark */
+  .folio-nav__item:last-child a::before {
+    content: ""; position: absolute; top: calc(100% + var(--folio-lead)); left: 50%;
+    width: var(--hair); height: var(--folio-segment);
+    margin-left: calc(var(--hair) / -2); background: var(--folio-rule);
+  }
 }
 
 /* ==========================================================================
@@ -514,10 +562,10 @@ dt { color: var(--ink-soft); }
    ========================================================================== */
 .usage-layout { grid-template-columns: minmax(0, 1fr); gap: var(--space-8); }
 .harness-usage { display: grid; gap: var(--space-4); }
-[data-harness="claude"] { --series: var(--claude); --series-ink: var(--paper-light); }
-[data-harness="codex"] { --series: var(--codex); --series-ink: var(--ink); }
-[data-harness="cursor"] { --series: var(--cursor); --series-ink: var(--ink); }
-[data-harness="hermes"] { --series: var(--hermes); --series-ink: var(--ink); }
+[data-harness="claude"] { --series: var(--claude); --series-bar: var(--claude); --series-ink: var(--paper-light); }
+[data-harness="codex"] { --series: var(--codex); --series-bar: #c05c2b; --series-ink: var(--ink); }
+[data-harness="cursor"] { --series: var(--cursor); --series-bar: #6a7783; --series-ink: var(--ink); }
+[data-harness="hermes"] { --series: var(--hermes); --series-bar: #a8654a; --series-ink: var(--ink); }
 #usage-chart { display: grid; gap: var(--space-5); }
 .usage-controls { display: inline-flex; justify-self: start; border: var(--hair) solid var(--signal); background: var(--paper-light); }
 .usage-metric {
@@ -564,10 +612,14 @@ dt { color: var(--ink-soft); }
 @media (min-width: 80rem) { .usage-key-row:not(:first-child) .usage-key-button { padding-left: var(--space-5); } }
 .usage-key-button:hover { background: var(--hover-tint); }
 .usage-key-button[data-active="true"] { background: var(--paper-light); }
-.usage-glyph { grid-area: glyph; width: 2.25rem; height: 2.25rem; color: var(--series); }
+/* The mark names the harness, so it is drawn in ink; the recorded value is
+   what carries that harness's colour. */
+.usage-glyph { grid-area: glyph; align-self: start; width: 2.25rem; height: 2.25rem; color: var(--ink); }
 .usage-glyph svg, .provider-glyph svg { display: block; width: 100%; height: 100%; }
 .usage-glyph svg { fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linejoin: round; }
 .usage-glyph--solid svg { fill: currentColor; stroke: none; }
+/* a mark may carry one filled face inside an otherwise drawn outline */
+.usage-glyph svg .glyph-face { fill: currentColor; stroke: none; }
 .usage-key-name { grid-area: name; font: 400 var(--text-lede)/1.25 var(--font-display); }
 .usage-key-value { grid-area: value; font: 400 var(--text-xl)/1.1 var(--font-display); letter-spacing: -0.02em; }
 .usage-key-secondary { grid-area: meta; color: var(--ink-soft); font: 400 var(--text-xs)/1.5 var(--font-data); letter-spacing: 0.04em; }
@@ -589,10 +641,10 @@ meter {
   border: 0; border-radius: 0; background: var(--bar);
 }
 meter::-webkit-meter-bar { border: 0; border-radius: 0; background: var(--bar); }
-meter::-webkit-meter-optimum-value { background: var(--series); }
-meter::-webkit-meter-suboptimum-value { background: var(--series); }
-meter::-webkit-meter-even-less-good-value { background: var(--series); }
-meter::-moz-meter-bar { background: var(--series); }
+meter::-webkit-meter-optimum-value { background: var(--series-bar); }
+meter::-webkit-meter-suboptimum-value { background: var(--series-bar); }
+meter::-webkit-meter-even-less-good-value { background: var(--series-bar); }
+meter::-moz-meter-bar { background: var(--series-bar); }
 
 .model-index { display: grid; gap: var(--space-4); padding: var(--space-6); background: var(--panel); }
 .index-heading h3 { font-size: var(--text-lg); font-weight: 400; font-family: var(--font-display); letter-spacing: -0.01em; }
@@ -765,10 +817,11 @@ meter::-moz-meter-bar { background: var(--series); }
 .provider-entry > summary:hover { background: var(--hover-tint); }
 .provider-entry[open] > summary { border-bottom: var(--hair) solid var(--rule-strong); }
 .provider-title { display: flex; align-items: center; gap: var(--space-3); min-width: 0; }
-.provider-glyph { flex: 0 0 auto; width: 1.75rem; height: 1.75rem; color: var(--series); }
+.provider-glyph { flex: 0 0 auto; width: 2rem; height: 2rem; color: var(--ink); }
 .provider-glyph svg, .harness-glyph svg { display: block; width: 100%; height: 100%; }
 .provider-glyph svg { fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linejoin: round; }
 .provider-glyph--solid svg { fill: currentColor; stroke: none; }
+.provider-glyph svg .glyph-face { fill: currentColor; stroke: none; }
 .provider-title strong { font-size: var(--text-lede); font-weight: 400; font-family: var(--font-display); overflow-wrap: anywhere; }
 .provider-session-cell { display: flex; align-items: center; gap: var(--space-4); min-width: 0; }
 .provider-session-count { flex: 0 0 auto; font: 400 var(--text-lg)/1.2 var(--font-display); }
@@ -986,10 +1039,14 @@ meter::-moz-meter-bar { background: var(--series); }
   .masthead__inner { flex-direction: column; align-items: flex-start; gap: var(--space-3); }
   .masthead__imprint { flex-direction: row; align-items: center; justify-content: space-between; width: 100%; }
   .wordmark__name { font-size: 1.75rem; }
-  .folio-nav__list { gap: 0 var(--space-4); padding-bottom: var(--space-3); overflow-x: auto; flex-wrap: nowrap; }
+  /* The chapter list becomes a table of contents: every folio stays visible
+     instead of a strip that clips one mid-word with no scroll affordance. */
+  .folio-nav__list { gap: var(--space-1) var(--space-4); padding-bottom: var(--space-3); }
   .folio-nav__item { flex: 0 0 auto; }
   .folio-nav a { min-height: 2.75rem; }
   .hero { padding-block: var(--space-6) var(--space-7); }
+  /* the note takes the width it has rather than wrapping at a desktop measure */
+  .hero-total__label { max-width: none; }
   .hero__ledger { grid-template-columns: minmax(0, 1fr); }
   .hero__ledger > * { padding-inline: 0; }
   .proof-strip { grid-template-columns: repeat(2, minmax(0, 1fr)); row-gap: var(--space-4); }
