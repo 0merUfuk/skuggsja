@@ -16,10 +16,16 @@ import (
 	"time"
 
 	"github.com/0merUfuk/skuggsja/internal/model"
+	"github.com/0merUfuk/skuggsja/internal/platform"
 	"github.com/0merUfuk/skuggsja/internal/provider"
 )
 
 const maxRecordBytes = 64 << 20
+
+// syntheticModelSentinel marks assistant records Claude Code itself injects
+// for synthetic/error turns; it is a transcript sentinel, not a model, and
+// must never enter the model ranking or usage attribution.
+const syntheticModelSentinel = "<synthetic>"
 
 // Reader discovers terminal/IDE histories plus Claude Desktop's embedded local
 // agent histories and Claude Code's supplemental prompt/statistics indexes.
@@ -36,6 +42,16 @@ type Reader struct {
 
 func (Reader) Harness() model.Harness { return model.Claude }
 func (Reader) DisplayName() string    { return "Claude Code" }
+
+// New builds the Claude Code reader from the machine's discovered paths. It
+// is the harness's sole entry in the CLI's provider registry.
+func New(paths platform.Paths) provider.Reader {
+	return Reader{
+		ProjectsDir: paths.ClaudeProjects, HistoryFile: paths.ClaudeHistory, ExtraHomes: paths.ClaudeExtraHomes,
+		StatsFile: paths.ClaudeStats, GlobalStateFile: paths.ClaudeGlobalState,
+		DesktopSessionsDir: paths.ClaudeDesktopSessions, CodeSessionsDir: paths.ClaudeCodeSessions,
+	}
+}
 
 func (r Reader) discoverConfigured(_ context.Context) (provider.Discovery, error) {
 	d := provider.Discovery{Harness: model.Claude}
@@ -594,6 +610,7 @@ func claudeWarningMessage(code string) string {
 		"assistant_usage_completed":                "A repeated assistant update added the first complete usage snapshot; that source-recorded snapshot was retained.",
 		"assistant_update_usage_conflict":          "Repeated assistant update records changed non-cumulative usage fields; the last complete snapshot was retained.",
 		"assistant_update_model_conflict":          "Repeated assistant update records changed model identity; the last nonempty model was retained.",
+		"synthetic_model_records_excluded":         "Assistant records carrying Claude Code's own synthetic-turn sentinel were excluded from the model list; their token usage and turns remain counted in this session's totals.",
 		"unanchored_session":                       "A transcript contained no record for its physical session ID; filesystem modification time anchors coverage only, while inherited records remain eligible for content-free deduplication.",
 		"malformed_history_record":                 "Malformed prompt-history records were skipped.",
 		"oversize_history_record":                  "Oversize prompt-history records were skipped to keep memory use bounded.",
@@ -1064,6 +1081,10 @@ func parseFile(ctx context.Context, path string) (model.Session, []promptEvidenc
 				}
 			}
 			modelName := provider.SafeLabel(event.Message.Model, 100)
+			if modelName == syntheticModelSentinel {
+				warnings["synthetic_model_records_excluded"]++
+				modelName = ""
+			}
 			callIndex, duplicate := assistantCallIndex[event.Message.ID]
 			if event.Message.ID == "" {
 				duplicate = false

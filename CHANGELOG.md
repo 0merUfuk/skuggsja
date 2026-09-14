@@ -4,6 +4,18 @@ All notable changes to this project will be documented in this file.
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and releases use [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.2] - 2026-09-15
+
+### Fixed
+
+- The folio rail had no background of its own, so every full-bleed band and rule painted straight through it: the inverse privacy band turned the rail dark and dropped its labels near-invisible, and the masthead's bottom hairline struck through the first folio. The rail now carries the page's own paper ground inside the 80 rem block; the page's already-painted full-bleed bands and rules are hidden behind it at every scroll offset, exactly as the mockups show.
+- Claude Code's own synthetic-turn sentinel (`<synthetic>`) was passed through as if it were a model, reaching a top-two "model" slot under Claude Code on real local history. It is a transcript sentinel, not a model: it is now excluded from the model ranking while its token usage and turns remain counted in the session's totals, and a new parser-note warning (`synthetic_model_records_excluded`) accounts for the excluded records so nothing disappears silently.
+- Cursor's mark was a hand-drawn three-face cube; it is now Cursor's own published mark (simple-icons, CC0-1.0), matching the treatment Claude Code and Codex already had. Hermes Agent has no public brand to source from and remains mockup-derived, but its inner triangle is now a hollow outline at a heavier stroke weight instead of a filled face, matching the supplied design asset's nested-triangle geometry.
+
+### Changed
+
+- The four shipped harness providers are now assembled from a small registry in `internal/cli/cli.go` instead of a hard-coded construction list. Each provider package exposes its own `New(platform.Paths) provider.Reader` constructor; supporting a harness beyond the four shipped today means writing its provider package (with fixtures, following the pattern in `internal/provider/claude`) and appending one factory to the registry — no other file changes. Provider ordering, terminal output and the UI behave exactly as before; an unrecognized harness id already rendered safely (the neutral series colour and the `unknown` diamond glyph), and that fallback now has a direct test.
+
 ## [0.3.1] - 2026-09-14
 
 ### Changed

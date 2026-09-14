@@ -21,6 +21,7 @@ import (
 	"time"
 
 	"github.com/0merUfuk/skuggsja/internal/model"
+	"github.com/0merUfuk/skuggsja/internal/platform"
 	"github.com/0merUfuk/skuggsja/internal/provider"
 	"github.com/0merUfuk/skuggsja/internal/sqlitecopy"
 	"github.com/klauspost/compress/zstd"
@@ -44,6 +45,17 @@ type Reader struct {
 
 func (Reader) Harness() model.Harness { return model.Codex }
 func (Reader) DisplayName() string    { return "Codex" }
+
+// New builds the Codex reader from the machine's discovered paths. It is
+// the harness's sole entry in the CLI's provider registry.
+func New(paths platform.Paths) provider.Reader {
+	return Reader{
+		SessionsDir: paths.CodexSessions, ArchivedDir: paths.CodexArchived, RecoveryDir: paths.CodexRecovery,
+		HistoryFile: paths.CodexHistory, SessionIndexFile: paths.CodexSessionIndex,
+		ExternalImportsFile: paths.CodexExternalImports, StateDatabase: paths.CodexStateDatabase,
+		CatalogDatabase: paths.CodexCatalogDatabase, ThreadHistoryDatabase: paths.CodexThreadHistoryDatabase,
+	}
+}
 
 func (r Reader) Discover(_ context.Context) (provider.Discovery, error) {
 	d := provider.Discovery{Harness: model.Codex, Roots: []string{r.SessionsDir, r.ArchivedDir}}

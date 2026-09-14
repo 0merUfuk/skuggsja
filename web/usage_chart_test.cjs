@@ -186,6 +186,33 @@ test("labels use inert text, retain privacy redaction and never control CSS or m
   assert.equal(ui.all().some((node) => Object.hasOwn(node, "innerHTML")), false);
 });
 
+test("a harness id outside the known four renders the fallback diamond glyph and unknown colour hook, while keeping its own supplied name", () => {
+  const providers = [
+    { id: "claude", name: "Claude Code", sessions: 5, prompts: 5, coverage: { status: "completeness unknown" } },
+    { id: "gemini-cli", name: "Gemini CLI", sessions: 3, prompts: 3, coverage: { status: "completeness unknown" } }
+  ];
+  const ui = setup(providers);
+  const buttons = ui.byClass("usage-key-button");
+  const known = buttons.find((button) => button.attributes["data-harness"] === "claude");
+  const unrecognized = buttons.find((button) => button.attributes["data-harness"] === "unknown");
+  assert.ok(known && unrecognized, "one button must resolve to the known harness, the other to the safe fallback");
+  const glyph = unrecognized.children[0];
+  assert.equal(glyph.className, "usage-glyph", "an unrecognized harness must never gain the --solid modifier reserved for a published mark");
+  const paths = glyph.children[0].children.map((path) => path.attributes.d);
+  assert.deepEqual(paths, [
+    "M12 3.2 20.8 12 12 20.8 3.2 12Z",
+    "M12 8.6 15.4 12 12 15.4 8.6 12Z"
+  ], "an unrecognized harness must render the diamond fallback mark, not a blank or borrowed glyph");
+  assert.equal(unrecognized.children[1].textContent, "Gemini CLI", "the harness's own supplied name is kept even when its mark and colour fall back");
+});
+
+test("an unrecognized harness with no supplied name falls back to a generic label instead of inventing one", () => {
+  const ui = setup([{ id: "gemini-cli", sessions: 1, prompts: 1, coverage: { status: "completeness unknown" } }]);
+  const button = ui.byClass("usage-key-button")[0];
+  assert.equal(button.attributes["data-harness"], "unknown");
+  assert.equal(button.children[1].textContent, "Harness");
+});
+
 test("metric switching preserves selected harness and replacing a report leaves one set of controls", () => {
   const ui = setup(harnesses([91, 43, 27, 16], [10, 30, 20, 40]));
   ui.byClass("usage-key-button")[1].listeners.click();

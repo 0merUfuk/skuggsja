@@ -89,22 +89,35 @@ func New(version string) *cobra.Command {
 	return command
 }
 
+// registry lists every shipped harness provider in the exact order skuggsja
+// reads, prints and displays them: claude, codex, hermes, cursor. Supporting
+// a harness beyond these four means writing its provider package (with its
+// own New constructor and fixtures, following the pattern in
+// internal/provider/claude) and appending one factory here — nothing else
+// needs to change. An entry not in this registry still renders safely in the
+// UI (the neutral series colour and the "unknown" glyph), but it will not be
+// read until it is registered.
+var registry = []func(platform.Paths) provider.Reader{
+	claude.New,
+	codex.New,
+	hermes.New,
+	cursor.New,
+}
+
 func readers(paths platform.Paths) []provider.Reader {
-	return []provider.Reader{
-		claude.Reader{
-			ProjectsDir: paths.ClaudeProjects, HistoryFile: paths.ClaudeHistory, ExtraHomes: paths.ClaudeExtraHomes,
-			StatsFile: paths.ClaudeStats, GlobalStateFile: paths.ClaudeGlobalState,
-			DesktopSessionsDir: paths.ClaudeDesktopSessions, CodeSessionsDir: paths.ClaudeCodeSessions,
-		},
-		codex.Reader{
-			SessionsDir: paths.CodexSessions, ArchivedDir: paths.CodexArchived, RecoveryDir: paths.CodexRecovery,
-			HistoryFile: paths.CodexHistory, SessionIndexFile: paths.CodexSessionIndex,
-			ExternalImportsFile: paths.CodexExternalImports, StateDatabase: paths.CodexStateDatabase,
-			CatalogDatabase: paths.CodexCatalogDatabase, ThreadHistoryDatabase: paths.CodexThreadHistoryDatabase,
-		},
-		hermes.Reader{DatabasePath: paths.HermesDatabase},
-		cursor.Reader{DatabasePath: paths.CursorStateDB},
+	return buildReaders(paths, registry)
+}
+
+// buildReaders applies each factory to paths, in order. It is the entire
+// mechanism a registry entry relies on: readers() is a thin wrapper over
+// buildReaders(paths, registry), kept separate so the wiring itself — not
+// just today's four harnesses — has a direct test.
+func buildReaders(paths platform.Paths, factories []func(platform.Paths) provider.Reader) []provider.Reader {
+	out := make([]provider.Reader, 0, len(factories))
+	for _, newReader := range factories {
+		out = append(out, newReader(paths))
 	}
+	return out
 }
 
 func applyPathOverrides(paths *platform.Paths) {
