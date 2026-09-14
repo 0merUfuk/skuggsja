@@ -1028,3 +1028,63 @@ Scope note: this round is presentation, parser-label and CLI-assembly only. The 
 privacy guarantees, the CSP and every other harness's verification level are unchanged; `internal/cli`,
 `internal/provider/{claude,codex,hermes,cursor}`, `web/app.js`, `web/styles.css` and `CONTRIBUTING.md`
 were touched, nothing else.
+
+## Release v0.3.2 and Homebrew synchronization — 2026-09-15
+
+Three commits landed as [PR #15](https://github.com/0merUfuk/skuggsja/pull/15)
+(`fix(ui): isolate the folio rail...`, `feat(cli): register harness providers...`,
+`docs(verification): record the v0.3.2 changes`), squash-merged as `2a4ff96a`. All seven required checks
+passed twice on that exact content — once on the PR head across both triggering runs (`34903469365`,
+`34903488465`) and again on the merge commit itself after push (CI run `34904149417`) — before the tag
+was created, per the "confirm CI green on the merge commit" requirement. The annotated tag object is
+`0fdf904a` → commit `2a4ff96a`. Release run `34904426729` published the draft as `draft: false`,
+`immutable: true`, `prerelease: false` with eight assets: six archives, `checksums.txt` and the generated
+formula.
+
+The published bytes were verified from a fresh download rather than from the build directory.
+`shasum -a 256 -c checksums.txt` passed for all six archives. `gh attestation verify` on the
+`darwin/arm64` archive resolved one attestation with predicate type `https://slsa.dev/provenance/v1`,
+signed by `0merUfuk/skuggsja/.github/workflows/release.yml@refs/tags/v0.3.2` and covering all eight
+subjects. `python3 scripts/verify-packages.py <release-download> v0.3.2`, run against a checkout with
+`HEAD` moved to the `v0.3.2` tag itself (not a newer working tree — the verifier compares against
+`git rev-parse HEAD` of its own checkout, so this is required, not optional), re-checked all six archive
+checksums, the regular-file member sets, the embedded UI files, every bundled webfont and the licence
+against that checkout, the Go target/provenance metadata, and then ran the installed-package smoke test
+(**30/30** checks) against the downloaded `darwin/arm64` executable, which reports `skuggsja 0.3.2`.
+Before the tag, local `goreleaser check`, a clean snapshot release and
+`python3 scripts/verify-packages.py dist` passed the same six-archive comparison against a
+`0.3.1-SNAPSHOT-a9f5e16` build whose installed CLI smoke also passed 30/30.
+
+### Homebrew tap
+
+The updater was dispatched for `v0.3.2` and opened candidate
+[PR #8](https://github.com/0merUfuk/homebrew-skuggsja/pull/8) on head `25d32b73`, one file and 18
+changed lines: the version comment and the four URL/SHA pairs. The candidate's CI run required explicit
+approval (bot-authored commit) and was approved to run. Before merge:
+
+| Check | Result |
+| --- | --- |
+| Candidate formula versus the attested release asset | The `darwin/arm64` pin, `sha256 ea3418a1199f1fdc2b60f1a06b5bcd4ad710d26cb1e232c7dd0dd0c92092b2cd`, matches the release asset digest exactly |
+| Four pinned platform checksums versus the downloaded archives | All four match `checksums.txt` and the freshly downloaded bytes, and every URL points at the `v0.3.2` tag |
+| Candidate diff against the tap's `main` | One file, 9 insertions and 9 deletions: the version line and the four URL/SHA pairs |
+| Required tap checks on head `25d32b73` | All five passed: candidate verification plus native lifecycle on macos-15, macos-15-intel, ubuntu-24.04 and ubuntu-24.04-arm |
+| Merge | Candidate reviewed and approved on that head, squash-merged as `29b2cb76` |
+
+The public qualified installation path was then exercised on this machine: `brew update` and
+`brew upgrade 0merUfuk/skuggsja/skuggsja` moved the keg from 0.3.1 to 0.3.2, `skuggsja version` prints
+`skuggsja 0.3.2`, and `brew test` exits 0. The installed keg is the released payload: its executable is
+byte-identical to the `darwin/arm64` archive member
+(`sha256 2389ceada49d60c87316ab1992f6a7bf264ac1a8670af2893800b4dc3a385619`), and all three files that
+installed binary serves on its loopback origin are byte-identical to the `v0.3.2` tagged checkout —
+`index.html` `sha256 f445734051e6672ff135d70b2c24bc310fcf99aa471c1d244b916d1a77485fb7`, `styles.css`
+`sha256 119ba98a1afb973aafebc6d468f539b4c266eace72a2338917fba31898c5c4d9` and `app.js`
+`sha256 fc59e838e0560b9007bd66f546512c7f2b73d1c16cd03c07237fe7cc172f33b2`.
+
+### Process note
+
+PR #15 carried three commits, and the default branch requires one approving review that the author
+cannot supply for their own pull request. All seven required checks had passed on the reviewed head, so
+the merge used the documented administrator bypass (`enforce_admins: false`), and CI was then confirmed
+green on the merge commit itself before the tag was created. The tap change went through its gated path
+end to end: bot-authored candidate, approval of the workflow run, five required checks, an owner-level
+review and approval, and a squash merge under `enforce_admins: true`, which allows no bypass there.
