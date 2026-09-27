@@ -2,7 +2,7 @@
 
 **A local-first Rewind for your AI coding agents.**
 
-`skuggsja` (from Old Norse *skuggsjá*, “mirror”) reads the histories already stored by Claude Code, Codex, Hermes Agent, and Cursor, reduces them to privacy-safe aggregates, and opens an editorial report on loopback. It is a record of what survives on one machine, not an account-wide usage statement.
+`skuggsja` (from Old Norse *skuggsjá*, “mirror”) reads the histories already stored by Claude Code, Codex, Hermes Agent, Cursor, GitHub Copilot, and Grok, reduces them to privacy-safe aggregates, and opens an editorial report on loopback. It is a record of what survives on one machine, not an account-wide usage statement.
 
 > Verification scope: the code has path handling for macOS, Linux, and Windows, but real-provider-data verification is currently macOS-only. Cursor support is schema-verified with synthetic data and is not real-data verified. Native tests and isolated installation pass on macOS, Linux and Windows; real harness stores on Linux/Windows and new upstream schemas remain unverified.
 
@@ -156,6 +156,8 @@ On Windows, build with `go build -trimpath -o ./bin/skuggsja.exe ./cmd/skuggsja`
 | Codex | Active, archived, and recovery rollout roots plus `history.jsonl`, `session_index.jsonl`, import/state/catalog indexes below `CODEX_HOME` (otherwise `~/.codex`) | Root/child sessions, human prompts, models, tools, final cumulative token fields, validated pagination, and explicit local-coverage evidence | Real data on macOS; compressed-file handling is fixture-tested |
 | Hermes Agent | `state.db` below `HERMES_HOME`; otherwise `~/.hermes` on Unix-like systems or the local app-data Hermes directory on Windows | Sessions, parent relationships, prompts, models, tool calls, source-recorded database token ledger | Real data on macOS |
 | Cursor | OS-specific `Cursor/User/globalStorage/state.vscdb` | Composer sessions/subagents, human prompts, models, project basename; no token estimates | Schema-verified synthetic; not real-data verified |
+| GitHub Copilot | VS Code's `Code/User/globalStorage/github.copilot-chat/session-store.db` | Chat sessions, human prompts, project basename; no model breakdown, no token estimates (not exposed by this schema) | Schema-verified synthetic; not real-data verified (the schema was confirmed live, but the verifying installation had no recorded turns yet) |
+| Grok | Per-project `prompt_history.jsonl` below `GROK_HOME` (otherwise `~/.grok`) `sessions/<url-encoded-cwd>/` | Sessions grouped by Grok's own session id, human prompts, project basename; no model breakdown, no token estimates (not exposed by this file) | Real data on macOS |
 
 When every supported input for a harness is absent, it is reported as `not found`; a missing detailed root accompanied by supplemental index evidence can instead be supported with warnings and marked incomplete. Parser and schema problems appear as provider-scoped warnings. Path-resolution errors or permissions that prevent discovery or proof of source/output separation can stop the whole run before writing; these safety checks are not bypassed to produce a partial report. See [Architecture](ARCHITECTURE.md) for the adapter contract and [Privacy](PRIVACY.md) for the data lifecycle.
 
@@ -218,6 +220,8 @@ These environment variables replace individual discovery locations:
 | `SKUGGSJA_CODEX_THREAD_HISTORY_DATABASE` | Codex paginated-history database; audited as unparsed coverage evidence |
 | `SKUGGSJA_HERMES_DATABASE` | Hermes `state.db` path |
 | `SKUGGSJA_CURSOR_DATABASE` | Cursor `state.vscdb` path |
+| `SKUGGSJA_COPILOT_CHAT_DATABASE` | GitHub Copilot Chat `session-store.db` path |
+| `SKUGGSJA_GROK_SESSIONS` | Grok's `sessions` root directory |
 | `CLAUDE_CONFIG_DIR` | Base Claude configuration directory for `projects`, prompt history, and statistics; home-level global state and macOS Desktop roots remain separate unless specifically overridden |
 | `CODEX_HOME` | Base Codex directory for rollout roots and all supplemental Codex indexes unless their specific overrides are set |
 | `HERMES_HOME` | Base Hermes directory; `state.db` is appended unless the specific Skuggsja override is set |
