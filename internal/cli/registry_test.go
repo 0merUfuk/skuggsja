@@ -13,7 +13,7 @@ import (
 func TestReadersUsesTheRegistryInDeterministicOrder(t *testing.T) {
 	t.Parallel()
 	got := readers(platform.Paths{})
-	want := []model.Harness{model.Claude, model.Codex, model.Hermes, model.Cursor}
+	want := []model.Harness{model.Claude, model.Codex, model.Hermes, model.Cursor, model.Copilot, model.Grok}
 	if len(got) != len(want) {
 		t.Fatalf("readers() returned %d providers, want %d", len(got), len(want))
 	}
