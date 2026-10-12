@@ -6,6 +6,10 @@
 
 > Verification scope: the code has path handling for macOS, Linux, and Windows, but real-provider-data verification is currently macOS-only. Cursor support is schema-verified with synthetic data and is not real-data verified. Native tests and isolated installation pass on macOS, Linux and Windows; real harness stores on Linux/Windows and new upstream schemas remain unverified.
 
+## Project film
+
+An illustrative project film showing how surviving local agent history becomes an inspectable, read-only aggregate report. The reconstructed report and all usage figures are synthetic examples, not a recording of a real account or evidence of productivity.
+
 ## Quick start
 
 On macOS or Linux with Homebrew installed:
