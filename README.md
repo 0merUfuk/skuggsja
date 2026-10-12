@@ -8,6 +8,8 @@
 
 ## Project film
 
+https://github.com/user-attachments/assets/ba5cc149-a735-4cea-aa77-a83f82b824b7
+
 An illustrative project film showing how surviving local agent history becomes an inspectable, read-only aggregate report. The reconstructed report and all usage figures are synthetic examples, not a recording of a real account or evidence of productivity.
 
 ## Quick start
