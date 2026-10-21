@@ -139,7 +139,7 @@ For Windows on ARM, select the `windows_arm64` archive. Move the executable to y
 
 ### Build from source
 
-From a checkout with Go 1.27.1 or a newer compatible toolchain:
+From a checkout with Go 1.27.3 or a newer compatible toolchain:
 
 ```sh
 CGO_ENABLED=0 go build -trimpath -o ./bin/skuggsja ./cmd/skuggsja
