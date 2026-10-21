@@ -2,9 +2,9 @@
 
 **A local-first Rewind for your AI coding agents.**
 
-`skuggsja` (from Old Norse *skuggsjá*, “mirror”) reads the histories already stored by Claude Code, Codex, Hermes Agent, Cursor, GitHub Copilot, and Grok, reduces them to privacy-safe aggregates, and opens an editorial report on loopback. It is a record of what survives on one machine, not an account-wide usage statement.
+`skuggsja` (from Old Norse *skuggsjá*, “mirror”) reads the histories already stored by Claude Code, Codex, Hermes Agent, Cursor, GitHub Copilot, Grok, Antigravity, Gemini CLI, Continue, Cline, Roo Code, and Aider, reduces them to privacy-safe aggregates, and opens an editorial report on loopback. It is a record of what survives on one machine, not an account-wide usage statement.
 
-> Verification scope: the code has path handling for macOS, Linux, and Windows, but real-provider-data verification is currently macOS-only. Cursor support is schema-verified with synthetic data and is not real-data verified. Native tests and isolated installation pass on macOS, Linux and Windows; real harness stores on Linux/Windows and new upstream schemas remain unverified.
+> Verification scope: the code has path handling for macOS, Linux, and Windows, but real-provider-data verification is currently macOS-only. Cursor, GitHub Copilot, Gemini CLI, Continue, Cline, Roo Code and Aider support is schema-verified with synthetic data and is not real-data verified; Antigravity was verified against a single real local conversation. Native tests and isolated installation pass on macOS, Linux and Windows; real harness stores on Linux/Windows and new upstream schemas remain unverified.
 
 ## Quick start
 
@@ -158,6 +158,12 @@ On Windows, build with `go build -trimpath -o ./bin/skuggsja.exe ./cmd/skuggsja`
 | Cursor | OS-specific `Cursor/User/globalStorage/state.vscdb` | Composer sessions/subagents, human prompts, models, project basename; no token estimates | Schema-verified synthetic; not real-data verified |
 | GitHub Copilot | VS Code's `Code/User/globalStorage/github.copilot-chat/session-store.db` | Chat sessions, human prompts, project basename; no model breakdown, no token estimates (not exposed by this schema) | Schema-verified synthetic; not real-data verified (the schema was confirmed live, but the verifying installation had no recorded turns yet) |
 | Grok | Per-project `prompt_history.jsonl` below `GROK_HOME` (otherwise `~/.grok`) `sessions/<url-encoded-cwd>/` | Sessions grouped by Grok's own session id, human prompts, project basename; no model breakdown, no token estimates (not exposed by this file) | Real data on macOS |
+| Antigravity | `conversation_summaries.db` below `~/.gemini/antigravity` (its conversation index and user-step search index; per-step protobuf payloads are not decoded) | Conversations, human prompts and their sizes, project basename; no model breakdown, no tokens, no tool calls, no start time | Real data on macOS (one local conversation) |
+| Gemini CLI | `session-*.jsonl` (and legacy `.json`) under `~/.gemini/tmp/<project>/chats/`, including subagent folders | Sessions, human prompts, models, exact token summaries, tool calls, subagent children | Schema-verified synthetic; not real-data verified |
+| Continue | `sessions/<id>.json` plus the `sessions.json` index below `CONTINUE_GLOBAL_DIR` (otherwise `~/.continue`) | Sessions, human prompts, session usage block, configured chat-model title; session time is its creation time | Schema-verified synthetic; not real-data verified |
+| Cline | `tasks/<id>/ui_messages.json` under VS Code and Cursor `globalStorage/saoudrizwan.claude-dev` and the Cline data directory (`CLINE_DATA_DIR`, otherwise `~/.cline/data`) | Tasks, human prompts with timestamps, token sums from recorded API requests, model when a task used exactly one; SDK-era session stores are not read | Schema-verified synthetic; not real-data verified |
+| Roo Code | `tasks/<id>/ui_messages.json` under VS Code and Cursor `globalStorage/rooveterinaryinc.roo-cline` | Tasks, human prompts with timestamps, token sums from recorded API requests; no model breakdown | Schema-verified synthetic; not real-data verified |
+| Aider | `.aider.chat.history.md` in the home directory and its direct subfolders, plus any `SKUGGSJA_AIDER_ROOTS` | Chat sessions and human prompts, project basename; no model, no tokens, no prompt timestamps | Schema-verified synthetic; not real-data verified |
 
 When every supported input for a harness is absent, it is reported as `not found`; a missing detailed root accompanied by supplemental index evidence can instead be supported with warnings and marked incomplete. Parser and schema problems appear as provider-scoped warnings. Path-resolution errors or permissions that prevent discovery or proof of source/output separation can stop the whole run before writing; these safety checks are not bypassed to produce a partial report. See [Architecture](ARCHITECTURE.md) for the adapter contract and [Privacy](PRIVACY.md) for the data lifecycle.
 
@@ -222,6 +228,12 @@ These environment variables replace individual discovery locations:
 | `SKUGGSJA_CURSOR_DATABASE` | Cursor `state.vscdb` path |
 | `SKUGGSJA_COPILOT_CHAT_DATABASE` | GitHub Copilot Chat `session-store.db` path |
 | `SKUGGSJA_GROK_SESSIONS` | Grok's `sessions` root directory |
+| `SKUGGSJA_ANTIGRAVITY_ROOT` | Antigravity application directory (default `~/.gemini/antigravity`) |
+| `SKUGGSJA_GEMINI_TMP` | Gemini CLI global temp directory holding per-project `chats/` (default `~/.gemini/tmp`) |
+| `SKUGGSJA_CONTINUE_SESSIONS` | Continue `sessions` directory |
+| `SKUGGSJA_CLINE_TASKS` | Cline `tasks` directories, separated by the OS path-list separator; an explicitly empty value disables automatic discovery |
+| `SKUGGSJA_ROO_TASKS` | Roo Code `tasks` directories, same list form |
+| `SKUGGSJA_AIDER_ROOTS` | Directories (or history files) searched for `.aider.chat.history.md` in the directory itself and its direct subfolders, same list form; default is the home directory |
 | `CLAUDE_CONFIG_DIR` | Base Claude configuration directory for `projects`, prompt history, and statistics; home-level global state and macOS Desktop roots remain separate unless specifically overridden |
 | `CODEX_HOME` | Base Codex directory for rollout roots and all supplemental Codex indexes unless their specific overrides are set |
 | `HERMES_HOME` | Base Hermes directory; `state.db` is appended unless the specific Skuggsja override is set |

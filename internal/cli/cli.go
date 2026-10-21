@@ -15,12 +15,18 @@ import (
 	"github.com/0merUfuk/skuggsja/internal/app"
 	"github.com/0merUfuk/skuggsja/internal/platform"
 	"github.com/0merUfuk/skuggsja/internal/provider"
+	"github.com/0merUfuk/skuggsja/internal/provider/aider"
+	"github.com/0merUfuk/skuggsja/internal/provider/antigravity"
 	"github.com/0merUfuk/skuggsja/internal/provider/claude"
+	"github.com/0merUfuk/skuggsja/internal/provider/cline"
 	"github.com/0merUfuk/skuggsja/internal/provider/codex"
+	"github.com/0merUfuk/skuggsja/internal/provider/continuedev"
 	"github.com/0merUfuk/skuggsja/internal/provider/copilot"
 	"github.com/0merUfuk/skuggsja/internal/provider/cursor"
+	"github.com/0merUfuk/skuggsja/internal/provider/gemini"
 	"github.com/0merUfuk/skuggsja/internal/provider/grok"
 	"github.com/0merUfuk/skuggsja/internal/provider/hermes"
+	"github.com/0merUfuk/skuggsja/internal/provider/roo"
 	"github.com/spf13/cobra"
 )
 
@@ -105,6 +111,12 @@ var registry = []func(platform.Paths) provider.Reader{
 	cursor.New,
 	copilot.New,
 	grok.New,
+	antigravity.New,
+	gemini.New,
+	continuedev.New,
+	cline.New,
+	roo.New,
+	aider.New,
 }
 
 func readers(paths platform.Paths) []provider.Reader {
@@ -154,10 +166,27 @@ func applyPathOverrides(paths *platform.Paths) {
 		{"SKUGGSJA_CURSOR_DATABASE", &paths.CursorStateDB},
 		{"SKUGGSJA_COPILOT_CHAT_DATABASE", &paths.CopilotChatDatabase},
 		{"SKUGGSJA_GROK_SESSIONS", &paths.GrokSessionsRoot},
+		{"SKUGGSJA_ANTIGRAVITY_ROOT", &paths.AntigravityRoot},
+		{"SKUGGSJA_GEMINI_TMP", &paths.GeminiTmpRoot},
+		{"SKUGGSJA_CONTINUE_SESSIONS", &paths.ContinueSessionsRoot},
 	}
 	for _, override := range overrides {
 		if value := os.Getenv(override.name); value != "" {
 			*override.target = value
+		}
+	}
+	// Path lists replace the discovered defaults, including an explicitly empty
+	// list, so an isolated run never inherits a real home's history.
+	for _, list := range []struct {
+		name   string
+		target *[]string
+	}{
+		{"SKUGGSJA_CLINE_TASKS", &paths.ClineTaskRoots},
+		{"SKUGGSJA_ROO_TASKS", &paths.RooTaskRoots},
+		{"SKUGGSJA_AIDER_ROOTS", &paths.AiderRoots},
+	} {
+		if value, explicit := os.LookupEnv(list.name); explicit {
+			*list.target = filepath.SplitList(value)
 		}
 	}
 }
