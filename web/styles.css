@@ -621,12 +621,15 @@ dt { color: var(--ink-soft); }
 .usage-glyph--solid svg { fill: currentColor; stroke: none; }
 /* a mark may carry one filled face inside an otherwise drawn outline */
 .usage-glyph svg .glyph-face { fill: currentColor; stroke: none; }
-.usage-key-name { grid-area: name; font: 400 var(--text-lede)/1.25 var(--font-display); }
-.usage-key-value { grid-area: value; font: 400 var(--text-xl)/1.1 var(--font-display); letter-spacing: -0.02em; }
-.usage-key-secondary { grid-area: meta; color: var(--ink-soft); font: 400 var(--text-xs)/1.5 var(--font-data); letter-spacing: 0.04em; }
-.usage-bar { grid-area: bar; width: auto; margin-left: var(--space-2); }
+/* min-width: 0 overrides the grid item default of auto (= its text's own
+   unbroken width), which is what let a longer harness name or coverage note
+   push past the button's own right edge instead of wrapping inside it. */
+.usage-key-name { grid-area: name; min-width: 0; font: 400 var(--text-lede)/1.25 var(--font-display); }
+.usage-key-value { grid-area: value; min-width: 0; font: 400 var(--text-xl)/1.1 var(--font-display); letter-spacing: -0.02em; }
+.usage-key-secondary { grid-area: meta; min-width: 0; color: var(--ink-soft); font: 400 var(--text-xs)/1.5 var(--font-data); letter-spacing: 0.04em; }
+.usage-bar { grid-area: bar; width: auto; min-width: 0; margin-left: var(--space-2); }
 .usage-key-coverage {
-  grid-area: coverage; margin-top: var(--space-2);
+  grid-area: coverage; min-width: 0; margin-top: var(--space-2);
   color: var(--ink-faint); font: 400 var(--text-micro)/1.5 var(--font-data); letter-spacing: 0.04em;
 }
 .usage-detail {

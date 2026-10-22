@@ -15,10 +15,18 @@ import (
 	"github.com/0merUfuk/skuggsja/internal/app"
 	"github.com/0merUfuk/skuggsja/internal/platform"
 	"github.com/0merUfuk/skuggsja/internal/provider"
+	"github.com/0merUfuk/skuggsja/internal/provider/aider"
+	"github.com/0merUfuk/skuggsja/internal/provider/antigravity"
 	"github.com/0merUfuk/skuggsja/internal/provider/claude"
+	"github.com/0merUfuk/skuggsja/internal/provider/cline"
 	"github.com/0merUfuk/skuggsja/internal/provider/codex"
+	"github.com/0merUfuk/skuggsja/internal/provider/continuedev"
+	"github.com/0merUfuk/skuggsja/internal/provider/copilot"
 	"github.com/0merUfuk/skuggsja/internal/provider/cursor"
+	"github.com/0merUfuk/skuggsja/internal/provider/gemini"
+	"github.com/0merUfuk/skuggsja/internal/provider/grok"
 	"github.com/0merUfuk/skuggsja/internal/provider/hermes"
+	"github.com/0merUfuk/skuggsja/internal/provider/roo"
 	"github.com/spf13/cobra"
 )
 
@@ -90,18 +98,25 @@ func New(version string) *cobra.Command {
 }
 
 // registry lists every shipped harness provider in the exact order skuggsja
-// reads, prints and displays them: claude, codex, hermes, cursor. Supporting
-// a harness beyond these four means writing its provider package (with its
-// own New constructor and fixtures, following the pattern in
-// internal/provider/claude) and appending one factory here — nothing else
-// needs to change. An entry not in this registry still renders safely in the
-// UI (the neutral series colour and the "unknown" glyph), but it will not be
-// read until it is registered.
+// reads, prints and displays them. Supporting a harness beyond these means
+// writing its provider package (with its own New constructor and fixtures,
+// following the pattern in internal/provider/claude) and appending one
+// factory here — nothing else needs to change. An entry not in this registry
+// still renders safely in the UI (the neutral series colour and the
+// "unknown" glyph), but it will not be read until it is registered.
 var registry = []func(platform.Paths) provider.Reader{
 	claude.New,
 	codex.New,
 	hermes.New,
 	cursor.New,
+	copilot.New,
+	grok.New,
+	antigravity.New,
+	gemini.New,
+	continuedev.New,
+	cline.New,
+	roo.New,
+	aider.New,
 }
 
 func readers(paths platform.Paths) []provider.Reader {
@@ -149,10 +164,29 @@ func applyPathOverrides(paths *platform.Paths) {
 		{"SKUGGSJA_CODEX_THREAD_HISTORY_DATABASE", &paths.CodexThreadHistoryDatabase},
 		{"SKUGGSJA_HERMES_DATABASE", &paths.HermesDatabase},
 		{"SKUGGSJA_CURSOR_DATABASE", &paths.CursorStateDB},
+		{"SKUGGSJA_COPILOT_CHAT_DATABASE", &paths.CopilotChatDatabase},
+		{"SKUGGSJA_GROK_SESSIONS", &paths.GrokSessionsRoot},
+		{"SKUGGSJA_ANTIGRAVITY_ROOT", &paths.AntigravityRoot},
+		{"SKUGGSJA_GEMINI_TMP", &paths.GeminiTmpRoot},
+		{"SKUGGSJA_CONTINUE_SESSIONS", &paths.ContinueSessionsRoot},
 	}
 	for _, override := range overrides {
 		if value := os.Getenv(override.name); value != "" {
 			*override.target = value
+		}
+	}
+	// Path lists replace the discovered defaults, including an explicitly empty
+	// list, so an isolated run never inherits a real home's history.
+	for _, list := range []struct {
+		name   string
+		target *[]string
+	}{
+		{"SKUGGSJA_CLINE_TASKS", &paths.ClineTaskRoots},
+		{"SKUGGSJA_ROO_TASKS", &paths.RooTaskRoots},
+		{"SKUGGSJA_AIDER_ROOTS", &paths.AiderRoots},
+	} {
+		if value, explicit := os.LookupEnv(list.name); explicit {
+			*list.target = filepath.SplitList(value)
 		}
 	}
 }
