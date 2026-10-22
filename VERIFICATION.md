@@ -1088,3 +1088,65 @@ the merge used the documented administrator bypass (`enforce_admins: false`), an
 green on the merge commit itself before the tag was created. The tap change went through its gated path
 end to end: bot-authored candidate, approval of the workflow run, five required checks, an owner-level
 review and approval, and a squash merge under `enforce_admins: true`, which allows no bypass there.
+
+## GitHub Copilot and Grok harness coverage for v0.3.3 — 2026-09-27
+
+The owner asked for broader harness coverage across roughly the top 10–15 most-used agent tools in
+today's market, not just the four named in the previous round. Real evidence was gathered for many
+candidates (recorded in the private `HANDOFF.md` §7b, since it names local host paths); two were
+implemented and shipped this round because they had strong, directly-verifiable evidence on this
+machine: **GitHub Copilot** (confirmed the actual market-share leader, ~37%, via a live web search) and
+**Grok**. Antigravity/Gemini-based tools, OpenCode, Windsurf, Amazon Q Developer, Aider, Cline, Roo Code,
+Continue.dev and Kiro remain researched-but-not-implemented this round; each has a documented reason.
+
+### GitHub Copilot (`internal/provider/copilot`)
+
+Reads VS Code's `github.copilot-chat` extension's `session-store.db` (SQLite): table `sessions` for
+session identity/cwd/timestamps, table `turns` for per-turn `user_message` (the assistant response
+column is never selected). Verified against the owner's real, live database — the schema matched
+exactly, but the live installation had zero recorded turns (the VS Code Copilot Chat panel has not been
+used on this machine yet), so `skuggsja --once --json` correctly reports `status: "supported", sessions:
+0` rather than a false positive. Because the positive-content parsing path could not be confirmed
+against real non-empty rows, `VerificationLevel` is honestly set to `schema-verified with synthetic
+fixtures` (the Cursor precedent), not `real data on macOS`.
+
+### Grok (`internal/provider/grok`)
+
+Reads Grok's own per-project `sessions/<url-encoded-cwd>/prompt_history.jsonl` files below `GROK_HOME`
+(otherwise `~/.grok`). Verified against the owner's real file: 7 raw JSONL lines parsed into 7 prompts
+across 6 sessions with zero warnings, matching a manual `wc -l` line count exactly. `VerificationLevel`
+is `real data on macOS`.
+
+### A real layout regression the browser gate caught
+
+The first `scripts/verify-browser.cjs --revision true` run against real data including the two new
+harnesses failed: `1440px no uncontained block overflow`. The Usage section's harness-legend button
+(`.usage-key-name` / `.usage-key-secondary` / `.usage-key-coverage` / `.usage-bar`, all CSS Grid items)
+overflowed its button at DPR 2, because a CSS Grid item's default `min-width: auto` lets its content's
+own unbroken text width win over its assigned track, and a new harness's name/coverage text was long
+enough to trigger it. Fixed generically: `min-width: 0` on those grid items, so any current or future
+harness's text wraps inside its column instead of overflowing — not a per-harness special case. Re-run
+after the fix: **pass, 1,674/1,674 assertions, 65 screenshots, zero non-loopback product requests** (up
+from v0.3.2's 1,620/63, consistent with two more provider rows/legend entries to assert against).
+
+### Local gates
+
+| Gate | Result |
+| --- | --- |
+| `go build ./...` | Clean |
+| `go test ./...` | 14/14 packages ok (the 12 existing plus `internal/provider/copilot`, `internal/provider/grok`) |
+| `node --test web/*.cjs scripts/generate_homebrew_test.cjs` | 38/38 |
+| `python3 scripts/release_workflow_test.py` | 21/21 |
+| `python3 scripts/verify_packages_test.py` | 9/9 |
+| `node scripts/verify-browser.cjs --revision true` (real local data, all six harnesses) | pass, 1,674/1,674 assertions, 65 screenshots, 0 non-loopback requests |
+
+### An unrelated pre-existing test bug found and fixed in passing
+
+`TestProductionNetworkSurfaceIsOnlyTheLoopbackServer` (`internal/app/network_policy_test.go`) walks the
+whole repository tree looking for network-capable imports outside `server.go`. It did not skip
+`.claude/worktrees/`, so a stale worktree checkout left on disk under the main checkout (two were
+present: `skuggsja-handoff-f00c5c`, `project-setup-open-items-86f864`) made it find and flag that
+worktree's own copy of `server.go` as if it were a second, unauthorized copy in this tree. Confirmed with
+`git worktree list` and `find . -name server.go`; not caused by this round's changes. Fixed by skipping
+`.claude` the same way `.git`/`dist`/`vendor` are already skipped — the worktrees themselves were left
+alone, since cleaning up another session's worktree is out of scope here.

@@ -30,6 +30,8 @@ type Paths struct {
 	CursorStateDB              string
 	CursorConversationDB       string
 	CursorWorkspaceRoot        string
+	CopilotChatDatabase        string
+	GrokSessionsRoot           string
 }
 
 // DefaultPaths returns native harness locations for the running OS.
@@ -77,6 +79,11 @@ func DefaultPaths() (Paths, error) {
 	}
 
 	cursorUser := cursorUserDir(home)
+	vsCodeUser := vsCodeUserDir(home)
+	grokHome := os.Getenv("GROK_HOME")
+	if grokHome == "" {
+		grokHome = filepath.Join(home, ".grok")
+	}
 	claudeDesktopSessions := ""
 	claudeCodeSessions := ""
 	if runtime.GOOS == "darwin" {
@@ -104,7 +111,30 @@ func DefaultPaths() (Paths, error) {
 		CursorStateDB:              filepath.Join(cursorUser, "globalStorage", "state.vscdb"),
 		CursorConversationDB:       filepath.Join(cursorUser, "globalStorage", "conversation-search.db"),
 		CursorWorkspaceRoot:        filepath.Join(cursorUser, "workspaceStorage"),
+		CopilotChatDatabase:        filepath.Join(vsCodeUser, "globalStorage", "github.copilot-chat", "session-store.db"),
+		GrokSessionsRoot:           filepath.Join(grokHome, "sessions"),
 	}, nil
+}
+
+// vsCodeUserDir locates standard (non-Insiders) VS Code's User directory,
+// which hosts the github.copilot-chat extension's global storage. Copilot
+// Chat running inside VS Code Insiders or another VS Code-family fork is not
+// covered by this path.
+func vsCodeUserDir(home string) string {
+	switch runtime.GOOS {
+	case "darwin":
+		return filepath.Join(home, "Library", "Application Support", "Code", "User")
+	case "windows":
+		if appData := os.Getenv("APPDATA"); appData != "" {
+			return filepath.Join(appData, "Code", "User")
+		}
+		return filepath.Join(home, "AppData", "Roaming", "Code", "User")
+	default:
+		if config := os.Getenv("XDG_CONFIG_HOME"); config != "" {
+			return filepath.Join(config, "Code", "User")
+		}
+		return filepath.Join(home, ".config", "Code", "User")
+	}
 }
 
 func cursorUserDir(home string) string {

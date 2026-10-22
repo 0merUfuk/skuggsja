@@ -30,6 +30,8 @@ const sourceOverrides = {
   SKUGGSJA_CODEX_THREAD_HISTORY_DATABASE: "codex/thread-history.sqlite",
   SKUGGSJA_HERMES_DATABASE: "hermes/state.db",
   SKUGGSJA_CURSOR_DATABASE: "cursor/state.vscdb",
+  SKUGGSJA_COPILOT_CHAT_DATABASE: "copilot/session-store.db",
+  SKUGGSJA_GROK_SESSIONS: "grok/sessions",
 };
 const expectedCSP = "default-src 'self'; base-uri 'none'; connect-src 'self'; font-src 'self'; form-action 'none'; frame-ancestors 'none'; img-src 'self' data:; object-src 'none'; script-src 'self'; style-src 'self'";
 const children = new Set();
@@ -241,7 +243,7 @@ async function main() {
     assert.equal(emptyReport.totals.prompts, 0);
     assert.equal(emptyReport.privacy.source_access, "read-only");
     assert(firstOutput.includes("skuggsja does not write to source paths"));
-    assert.equal(emptyReport.providers.length, 4);
+    assert.equal(emptyReport.providers.length, 6);
     for (const provider of emptyReport.providers) assert.equal(provider.status, "not found");
   });
   const emptyAfter = await snapshot(sources);

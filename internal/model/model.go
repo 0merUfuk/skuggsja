@@ -8,10 +8,12 @@ import "time"
 type Harness string
 
 const (
-	Claude Harness = "claude"
-	Codex  Harness = "codex"
-	Hermes Harness = "hermes"
-	Cursor Harness = "cursor"
+	Claude  Harness = "claude"
+	Codex   Harness = "codex"
+	Hermes  Harness = "hermes"
+	Cursor  Harness = "cursor"
+	Copilot Harness = "copilot"
+	Grok    Harness = "grok"
 )
 
 // PromptMetric is all that survives after a raw prompt is processed in memory.

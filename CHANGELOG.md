@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and releases use [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.3] - 2026-09-27
+
+### Added
+
+- GitHub Copilot is now a supported harness: sessions and human prompts are read from VS Code's Copilot Chat extension (`github.copilot-chat/session-store.db`). This schema does not expose a per-turn model identity or token counts, so Copilot sessions carry no model breakdown or usage figures; the Sources panel says so.
+- Grok is now a supported harness: sessions and human prompts are read from Grok's own per-project `prompt_history.jsonl` files. Assistant turns, model identity and token usage are not exposed by this file, so only prompt-side activity is counted; the Sources panel says so.
+
 ## [0.3.2] - 2026-09-15
 
 ### Fixed
