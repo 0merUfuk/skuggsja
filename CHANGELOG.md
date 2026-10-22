@@ -4,6 +4,30 @@ All notable changes to this project will be documented in this file.
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and releases use [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.0] - 2026-10-22
+
+### Added
+
+- Antigravity is a supported harness, read from its own conversation index (`~/.gemini/antigravity/conversation_summaries.db`). Prompts are the user steps recorded in the app's search index, with sizes sliced from the indexed text; the per-step protobuf payloads have no public schema and are not decoded, so models, tokens and tool calls are unavailable rather than guessed. The user-step index was cross-checked against the conversation database's step records on a real conversation: both identify the same four steps. The conversation summary's `step_count` is deliberately not used to create prompts, and a conversation with no indexed user step contributes nothing.
+- Gemini CLI is a supported harness, read from its `session-*.jsonl` recordings (and legacy `.json`), applying its own `$rewindTo`, `$patch` and `$set` edit records, with models, exact token summaries, tool calls and subagent children.
+- Continue (`sessions/<id>.json` with its `sessions.json` index), Cline and Roo Code (`tasks/<id>/ui_messages.json`, one shared parser) and Aider (`.aider.chat.history.md`) are supported harnesses. Their layouts were confirmed from each project's published source and are verified with synthetic fixtures only, because this machine holds no history for them; the Sources panel labels them that way.
+- Environment overrides `SKUGGSJA_ANTIGRAVITY_ROOT`, `SKUGGSJA_GEMINI_TMP`, `SKUGGSJA_CONTINUE_SESSIONS`, `SKUGGSJA_CLINE_TASKS`, `SKUGGSJA_ROO_TASKS` and `SKUGGSJA_AIDER_ROOTS`.
+
+### Security
+
+- The toolchain floor is now Go 1.27.3. Go 1.27.1's `net/http` and `net/http/internal/http2` carry GO-2026-6603, 6609, 6611, 6612, 6613 and 6617 (fixed in 1.27.2), which `govulncheck` reports against the loopback server.
+
+### Not included
+
+- Windsurf and Kiro keep their agent state in closed, undocumented stores, and OpenCode is mid-way through a storage-schema change between releases; none of the three has a schema that could be confirmed here, so no reader was written rather than guessing one. Amazon Q Developer CLI stores conversations in an SQLite database whose upstream project is archived; it is not read yet.
+
+## [0.3.3] - 2026-09-27
+
+### Added
+
+- GitHub Copilot is now a supported harness: sessions and human prompts are read from VS Code's Copilot Chat extension (`github.copilot-chat/session-store.db`). This schema does not expose a per-turn model identity or token counts, so Copilot sessions carry no model breakdown or usage figures; the Sources panel says so.
+- Grok is now a supported harness: sessions and human prompts are read from Grok's own per-project `prompt_history.jsonl` files. Assistant turns, model identity and token usage are not exposed by this file, so only prompt-side activity is counted; the Sources panel says so.
+
 ## [0.3.2] - 2026-09-15
 
 ### Fixed
