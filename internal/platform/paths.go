@@ -32,6 +32,12 @@ type Paths struct {
 	CursorWorkspaceRoot        string
 	CopilotChatDatabase        string
 	GrokSessionsRoot           string
+	AntigravityRoot            string
+	GeminiTmpRoot              string
+	ContinueSessionsRoot       string
+	ClineTaskRoots             []string
+	RooTaskRoots               []string
+	AiderRoots                 []string
 }
 
 // DefaultPaths returns native harness locations for the running OS.
@@ -84,6 +90,15 @@ func DefaultPaths() (Paths, error) {
 	if grokHome == "" {
 		grokHome = filepath.Join(home, ".grok")
 	}
+	geminiHome := filepath.Join(home, ".gemini")
+	clineData := os.Getenv("CLINE_DATA_DIR")
+	if clineData == "" {
+		clineData = filepath.Join(home, ".cline", "data")
+	}
+	continueHome := os.Getenv("CONTINUE_GLOBAL_DIR")
+	if continueHome == "" {
+		continueHome = filepath.Join(home, ".continue")
+	}
 	claudeDesktopSessions := ""
 	claudeCodeSessions := ""
 	if runtime.GOOS == "darwin" {
@@ -113,7 +128,24 @@ func DefaultPaths() (Paths, error) {
 		CursorWorkspaceRoot:        filepath.Join(cursorUser, "workspaceStorage"),
 		CopilotChatDatabase:        filepath.Join(vsCodeUser, "globalStorage", "github.copilot-chat", "session-store.db"),
 		GrokSessionsRoot:           filepath.Join(grokHome, "sessions"),
+		AntigravityRoot:            filepath.Join(geminiHome, "antigravity"),
+		GeminiTmpRoot:              filepath.Join(geminiHome, "tmp"),
+		ContinueSessionsRoot:       filepath.Join(continueHome, "sessions"),
+		ClineTaskRoots:             append(extensionTaskRoots([]string{vsCodeUser, cursorUser}, "saoudrizwan.claude-dev"), filepath.Join(clineData, "tasks")),
+		RooTaskRoots:               extensionTaskRoots([]string{vsCodeUser, cursorUser}, "rooveterinaryinc.roo-cline"),
+		AiderRoots:                 []string{home},
 	}, nil
+}
+
+// extensionTaskRoots lists the per-task storage folder a VS Code-hosted agent
+// extension keeps under each editor's global storage. Only the stock VS Code
+// and Cursor user directories are probed; other forks need an explicit override.
+func extensionTaskRoots(userDirs []string, extensionID string) []string {
+	roots := make([]string, 0, len(userDirs))
+	for _, dir := range userDirs {
+		roots = append(roots, filepath.Join(dir, "globalStorage", extensionID, "tasks"))
+	}
+	return roots
 }
 
 // vsCodeUserDir locates standard (non-Insiders) VS Code's User directory,

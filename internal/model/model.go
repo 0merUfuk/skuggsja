@@ -14,6 +14,13 @@ const (
 	Cursor  Harness = "cursor"
 	Copilot Harness = "copilot"
 	Grok    Harness = "grok"
+
+	Antigravity Harness = "antigravity"
+	Gemini      Harness = "gemini"
+	Continue    Harness = "continue"
+	Cline       Harness = "cline"
+	Roo         Harness = "roo"
+	Aider       Harness = "aider"
 )
 
 // PromptMetric is all that survives after a raw prompt is processed in memory.
