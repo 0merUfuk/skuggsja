@@ -40,6 +40,13 @@ func TestProductionNetworkSurfaceIsOnlyTheLoopbackServer(t *testing.T) {
 			if entry.Name() == ".git" || entry.Name() == "dist" || entry.Name() == "vendor" {
 				return filepath.SkipDir
 			}
+			// .claude/worktrees may hold other full checkouts of this same
+			// repository (a supported local workflow); each is its own
+			// production tree with its own copy of this test, so walking
+			// into one here would just re-check it under the wrong root.
+			if entry.Name() == ".claude" {
+				return filepath.SkipDir
+			}
 			return nil
 		}
 		if filepath.Ext(path) != ".go" || strings.HasSuffix(path, "_test.go") ||
