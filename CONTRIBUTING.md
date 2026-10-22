@@ -4,7 +4,7 @@ Thank you for helping improve Skuggsja. The project treats privacy claims as par
 
 ## Prerequisites
 
-- Go 1.27.1 or newer compatible toolchain
+- Go 1.27.3 or newer compatible toolchain
 - Git
 - A POSIX-like shell for the commands below; equivalent Go commands work on Windows
 - Node.js 22.23.1, matching CI, for frontend regression tests, installation checks and browser verification
