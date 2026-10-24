@@ -135,7 +135,8 @@ To register a genuinely new harness (rather than change an existing one):
 
 1. Add its native path-discovery fields to `platform.Paths` (`internal/platform/paths.go`) alongside the existing per-harness fields.
 2. Write the provider package (`internal/provider/<name>`) implementing `Reader`, plus a `New(platform.Paths) provider.Reader` constructor that maps the relevant `platform.Paths` fields onto it — see `internal/provider/claude.New` for the pattern.
-3. Append that constructor to the `registry` slice in `internal/cli/cli.go`. This is the only edit needed to the CLI, the terminal output, or the UI: `registry`'s order is the deterministic read/print/display order, and nothing else hard-codes the four shipped harnesses.
+3. Append that constructor to the `registry` slice in `internal/cli/cli.go`. This is the only production-code edit needed for the CLI, the terminal output, or the UI: `registry`'s order is the deterministic read/print/display order, and nothing else hard-codes the shipped harness list.
+4. If the new provider reads its path from a `SKUGGSJA_*` environment override (via `applyPathOverrides` in `internal/cli/cli.go`), add the matching entry to `sourceOverrides` in `scripts/verify-install.cjs`, and update its hardcoded `providers.length` assertion to the new total. That script only runs in CI (and inside `verify-packages.py`'s smoke step) — not in the four fast local commands above — so a provider added without this step passes every fast local gate and only fails in CI, on every platform, at once.
 
 ### Discovery
 
