@@ -180,3 +180,56 @@ func TestDiscoverKeepsRootProtectionWhenMissing(t *testing.T) {
 		}
 	}
 }
+
+func TestTranscriptJSONLEnrichesTokensToolCallsPromptTimesAndSessionSpan(t *testing.T) {
+	t.Parallel()
+	r := newFixture(t, `
+		INSERT INTO conversation_summaries (conversation_id, last_modified_time, workspace_uris, last_user_input_time, last_user_input_step_index)
+		VALUES ('c1', '2026-10-20 02:36:18+00:00', '["file:///synthetic/agy-project"]', '2026-10-20 02:36:03+00:00', 7);
+		INSERT INTO conversations_fts (conversation_id, chunk_index, chunk_first_step, chunk_last_step, user_step_byte_offsets, title, user_body, agent_body)
+		VALUES ('c1', 0, 0, 9, '[[0,0],[7,4]]', 't', 'one two', '');
+	`)
+	logsDir := filepath.Join(r.Root, "brain", "c1", ".system_generated", "logs")
+	if err := os.MkdirAll(logsDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	transcript := `{"step_index":0,"source":"USER_EXPLICIT","type":"USER_INPUT","status":"DONE","created_at":"2026-10-19T00:36:48Z","content":"one"}
+{"step_index":1,"source":"MODEL","type":"PLANNER_RESPONSE","status":"DONE","created_at":"2026-10-19T00:36:52Z","input_tokens":1200,"cache_read_tokens":400,"output_tokens":150,"tool_calls":[{"id":"t1"},{"id":"t2"}]}
+{"step_index":7,"source":"USER_EXPLICIT","type":"USER_INPUT","status":"DONE","created_at":"2026-10-20T02:36:03Z","content":"two"}
+{"step_index":8,"source":"MODEL","type":"PLANNER_RESPONSE","status":"DONE","created_at":"2026-10-20T02:36:15Z","input_tokens":800,"cache_read_tokens":1600,"output_tokens":50,"tool_calls":[{"id":"t3"}]}
+`
+	if err := os.WriteFile(filepath.Join(logsDir, "transcript.jsonl"), []byte(transcript), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	discovery, err := r.Discover(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(discovery.Files) != 2 {
+		t.Fatalf("discovered files = %d, want 2", len(discovery.Files))
+	}
+	out := r.Read(context.Background(), discovery)
+	if out.Status != "supported" || !out.ToolCallsAvailable || len(out.Sessions) != 1 {
+		t.Fatalf("unexpected result: %#v", out)
+	}
+	s := out.Sessions[0]
+	if s.ToolCalls != 3 {
+		t.Fatalf("tool calls = %d, want 3", s.ToolCalls)
+	}
+	if !s.Usage.Available || !s.Usage.Exact || s.Usage.Input != 2000 || s.Usage.CacheRead != 2000 || s.Usage.Output != 200 {
+		t.Fatalf("token usage = %#v, want Input=2000 CacheRead=2000 Output=200", s.Usage)
+	}
+	if s.StartedAt.Format("2006-01-02T15:04:05Z") != "2026-10-19T00:36:48Z" {
+		t.Fatalf("StartedAt = %v, want 2026-10-19T00:36:48Z", s.StartedAt)
+	}
+	if s.EndedAt.Format("2006-01-02T15:04:05Z") != "2026-10-20T02:36:18Z" {
+		t.Fatalf("EndedAt = %v, want 2026-10-20T02:36:18Z", s.EndedAt)
+	}
+	if s.Prompts[0].At.Format("2006-01-02T15:04:05Z") != "2026-10-19T00:36:48Z" {
+		t.Fatalf("first prompt At = %v, want 2026-10-19T00:36:48Z", s.Prompts[0].At)
+	}
+	if s.Prompts[1].At.Format("2006-01-02T15:04:05Z") != "2026-10-20T02:36:03Z" {
+		t.Fatalf("second prompt At = %v, want 2026-10-20T02:36:03Z", s.Prompts[1].At)
+	}
+}

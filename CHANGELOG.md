@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and releases use [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- Antigravity sessions are now enriched from each conversation's plain JSONL step log (`~/.gemini/antigravity/brain/<id>/.system_generated/logs/transcript.jsonl`) when present, adding exact token usage (`input_tokens`, `output_tokens`, `cache_read_tokens`), tool-call counts, per-prompt timestamps, and session start/end spans without decoding `.pb` protobuf files or reading prompt/response text from the transcript.
+
 ## [0.4.0] - 2026-10-22
 
 ### Added
