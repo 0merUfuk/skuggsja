@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Security Vulnerability Report
+    url: https://github.com/0merUfuk/skuggsja/security/advisories/new
+    about: Please report security vulnerabilities privately using GitHub Security Advisories.
+  - name: Privacy Policy & Data Handling
+    url: https://github.com/0merUfuk/skuggsja/blob/main/PRIVACY.md
+    about: Read how Skuggsja isolates local histories and enforces zero runtime network calls.

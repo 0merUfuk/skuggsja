@@ -1,0 +1,70 @@
+name: Bug Report
+description: File a bug report for Skuggsja (unexpected behavior, counts, or UI problem)
+title: "[bug]: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        **Privacy Warning:** This issue tracker is public. Use synthetic examples only.
+        **NEVER** attach real agent histories, SQLite databases, Rewind JSON, personal metrics, source paths, or API credentials.
+        For a security vulnerability, please report privately via [GitHub Security Advisories](https://github.com/0merUfuk/skuggsja/security/advisories/new).
+  - type: dropdown
+    id: harness
+    attributes:
+      label: AI Harness / Provider
+      description: Which harness adapter is involved?
+      options:
+        - Claude Code
+        - Codex
+        - Hermes Agent
+        - Cursor
+        - Antigravity
+        - GitHub Copilot
+        - Gemini CLI
+        - Grok
+        - Continue
+        - Cline
+        - Roo Code
+        - Aider
+        - Embedded Web UI
+        - CLI / Core Engine
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Skuggsja Version
+      description: What version of Skuggsja are you running? (Run `skuggsja --version`)
+      placeholder: v0.4.0
+    validations:
+      required: true
+  - type: textarea
+    id: expected-actual
+    attributes:
+      label: Expected and Actual Behavior
+      description: What did you expect to happen, and what happened instead?
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Reproduction Steps
+      description: CLI command or UI steps. For data-dependent issues, describe minimal synthetic records.
+      render: shell
+    validations:
+      required: true
+  - type: textarea
+    id: diagnostics
+    attributes:
+      label: Diagnostics and Warning Codes
+      description: Content-free error codes, provider coverage status, and sanitized logs (remove local paths/usernames).
+      render: shell
+  - type: input
+    id: environment
+    attributes:
+      label: Operating System & Architecture
+      description: e.g. macOS 15.0 arm64, Ubuntu 24.04 x86_64, Windows 11
+      placeholder: macOS 15.0 arm64
+    validations:
+      required: true

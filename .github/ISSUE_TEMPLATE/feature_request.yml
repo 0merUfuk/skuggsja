@@ -1,0 +1,44 @@
+name: Feature Request
+description: Propose a new harness adapter, analytics metric, or UI enhancement for Skuggsja
+title: "[feat]: "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you for suggesting improvements to Skuggsja!
+        Remember that all features must uphold Skuggsja's architectural guarantees: zero outbound network calls, local-first execution, and read-only source inspection.
+  - type: dropdown
+    id: category
+    attributes:
+      label: Category
+      description: What area does this proposal target?
+      options:
+        - New Harness Adapter
+        - Existing Harness Enrichment
+        - Embedded Web UI
+        - Export / CLI Output
+        - Performance / Memory
+        - Architecture / Platform
+    validations:
+      required: true
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem Statement
+      description: What challenge or gap does this proposal address?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed Solution
+      description: Describe the expected behavior, schema, or UI changes.
+    validations:
+      required: true
+  - type: checkboxes
+    id: willingness
+    attributes:
+      label: Contribution
+      options:
+        - label: I would be interested in submitting a pull request or synthetic test fixture for this.

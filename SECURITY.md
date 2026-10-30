@@ -8,7 +8,7 @@ Read [PRIVACY.md](PRIVACY.md) for the complete data lifecycle.
 
 Please do not open a public issue containing an exploit, local path, Rewind artifact, agent history, prompt, response, database, screenshot of personal metrics, or other sensitive evidence.
 
-Use GitHub's private vulnerability-reporting or Security Advisory interface for this repository if it is enabled. If that interface is unavailable, contact the maintainer privately through their GitHub profile before publishing details. Include only the minimum synthetic information needed to reproduce the issue:
+Use GitHub's private vulnerability reporting via [GitHub Security Advisories](https://github.com/0merUfuk/skuggsja/security/advisories/new). If that interface is unavailable, contact the maintainer privately through their GitHub profile at [https://github.com/0merUfuk](https://github.com/0merUfuk) before publishing details. Include only the minimum synthetic information needed to reproduce the issue:
 
 - affected commit or version;
 - operating system and Go version;
@@ -17,7 +17,13 @@ Use GitHub's private vulnerability-reporting or Security Advisory interface for 
 - reproduction using a synthetic fixture;
 - proposed mitigation, if known.
 
-Never send real Claude, Codex, Hermes, or Cursor history files. There is no published response-time SLA yet.
+Never send real Claude, Codex, Hermes, or Cursor history files.
+
+### Response SLA and disclosure
+
+- **Acknowledgement:** Within 48 hours of receipt.
+- **Triage and Impact Assessment:** Within 5 business days.
+- **Resolution:** Critical security issues are addressed promptly on the latest stable line on `main`. Coordinated public disclosure occurs 30 days after a fix is published.
 
 ## Verification scope
 
